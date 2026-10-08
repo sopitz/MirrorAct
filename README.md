@@ -188,6 +188,12 @@ example from streaming apps) is blocked by iOS and cannot be mirrored.
 Android is a trademark of Google LLC; MirrorAct is not affiliated with Google. Android mirroring
 uses the server of the [scrcpy](https://github.com/Genymobile/scrcpy) project by Genymobile.
 
+## Support
+
+MirrorAct is free. If it saves you time, you can [buy me a coffee](https://buymeacoffee.com/sopitz).
+
+[![Buy me a coffee](https://img.shields.io/badge/Buy_me_a_coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/sopitz)
+
 ## License
 
 GPL-3.0-or-later, see [LICENSE](LICENSE). Third-party components: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
