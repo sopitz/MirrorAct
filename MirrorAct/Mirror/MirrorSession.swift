@@ -70,9 +70,9 @@ final class MirrorSession: ObservableObject, Identifiable {
     var subtitle: String {
         if let toast { return toast }
         switch state {
-        case .connecting: return kind == .cable ? "Verbinde per Kabel …" : "Warte auf Bild …"
+        case .connecting: return kind == .cable ? String(localized: "Connecting via cable …") : String(localized: "Waiting for video …")
         case .live: return profile.marketingName ?? profile.displayName
-        case let .disconnected(reason): return reason ?? "Getrennt"
+        case let .disconnected(reason): return reason ?? String(localized: "Disconnected")
         }
     }
 
@@ -111,7 +111,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         guard !isRecording else { return }
         guard let latest = sink.latest else {
             NSSound.beep()
-            showToast("Noch kein Bild zum Aufnehmen")
+            showToast(String(localized: "No video to record yet"))
             return
         }
         let withFrame = AppSettings.shared.recordWithFrame
@@ -123,10 +123,10 @@ final class MirrorSession: ObservableObject, Identifiable {
             recorder.appendVideo(latest, at: MirrorRecorder.now)   // Startbild, auch wenn sich nichts bewegt
             sink.recorder = recorder
             recordingStartedAt = Date()
-            Log.info("Aufnahme gestartet: \(url.lastPathComponent) (Rahmen: \(withFrame), Hintergrund: \(AppSettings.shared.style.background.rawValue))")
+            Log.info("Recording started: \(url.lastPathComponent) (frame: \(withFrame), background: \(AppSettings.shared.style.background.rawValue))")
         } catch {
-            Log.error("Aufnahme: \(error.localizedDescription)")
-            showToast("Aufnahme fehlgeschlagen")
+            Log.error("Recording: \(error.localizedDescription)")
+            showToast(String(localized: "Recording failed"))
         }
     }
 
@@ -137,20 +137,20 @@ final class MirrorSession: ObservableObject, Identifiable {
         recorder.finish { [weak self] result in
             switch result {
             case let .success(url):
-                Log.info("Aufnahme gesichert: \(url.path)")
+                Log.info("Recording saved: \(url.path)")
                 self?.lastExport = url
                 self?.lastEditable = recorder.isPassthrough ? url : nil
-                self?.showToast("Aufnahme gesichert – zum Teilen herausziehen")
+                self?.showToast(String(localized: "Recording saved – drag it out to share"))
             case let .failure(error):
-                Log.error("Aufnahme: \(error.localizedDescription)")
-                self?.showToast("Aufnahme fehlgeschlagen")
+                Log.error("Recording: \(error.localizedDescription)")
+                self?.showToast(String(localized: "Recording failed"))
             }
         }
     }
 
     private func desktopURL(extension ext: String) -> URL {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd 'um' HH.mm.ss"
+        formatter.dateFormat = String(localized: "yyyy-MM-dd 'at' HH.mm.ss")
         let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
         return desktop.appendingPathComponent("\(deviceName) \(formatter.string(from: Date())).\(ext)")
     }
@@ -176,7 +176,7 @@ final class MirrorSession: ObservableObject, Identifiable {
     func screenshotFileForDragging(withFrame: Bool) -> URL? {
         guard let image = screenshotImage(withFrame: withFrame) else { return nil }
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd 'um' HH.mm.ss"
+        formatter.dateFormat = String(localized: "yyyy-MM-dd 'at' HH.mm.ss")
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("MirrorAct", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("\(deviceName) \(formatter.string(from: Date())).png")
@@ -192,9 +192,9 @@ final class MirrorSession: ObservableObject, Identifiable {
         if FrameRenderer.writePNG(image, to: url) {
             lastExport = url
             lastEditable = rawScreenshotCopy()
-            showToast("Auf dem Schreibtisch gesichert")
+            showToast(String(localized: "Saved to the Desktop"))
         } else {
-            showToast("Sichern fehlgeschlagen")
+            showToast(String(localized: "Saving failed"))
         }
     }
 
@@ -204,6 +204,6 @@ final class MirrorSession: ObservableObject, Identifiable {
             return
         }
         FrameRenderer.copyToPasteboard(image)
-        showToast("In die Zwischenablage kopiert")
+        showToast(String(localized: "Copied to the clipboard"))
     }
 }

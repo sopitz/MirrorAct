@@ -37,9 +37,9 @@ struct LauncherView: View {
         .background(background)
         .sheet(isPresented: $showGuide) { ConnectGuide() }
         .alert(item: $wirelessHint) { card in
-            Alert(title: Text("\(card.name) kabellos spiegeln"),
-                  message: Text("Auf dem Gerät: Kontrollzentrum → Bildschirmsynchronisierung → «\(settings.receiverName)»."
-                      + (settings.peerToPeer ? "\n\nCode beim ersten Verbinden: \(settings.pin)" : "")),
+            Alert(title: Text("Mirror \(card.name) wirelessly"),
+                  message: Text(String(localized: "On the device: Control Center → Screen Mirroring → “\(settings.receiverName)”.")
+                      + (settings.peerToPeer ? "\n\n" + String(localized: "Code on first connection: \(settings.pin)") : "")),
                   dismissButton: .default(Text("OK")))
         }
     }
@@ -62,15 +62,15 @@ struct LauncherView: View {
             Button {
                 model.openEditorPanel()
             } label: {
-                Label("Bearbeiten …", systemImage: "wand.and.stars")
+                Label("Edit …", systemImage: "wand.and.stars")
             }
-            .help("Screenshots (auch zwei als Duo) oder Videos einrahmen (⌘E)")
+            .help("Frame screenshots (also two as a duo) or videos (⌘E)")
             Button {
                 openSettings()
             } label: {
                 Image(systemName: "gearshape")
             }
-            .help("Einstellungen (⌘,)")
+            .help("Settings (⌘,)")
         }
         .controlSize(.large)
     }
@@ -79,10 +79,10 @@ struct LauncherView: View {
         let connected = usb.devices.count
         let wireless = model.activeWirelessClient != nil
         switch (connected, wireless) {
-        case (0, false): return "Gerät anschliessen oder kabellos verbinden"
-        case (0, true): return "Spiegelt kabellos"
-        case (1, _): return wireless ? "1 Gerät per Kabel · spiegelt kabellos" : "1 Gerät per Kabel – klicken zum Spiegeln"
-        default: return "\(connected) Geräte per Kabel" + (wireless ? " · spiegelt kabellos" : "")
+        case (0, false): return String(localized: "Connect a device by cable or wirelessly")
+        case (0, true): return String(localized: "Mirroring wirelessly")
+        case (1, _): return wireless ? String(localized: "1 device via cable · mirroring wirelessly") : String(localized: "1 device via cable – click to mirror")
+        default: return String(localized: "\(connected) devices via cable") + (wireless ? String(localized: " · mirroring wirelessly") : "")
         }
     }
 
@@ -103,7 +103,7 @@ struct LauncherView: View {
             let mirroring = model.isMirroring(cableDevice: device.id)
             result.append(.init(id: "cable:\(device.id)", name: device.name,
                                 modelIdentifier: settings.modelIdentifier(forDeviceNamed: device.name),
-                                status: mirroring ? "Wird gespiegelt" : "Per Kabel bereit",
+                                status: mirroring ? String(localized: "Mirroring") : String(localized: "Ready via cable"),
                                 state: mirroring ? .mirroring : .ready, transport: .cable, cableDevice: device))
         }
         for known in settings.knownDevices {
@@ -111,12 +111,12 @@ struct LauncherView: View {
             case .cable:
                 guard !connected.contains(known.key) else { continue }
                 result.append(.init(id: known.id, name: known.name, modelIdentifier: known.modelIdentifier,
-                                    status: "Kabel nicht verbunden", state: .offline, transport: .cable,
+                                    status: String(localized: "Cable not connected"), state: .offline, transport: .cable,
                                     cableDevice: nil))
             case .wireless:
                 let live = model.activeWirelessClient?.deviceID == known.key
                 result.append(.init(id: known.id, name: known.name, modelIdentifier: known.modelIdentifier,
-                                    status: live ? "Spiegelt kabellos" : "Kabellos",
+                                    status: live ? String(localized: "Mirroring wirelessly") : String(localized: "Wireless"),
                                     state: live ? .mirroring : .offline, transport: .wireless, cableDevice: nil))
             }
         }
@@ -160,7 +160,7 @@ struct DeviceCard: View {
                     .frame(height: 120)
                     .overlay(alignment: .bottom) {
                         if hovering, model.state != .offline {
-                            Text(model.state == .mirroring ? "Anzeigen" : "Spiegeln")
+                            Text(model.state == .mirroring ? String(localized: "Show") : String(localized: "Mirror"))
                                 .font(.system(size: 11, weight: .semibold))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
@@ -263,7 +263,7 @@ struct WirelessCard: View {
             HStack(spacing: 6) {
                 Image(systemName: "wifi")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Kabellos")
+                Text("Wireless")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Circle()
@@ -272,10 +272,10 @@ struct WirelessCard: View {
             }
             if state == .ready {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Im Kontrollzentrum wählen:")
+                    Text("Choose in Control Center:")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                    Text("«\(receiverName)»")
+                    Text("“\(receiverName)”")
                         .font(.system(size: 15, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -291,11 +291,11 @@ struct WirelessCard: View {
                     }
                 }
             } else {
-                Text(state == .stopped ? "Kabelloser Empfang aus" : "Empfang fehlgeschlagen – Details im Log")
+                Text(state == .stopped ? String(localized: "Wireless receiver off") : String(localized: "Receiver failed – see the log"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Button("Neu starten", action: restart)
+                Button("Restart", action: restart)
                     .controlSize(.small)
             }
         }
@@ -318,9 +318,9 @@ struct AddDeviceCard: View {
                     .font(.system(size: 26, weight: .light))
                     .frame(width: 56, height: 56)
                     .background(Circle().fill(Color.accentColor.opacity(hovering ? 0.25 : 0.14)))
-                Text("Gerät verbinden")
+                Text("Connect a Device")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Kabel oder WLAN – so geht's")
+                Text("Cable or Wi-Fi – how it works")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -355,25 +355,25 @@ struct ConnectGuide: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Gerät verbinden")
+            Text("Connect a Device")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
             HStack(alignment: .top, spacing: 18) {
-                steps(title: "Per Kabel", symbol: "cable.connector", items: [
-                    "iPhone oder iPad mit dem Mac verbinden.",
-                    "Gerät entsperren und «Diesem Computer vertrauen» bestätigen.",
-                    "Das Gerät erscheint im Startfenster – anklicken.",
-                    "Beim ersten Mal den Kamerazugriff für MirrorAct erlauben.",
-                ], note: "Geringste Verzögerung. Andere Apps wie QuickTime dürfen das Gerät nicht gleichzeitig geöffnet haben.")
-                steps(title: "Kabellos", symbol: "wifi", items: [
-                    "Auf dem Gerät das Kontrollzentrum öffnen.",
-                    "«Bildschirmsynchronisierung» tippen.",
-                    "«\(settings.receiverName)» wählen.",
-                    settings.peerToPeer ? "Beim ersten Mal den Code \(settings.pin) eingeben." : "Fertig – ohne Code.",
-                ], note: "Erscheint «\(settings.receiverName)» nicht: in macOS unter Allgemein → AirDrop & Handoff den AirPlay-Empfänger einschalten. WLAN und Bluetooth am Gerät eingeschaltet lassen.")
+                steps(title: String(localized: "Cable"), symbol: "cable.connector", items: [
+                    String(localized: "Connect the iPhone or iPad to the Mac."),
+                    String(localized: "Unlock the device and confirm “Trust This Computer”."),
+                    String(localized: "The device appears in the start window – click it."),
+                    String(localized: "The first time, allow camera access for MirrorAct."),
+                ], note: String(localized: "Lowest latency. Other apps such as QuickTime must not have the device open at the same time."))
+                steps(title: String(localized: "Wireless"), symbol: "wifi", items: [
+                    String(localized: "Open Control Center on the device."),
+                    String(localized: "Tap “Screen Mirroring”."),
+                    String(localized: "Choose “\(settings.receiverName)”."),
+                    settings.peerToPeer ? String(localized: "The first time, enter the code \(settings.pin).") : String(localized: "Done – no code needed."),
+                ], note: String(localized: "If “\(settings.receiverName)” does not appear: turn on AirPlay Receiver in macOS under General → AirDrop & Handoff. Keep Wi-Fi and Bluetooth on the device turned on."))
             }
             HStack {
                 Spacer()
-                Button("Fertig") { dismiss() }
+                Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
         }

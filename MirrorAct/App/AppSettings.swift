@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import AppKit
 import Foundation
 
 /// Persistente Einstellungen (UserDefaults).
@@ -81,6 +82,37 @@ final class AppSettings: ObservableObject {
     }
 
     var pinNumber: Int32 { Int32(pin) ?? 0 }
+
+    // MARK: Sprache
+
+    /// "system", "en" oder "de"; wirkt nach einem Neustart (AppleLanguages der App)
+    static let languages: [(id: String, name: String)] = [("en", "English"), ("de", "Deutsch")]
+
+    var appLanguage: String {
+        get {
+            let domain = UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "") ?? [:]
+            guard let list = domain["AppleLanguages"] as? [String], let first = list.first else { return "system" }
+            return Self.languages.first { first.hasPrefix($0.id) }?.id ?? "system"
+        }
+        set {
+            objectWillChange.send()
+            if newValue == "system" {
+                UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+            } else {
+                UserDefaults.standard.set([newValue], forKey: "AppleLanguages")
+            }
+        }
+    }
+
+    /// startet die App neu (nach dem Beenden, damit der AirPlay-Name frei ist)
+    static func relaunch() {
+        let path = Bundle.main.bundleURL.path
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "sleep 1.5; /usr/bin/open \"$0\"", path]
+        try? task.run()
+        NSApp.terminate(nil)
+    }
 
     /// Ordner für den AirPlay-Schlüssel usw.
     var supportDirectory: URL {

@@ -7,18 +7,18 @@ import UniformTypeIdentifiers
 /// Screenshot vom gespiegelten Gerät, Aufnahme starten/beenden.
 
 struct FrameScreenshotIntent: AppIntent {
-    static var title: LocalizedStringResource = "Screenshot einrahmen"
+    static var title: LocalizedStringResource = "Frame Screenshot"
     static var description = IntentDescription(
-        "Setzt iPhone- oder iPad-Screenshots in den Gerätrahmen, mit der Gestaltung aus MirrorAct (Rahmenfarbe, Hintergrund, Format).")
+        "Puts iPhone or iPad screenshots into the device frame, using the style from MirrorAct (frame color, background, aspect ratio).")
 
     @Parameter(title: "Screenshots", supportedContentTypes: [.image])
     var files: [IntentFile]
 
-    @Parameter(title: "Mit Gerätrahmen", default: true)
+    @Parameter(title: "With Device Frame", default: true)
     var withFrame: Bool
 
     static var parameterSummary: some ParameterSummary {
-        Summary("\(\.$files) einrahmen") {
+        Summary("Frame \(\.$files)") {
             \.$withFrame
         }
     }
@@ -34,7 +34,7 @@ struct FrameScreenshotIntent: AppIntent {
             guard let framed = FrameRenderer.render(screen: image, profile: profile, showFrame: withFrame, style: style),
                   let data = IntentSupport.png(framed) else { continue }
             let base = (file.filename as NSString).deletingPathExtension
-            results.append(IntentFile(data: data, filename: "\(base) (Rahmen).png", type: .png))
+            results.append(IntentFile(data: data, filename: String(localized: "\(base) (Framed).png"), type: .png))
         }
         guard !results.isEmpty else { throw IntentSupport.Failure.noImages }
         return .result(value: results)
@@ -42,11 +42,11 @@ struct FrameScreenshotIntent: AppIntent {
 }
 
 struct DeviceScreenshotIntent: AppIntent {
-    static var title: LocalizedStringResource = "Screenshot vom iPhone"
+    static var title: LocalizedStringResource = "Screenshot from iPhone"
     static var description = IntentDescription(
-        "Screenshot des gerade gespiegelten Geräts, mit der Gestaltung aus MirrorAct.")
+        "Screenshot of the device currently mirrored, using the style from MirrorAct.")
 
-    @Parameter(title: "Mit Gerätrahmen", default: true)
+    @Parameter(title: "With Device Frame", default: true)
     var withFrame: Bool
 
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
@@ -60,8 +60,8 @@ struct DeviceScreenshotIntent: AppIntent {
 }
 
 struct ToggleRecordingIntent: AppIntent {
-    static var title: LocalizedStringResource = "Aufnahme starten oder beenden"
-    static var description = IntentDescription("Startet bzw. beendet die Videoaufnahme des gespiegelten Geräts.")
+    static var title: LocalizedStringResource = "Start or Stop Recording"
+    static var description = IntentDescription("Starts or stops the video recording of the mirrored device.")
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let recording: Bool? = await MainActor.run {
@@ -70,18 +70,18 @@ struct ToggleRecordingIntent: AppIntent {
             return session.isRecording
         }
         guard let recording else { throw IntentSupport.Failure.noDevice }
-        return .result(dialog: recording ? "Aufnahme läuft" : "Aufnahme beendet")
+        return .result(dialog: recording ? IntentDialog("Recording started") : IntentDialog("Recording stopped"))
     }
 }
 
 struct MirrorActShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: DeviceScreenshotIntent(),
-                    phrases: ["Screenshot mit \(.applicationName)", "\(.applicationName) Screenshot"],
-                    shortTitle: "Screenshot vom iPhone", systemImageName: "camera")
+                    phrases: ["Take a screenshot with \(.applicationName)", "\(.applicationName) screenshot"],
+                    shortTitle: "Screenshot from iPhone", systemImageName: "camera")
         AppShortcut(intent: ToggleRecordingIntent(),
-                    phrases: ["Aufnahme mit \(.applicationName)", "\(.applicationName) Aufnahme"],
-                    shortTitle: "Aufnahme starten/beenden", systemImageName: "record.circle")
+                    phrases: ["Record with \(.applicationName)", "\(.applicationName) recording"],
+                    shortTitle: "Start/Stop Recording", systemImageName: "record.circle")
     }
 }
 
@@ -90,8 +90,8 @@ enum IntentSupport {
         case noImages, noDevice
         var localizedStringResource: LocalizedStringResource {
             switch self {
-            case .noImages: return "Keine lesbaren Bilder übergeben."
-            case .noDevice: return "Kein Gerät wird gerade gespiegelt."
+            case .noImages: return "No readable images were passed."
+            case .noDevice: return "No device is being mirrored right now."
             }
         }
     }

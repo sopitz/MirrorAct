@@ -1,0 +1,52 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Record with ${applicationName}" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Aufnahme mit ${applicationName}",
+              "${applicationName} Aufnahme"
+            ]
+          }
+        },
+        "en" : {
+          "stringSet" : {
+            "state" : "new",
+            "values" : [
+              "Record with ${applicationName}",
+              "${applicationName} recording"
+            ]
+          }
+        }
+      }
+    },
+    "Take a screenshot with ${applicationName}" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Screenshot mit ${applicationName}",
+              "${applicationName} Screenshot"
+            ]
+          }
+        },
+        "en" : {
+          "stringSet" : {
+            "state" : "new",
+            "values" : [
+              "Take a screenshot with ${applicationName}",
+              "${applicationName} screenshot"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

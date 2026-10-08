@@ -112,7 +112,7 @@ final class AnnexBDecoder {
             // z. B. nach Ruhezustand: Session neu aufbauen und auf nächsten Keyframe warten
             rebuildSession()
         } else if status != noErr {
-            onError?("Dekodierfehler \(status)")
+            onError?("Decode error \(status)")
             waitingForKeyframe = true
         }
     }
@@ -121,7 +121,7 @@ final class AnnexBDecoder {
         invalidateSession()
         waitingForKeyframe = true
         guard let description = makeFormatDescription() else {
-            onError?("Ungültige Parameter-Sets")
+            onError?("Invalid parameter sets")
             return
         }
         formatDescription = description

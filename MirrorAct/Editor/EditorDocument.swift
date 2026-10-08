@@ -120,9 +120,9 @@ final class EditorDocument: ObservableObject, Identifiable {
         switch content {
         case let .images(urls, _):
             let base = urls[0].deletingPathExtension().lastPathComponent
-            return urls.count == 2 ? "\(base) (Duo).png" : "\(base) (Rahmen).png"
+            return urls.count == 2 ? String(localized: "\(base) (Duo).png") : String(localized: "\(base) (Framed).png")
         case let .video(url):
-            return "\(url.deletingPathExtension().lastPathComponent) (Rahmen).mov"
+            return String(localized: "\(url.deletingPathExtension().lastPathComponent) (Framed).mov")
         }
     }
 
@@ -142,16 +142,16 @@ final class EditorDocument: ObservableObject, Identifiable {
         if isVideo {
             Task { await exportVideo(to: url) }
         } else if let image = renderFull(), FrameRenderer.writePNG(image, to: url) {
-            message = "Gesichert: \(url.lastPathComponent)"
+            message = String(localized: "Saved: \(url.lastPathComponent)")
         } else {
-            message = "Sichern fehlgeschlagen"
+            message = String(localized: "Saving failed")
         }
     }
 
     func copy() {
         guard let image = renderFull() else { return }
         FrameRenderer.copyToPasteboard(image)
-        message = "In die Zwischenablage kopiert"
+        message = String(localized: "Copied to the clipboard")
     }
 
     /// Datei für Teilen bzw. Herausziehen (temporär)
@@ -185,7 +185,7 @@ final class EditorDocument: ObservableObject, Identifiable {
                                          range: CMTimeRange(start: start, end: end), to: url) { value in
                 Task { @MainActor [weak self] in self?.exportProgress = value }
             }
-            message = "Gesichert: \(url.lastPathComponent)"
+            message = String(localized: "Saved: \(url.lastPathComponent)")
         } catch {
             message = error.localizedDescription
         }
@@ -195,7 +195,7 @@ final class EditorDocument: ObservableObject, Identifiable {
     func adoptAsDefault() {
         AppSettings.shared.style = style
         AppSettings.shared.showFrame = showFrame
-        message = "Als Standard übernommen"
+        message = String(localized: "Used as default")
     }
 
     static func downscaled(_ image: CGImage, maxSide: CGFloat) -> CGImage {

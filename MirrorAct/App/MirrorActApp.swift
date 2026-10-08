@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             RenderTest.recordTest(into: URL(fileURLWithPath: dir)) { exit(0) }
             return
         }
-        Log.info("MirrorAct startet")
+        Log.info("MirrorAct starting")
         MainActor.assumeIsolated { AppModel.shared.start() }
     }
 
@@ -46,45 +46,45 @@ struct MirrorCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("iPhone oder iPad spiegeln …") { AppModel.shared.mirrorFirstAvailable() }
+            Button("Mirror iPhone or iPad …") { AppModel.shared.mirrorFirstAvailable() }
                 .keyboardShortcut("n")
-            Button("Screenshot oder Video bearbeiten …") { AppModel.shared.openEditorPanel() }
+            Button("Edit Screenshot or Video …") { AppModel.shared.openEditorPanel() }
                 .keyboardShortcut("e")
         }
-        CommandMenu("Gerät") {
-            Button("Screenshot sichern") { mirror?.session.saveScreenshot(withFrame: settings.showFrame) }
+        CommandMenu("Device") {
+            Button("Save Screenshot") { mirror?.session.saveScreenshot(withFrame: settings.showFrame) }
                 .keyboardShortcut("s")
-            Button("Screenshot kopieren") { mirror?.session.copyScreenshot(withFrame: settings.showFrame) }
+            Button("Copy Screenshot") { mirror?.session.copyScreenshot(withFrame: settings.showFrame) }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
-            Button("Video aufnehmen / beenden") {
+            Button("Start / Stop Recording") {
                 mirror?.session.toggleRecording()
             }
             .keyboardShortcut("r")
-            Toggle("Aufnahme mit Gerätrahmen", isOn: $settings.recordWithFrame)
+            Toggle("Record with Device Frame", isOn: $settings.recordWithFrame)
             Divider()
-            Button("Grösser") { mirror?.zoomIn() }
+            Button("Larger") { mirror?.zoomIn() }
                 .keyboardShortcut("+")
-            Button("Kleiner") { mirror?.zoomOut() }
+            Button("Smaller") { mirror?.zoomOut() }
                 .keyboardShortcut("-")
-            Button("Punktgenau (wie auf dem iPhone)") { mirror?.actualSize() }
+            Button("Point-Perfect (as on the iPhone)") { mirror?.actualSize() }
                 .keyboardShortcut("0")
-            Button("Lebensgross") { mirror?.lifeSize() }
+            Button("Life-Size") { mirror?.lifeSize() }
                 .keyboardShortcut("1")
-            Button("Pixelgenau") { mirror?.pixelPerfect() }
+            Button("Pixel-Perfect") { mirror?.pixelPerfect() }
                 .keyboardShortcut("2")
-            Button("An Bildschirm anpassen") { mirror?.fitToScreen() }
+            Button("Fit to Screen") { mirror?.fitToScreen() }
                 .keyboardShortcut("9")
             Divider()
-            Button("Präsentieren") { mirror?.togglePresentation() }
+            Button("Present") { mirror?.togglePresentation() }
                 .keyboardShortcut("f", modifiers: [.command, .control])
-            Button("Stil …") { mirror?.showStylePanel() }
+            Button("Style …") { mirror?.showStylePanel() }
                 .keyboardShortcut("k")
-            Toggle("Werkzeuge immer zeigen", isOn: $settings.alwaysShowTools)
-            Toggle("Immer im Vordergrund", isOn: $settings.alwaysOnTop)
+            Toggle("Always Show Tools", isOn: $settings.alwaysShowTools)
+            Toggle("Keep on Top", isOn: $settings.alwaysOnTop)
                 .keyboardShortcut("t")
-            Toggle("Gerätrahmen anzeigen", isOn: $settings.showFrame)
+            Toggle("Show Device Frame", isOn: $settings.showFrame)
                 .keyboardShortcut("f", modifiers: [.command, .shift])
-            Toggle("Ton wiedergeben", isOn: Binding(
+            Toggle("Play Sound", isOn: Binding(
                 get: { settings.playAudio },
                 set: { value in
                     settings.playAudio = value

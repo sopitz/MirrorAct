@@ -15,8 +15,8 @@ enum VideoFramer {
         case noVideo, exportFailed(String)
         var errorDescription: String? {
             switch self {
-            case .noVideo: return "Die Datei enthält keine Videospur."
-            case let .exportFailed(reason): return "Export fehlgeschlagen: \(reason)"
+            case .noVideo: return String(localized: "The file contains no video track.")
+            case let .exportFailed(reason): return String(localized: "Export failed: \(reason)")
             }
         }
     }
@@ -74,7 +74,7 @@ enum VideoFramer {
                        to url: URL, progress: @escaping (Double) -> Void) async throws {
         let preset = needsAlpha ? AVAssetExportPresetHEVCHighestQualityWithAlpha : AVAssetExportPresetHighestQuality
         guard let session = AVAssetExportSession(asset: source.asset, presetName: preset) else {
-            throw FramerError.exportFailed("Exportprofil nicht verfügbar")
+            throw FramerError.exportFailed(String(localized: "Export preset not available"))
         }
         try? FileManager.default.removeItem(at: url)
         session.videoComposition = composition

@@ -54,7 +54,7 @@ final class USBDeviceMonitor: ObservableObject {
         let list = found.map { Device(id: $0.uniqueID, name: $0.localizedName, modelID: $0.modelID) }
         if list != devices {
             devices = list
-            Log.info("USB-Geräte: \(list.map { "\($0.name) [\($0.modelID)]" })")
+            Log.info("USB devices: \(list.map { "\($0.name) [\($0.modelID)]" })")
         }
     }
 
@@ -169,7 +169,7 @@ final class USBCaptureSession: NSObject, AVCaptureVideoDataOutputSampleBufferDel
 
     enum CaptureError: LocalizedError {
         case cannotAddInput
-        var errorDescription: String? { "Das Gerät ist bereits in einer anderen App geöffnet (z. B. QuickTime)." }
+        var errorDescription: String? { String(localized: "The device is already open in another app (such as QuickTime).") }
     }
 
     /// Kamera- und Mikrofonfreigabe (für Bildschirm-Aufnahmegeräte nötig)

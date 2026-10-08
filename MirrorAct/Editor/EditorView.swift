@@ -51,23 +51,23 @@ struct EditorView: View {
             if let progress = document.exportProgress {
                 ProgressView(value: progress)
                     .frame(width: 160)
-                Text("Exportiere …").foregroundStyle(.secondary)
+                Text("Exporting …").foregroundStyle(.secondary)
             } else if let message = document.message {
                 Text(message).foregroundStyle(.secondary).lineLimit(1)
             } else {
                 Text(document.isVideo
-                     ? "Kürzen über «Kürzen …»; die Vorschau zeigt halbe Auflösung."
-                     : "Bild herausziehen zum Teilen, oder sichern/kopieren.")
+                     ? String(localized: "Trim with “Trim …”; the preview shows half resolution.")
+                     : String(localized: "Drag the image out to share it, or save/copy it."))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
             if !document.isVideo {
-                Button("Kopieren") { document.copy() }
+                Button("Copy") { document.copy() }
             }
             ShareButton(document: document)
                 .frame(width: 34, height: 24)
-            Button(document.isVideo ? "Video sichern …" : "Sichern …") { document.save() }
+            Button(document.isVideo ? String(localized: "Save Video …") : String(localized: "Save …")) { document.save() }
                 .keyboardShortcut("s")
                 .buttonStyle(.borderedProminent)
                 .disabled(document.exportProgress != nil)
@@ -99,9 +99,9 @@ struct EditorView: View {
                     .pickerStyle(.segmented)
                 }
             }
-            Section("Modell") {
-                Picker("Gerät", selection: $document.modelSelection) {
-                    Text("Automatisch (nach Auflösung)").tag("auto")
+            Section("Model") {
+                Picker("Device", selection: $document.modelSelection) {
+                    Text("Automatic (by resolution)").tag("auto")
                     Divider()
                     ForEach(DeviceProfile.selectableModels, id: \.id) { model in
                         Text(model.name).tag(model.id)
@@ -111,19 +111,19 @@ struct EditorView: View {
             StyleControls(style: $document.style, showFrame: $document.showFrame)
             if document.isVideo {
                 Section("Video") {
-                    Button("Kürzen …") { trimRequest += 1 }
+                    Button("Trim …") { trimRequest += 1 }
                     if let source = document.videoSource {
-                        LabeledContent("Quelle", value: "\(Int(source.size.width)) × \(Int(source.size.height)), \(Self.duration(source.duration))")
+                        LabeledContent("Source", value: "\(Int(source.size.width)) × \(Int(source.size.height)), \(Self.duration(source.duration))")
                     }
                     Text(VideoFramer.needsAlpha(style: document.style, showFrame: document.showFrame)
-                         ? "Export: HEVC mit Transparenz (.mov)"
-                         : "Export: H.264 (.mov), höchstens 4K")
+                         ? String(localized: "Export: HEVC with transparency (.mov)")
+                         : String(localized: "Export: H.264 (.mov), up to 4K"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             Section {
-                Button("Als Standard übernehmen") { document.adoptAsDefault() }
+                Button("Use as Default") { document.adoptAsDefault() }
             }
         }
         .formStyle(.grouped)
@@ -164,10 +164,10 @@ struct ShareButton: NSViewRepresentable {
     let document: EditorDocument
 
     func makeNSView(context: Context) -> NSButton {
-        let button = NSButton(image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Teilen")!,
+        let button = NSButton(image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: String(localized: "Share"))!,
                               target: context.coordinator, action: #selector(Coordinator.share(_:)))
         button.bezelStyle = .rounded
-        button.toolTip = "Teilen"
+        button.toolTip = String(localized: "Share")
         return button
     }
 
@@ -201,7 +201,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 740),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
-        window.title = "Bearbeiten – \(document.title)"
+        window.title = String(localized: "Edit – \(document.title)")
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(rootView: EditorView(document: document))
         window.setContentSize(NSSize(width: 1120, height: 740))

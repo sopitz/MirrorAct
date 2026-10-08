@@ -131,9 +131,9 @@ final class AirPlayReceiver: @unchecked Sendable {
         }
         isRunning = result == 0
         if isRunning {
-            Log.info("AirPlay-Empfänger gestartet: «\(config.name)», \(height)p, \(config.maxFPS) fps, HEVC \(config.hevc), AWDL \(config.peerToPeer)")
+            Log.info("AirPlay receiver started: “\(config.name)”, \(height)p, \(config.maxFPS) fps, HEVC \(config.hevc), AWDL \(config.peerToPeer)")
         } else {
-            Log.error("AirPlay-Empfänger konnte nicht starten (\(result))")
+            Log.error("AirPlay receiver could not start (\(result))")
         }
         return result
     }

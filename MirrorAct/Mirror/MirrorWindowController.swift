@@ -160,32 +160,32 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     private func contextMenu() -> NSMenu {
         let menu = NSMenu()
         let a = actions!
-        menu.addItem(ActionMenuItem(session.isRecording ? "Aufnahme beenden" : "Video aufnehmen", key: "r", a.toggleRecording))
-        menu.addItem(ActionMenuItem("Screenshot auf den Schreibtisch", key: "s", a.saveScreenshot))
-        menu.addItem(ActionMenuItem("Screenshot kopieren", a.copyScreenshot))
+        menu.addItem(ActionMenuItem(session.isRecording ? String(localized: "Stop Recording") : String(localized: "Start Recording"), key: "r", a.toggleRecording))
+        menu.addItem(ActionMenuItem(String(localized: "Save Screenshot to Desktop"), key: "s", a.saveScreenshot))
+        menu.addItem(ActionMenuItem(String(localized: "Copy Screenshot"), a.copyScreenshot))
         menu.addItem(.separator())
-        menu.addItem(ActionMenuItem("Ton", state: !session.muted) { [weak self] in
+        menu.addItem(ActionMenuItem(String(localized: "Sound"), state: !session.muted) { [weak self] in
             guard let self else { return }
             self.session.muted.toggle()
             self.settings.playAudio = !self.session.muted
         })
-        menu.addItem(ActionMenuItem("Immer im Vordergrund", key: "t", state: settings.alwaysOnTop) { [weak self] in
+        menu.addItem(ActionMenuItem(String(localized: "Keep on Top"), key: "t", state: settings.alwaysOnTop) { [weak self] in
             self?.settings.alwaysOnTop.toggle()
         })
-        menu.addItem(ActionMenuItem("Präsentieren", a.present))
+        menu.addItem(ActionMenuItem(String(localized: "Present"), a.present))
         menu.addItem(.separator())
 
         let size = NSMenu()
-        size.addItem(ActionMenuItem("Lebensgross", key: "1", a.lifeSize))
-        size.addItem(ActionMenuItem("Pixelgenau", key: "2", a.pixelPerfect))
-        size.addItem(ActionMenuItem("Punktgenau", key: "0", a.actualSize))
-        size.addItem(ActionMenuItem("Bildschirm füllen", key: "9", a.fitToScreen))
+        size.addItem(ActionMenuItem(String(localized: "Life-Size"), key: "1", a.lifeSize))
+        size.addItem(ActionMenuItem(String(localized: "Pixel-Perfect"), key: "2", a.pixelPerfect))
+        size.addItem(ActionMenuItem(String(localized: "Point-Perfect"), key: "0", a.actualSize))
+        size.addItem(ActionMenuItem(String(localized: "Fit to Screen"), key: "9", a.fitToScreen))
         size.addItem(.separator())
-        size.addItem(ActionMenuItem("Grösser", key: "+", a.zoomIn))
-        size.addItem(ActionMenuItem("Kleiner", key: "-", a.zoomOut))
-        menu.addItem(ActionMenuItem.submenu("Grösse", size))
+        size.addItem(ActionMenuItem(String(localized: "Larger"), key: "+", a.zoomIn))
+        size.addItem(ActionMenuItem(String(localized: "Smaller"), key: "-", a.zoomOut))
+        menu.addItem(ActionMenuItem.submenu(String(localized: "Size"), size))
 
-        menu.addItem(ActionMenuItem("Gerätrahmen", state: settings.showFrame) { [weak self] in
+        menu.addItem(ActionMenuItem(String(localized: "Device Frame"), state: settings.showFrame) { [weak self] in
             self?.settings.showFrame.toggle()
         })
         let colors = NSMenu()
@@ -196,16 +196,16 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             item.image = StyleControls.swatch(color.swatch)
             colors.addItem(item)
         }
-        menu.addItem(ActionMenuItem.submenu("Rahmenfarbe", colors))
-        menu.addItem(ActionMenuItem("Stil …") { [weak self] in self?.showStylePanel() })
+        menu.addItem(ActionMenuItem.submenu(String(localized: "Frame Color"), colors))
+        menu.addItem(ActionMenuItem(String(localized: "Style …")) { [weak self] in self?.showStylePanel() })
         if let editable = session.lastEditable {
-            menu.addItem(ActionMenuItem("Letzte Datei bearbeiten …") { AppModel.shared.openEditor(urls: [editable]) })
+            menu.addItem(ActionMenuItem(String(localized: "Edit Last File …")) { AppModel.shared.openEditor(urls: [editable]) })
         }
         menu.addItem(.separator())
         if session.kind == .wireless {
-            menu.addItem(ActionMenuItem("Gerät trennen", a.disconnect))
+            menu.addItem(ActionMenuItem(String(localized: "Disconnect Device"), a.disconnect))
         }
-        menu.addItem(ActionMenuItem("Fenster schliessen", key: "w", a.close))
+        menu.addItem(ActionMenuItem(String(localized: "Close Window"), key: "w", a.close))
         return menu
     }
 
@@ -266,7 +266,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         let millimeters = CGDisplayScreenSize(CGDirectDisplayID(number.uint32Value))
         guard millimeters.width > 0, let deviceMM = session.profile.physicalWidthMM else {
             NSSound.beep()
-            session.showToast("Lebensgross: Grösse des Monitors oder Geräts unbekannt")
+            session.showToast(String(localized: "Life-size: size of the display or device unknown"))
             return
         }
         let pointsPerMM = screen.frame.width / millimeters.width
@@ -423,11 +423,11 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         case .connecting:
             frameView.placeholder.isHidden = false
             frameView.placeholder.stringValue = session.kind == .cable
-                ? "Verbinde …\nGerät entsperren, falls nötig"
-                : "Warte auf Bild …"
+                ? String(localized: "Connecting …\nUnlock the device if needed")
+                : String(localized: "Waiting for video …")
         case let .disconnected(reason):
             frameView.placeholder.isHidden = false
-            frameView.placeholder.stringValue = reason ?? "Getrennt"
+            frameView.placeholder.stringValue = reason ?? String(localized: "Disconnected")
         }
     }
 }

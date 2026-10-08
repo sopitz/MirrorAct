@@ -7,10 +7,10 @@ enum DuoPose: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .sideBySide: return "Nebeneinander"
-        case .staggered: return "Versetzt"
-        case .tilted: return "Gekippt"
-        case .perspective: return "Perspektive"
+        case .sideBySide: return String(localized: "Side by side")
+        case .staggered: return String(localized: "Staggered")
+        case .tilted: return String(localized: "Tilted")
+        case .perspective: return String(localized: "Perspective")
         }
     }
 }

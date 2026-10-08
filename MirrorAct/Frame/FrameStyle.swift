@@ -54,10 +54,10 @@ enum BackgroundKind: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .transparent: return "Transparent"
-        case .color: return "Farbe"
-        case .gradient: return "Verlauf"
-        case .image: return "Bild"
+        case .transparent: return String(localized: "Transparent")
+        case .color: return String(localized: "Color")
+        case .gradient: return String(localized: "Gradient")
+        case .image: return String(localized: "Image")
         }
     }
 }
@@ -67,7 +67,7 @@ enum CanvasAspect: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .auto: return "Automatisch"
+        case .auto: return String(localized: "Automatic")
         case .square: return "1:1"
         case .landscape16x9: return "16:9"
         case .portrait9x16: return "9:16"
@@ -91,12 +91,12 @@ enum GradientPreset: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .ocean: return "Ozean"
-        case .evening: return "Abend"
-        case .forest: return "Wald"
-        case .lilac: return "Flieder"
-        case .graphite: return "Graphit"
-        case .light: return "Hell"
+        case .ocean: return String(localized: "Ocean")
+        case .evening: return String(localized: "Evening")
+        case .forest: return String(localized: "Forest")
+        case .lilac: return String(localized: "Lilac")
+        case .graphite: return String(localized: "Graphite")
+        case .light: return String(localized: "Light")
         }
     }
     var colors: (RGBA, RGBA) {
@@ -117,13 +117,13 @@ enum BezelColor: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .graphite: return "Graphit"
-        case .black: return "Schwarz"
-        case .silver: return "Silber"
-        case .gold: return "Gold"
-        case .naturalTitanium: return "Titan Natur"
-        case .blue: return "Blau"
-        case .purple: return "Dunkellila"
+        case .graphite: return String(localized: "Graphite")
+        case .black: return String(localized: "Black")
+        case .silver: return String(localized: "Silver")
+        case .gold: return String(localized: "Gold")
+        case .naturalTitanium: return String(localized: "Natural Titanium")
+        case .blue: return String(localized: "Blue")
+        case .purple: return String(localized: "Deep Purple")
         }
     }
     /// Verlauf hell → dunkel → mittel

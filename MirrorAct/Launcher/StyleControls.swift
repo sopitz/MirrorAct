@@ -8,9 +8,9 @@ struct StyleControls: View {
     @Binding var showFrame: Bool
 
     var body: some View {
-        Section("Gerät") {
-            Toggle("Gerätrahmen anzeigen", isOn: $showFrame)
-            Picker("Rahmenfarbe", selection: $style.bezelColor) {
+        Section("Device") {
+            Toggle("Show device frame", isOn: $showFrame)
+            Picker("Frame color", selection: $style.bezelColor) {
                 ForEach(BezelColor.allCases) { color in
                     Label {
                         Text(color.title)
@@ -21,11 +21,11 @@ struct StyleControls: View {
                 }
             }
             .disabled(!showFrame)
-            Toggle("Ohne Rahmen: Ecken wie das Gerät abrunden", isOn: $style.roundedScreen)
+            Toggle("Without frame: round corners like the device", isOn: $style.roundedScreen)
                 .disabled(showFrame)
         }
-        Section("Hintergrund") {
-            Picker("Hintergrund", selection: backgroundSelection) {
+        Section("Background") {
+            Picker("Background", selection: backgroundSelection) {
                 ForEach(BackgroundKind.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -33,25 +33,25 @@ struct StyleControls: View {
             case .transparent:
                 EmptyView()
             case .color:
-                ColorPicker("Farbe", selection: colorBinding, supportsOpacity: false)
+                ColorPicker("Color", selection: colorBinding, supportsOpacity: false)
             case .gradient:
-                Picker("Verlauf", selection: $style.gradient) {
+                Picker("Gradient", selection: $style.gradient) {
                     ForEach(GradientPreset.allCases) { Text($0.title).tag($0) }
                 }
             case .image:
                 HStack {
-                    Text(style.imagePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Kein Bild gewählt")
+                    Text(style.imagePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? String(localized: "No image chosen"))
                         .foregroundStyle(style.imagePath == nil ? .secondary : .primary)
                         .lineLimit(1)
                     Spacer()
-                    Button("Bild wählen …", action: chooseImage)
+                    Button("Choose Image …", action: chooseImage)
                 }
             }
-            LabeledContent("Abstand") {
+            LabeledContent("Padding") {
                 Slider(value: $style.padding, in: 0...0.5)
             }
-            Toggle("Schatten", isOn: $style.shadow)
-            Picker("Format", selection: $style.aspect) {
+            Toggle("Shadow", isOn: $style.shadow)
+            Picker("Aspect ratio", selection: $style.aspect) {
                 ForEach(CanvasAspect.allCases) { Text($0.title).tag($0) }
             }
         }
@@ -79,7 +79,7 @@ struct StyleControls: View {
     private func chooseImage() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
-        panel.message = "Hintergrundbild wählen"
+        panel.message = String(localized: "Choose background image")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // Kopie im App-Ordner, damit das Bild auch nach Verschieben des Originals bleibt
         let target = AppSettings.shared.supportDirectory

@@ -12,7 +12,7 @@ import CoreVideo
 final class MirrorRecorder: @unchecked Sendable {
     enum RecorderError: LocalizedError {
         case cannotAddInput
-        var errorDescription: String? { "Die Aufnahme konnte nicht gestartet werden." }
+        var errorDescription: String? { String(localized: "The recording could not be started.") }
     }
 
     let url: URL

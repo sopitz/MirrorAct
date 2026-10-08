@@ -6,6 +6,9 @@ HOMEBREW_PREFIX = /opt/homebrew
 
 PRODUCT_BUNDLE_IDENTIFIER = io.github.sopitz.MirrorAct
 
+// Die UxPlay-Bibliothek wird nur für die Architektur dieses Macs gebaut
+ARCHS = $(NATIVE_ARCH_ACTUAL)
+
 // Standard: ad-hoc signieren, ohne Entwicklerkonto
 CODE_SIGN_STYLE = Manual
 CODE_SIGN_IDENTITY = -

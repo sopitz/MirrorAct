@@ -56,7 +56,7 @@ final class AppModel: ObservableObject {
         }
         receiver.onPin = { [weak self] _ in
             self?.pinRequested = true
-            self?.wirelessSession?.state = .disconnected("Code auf dem iPhone eingeben: \(AppSettings.shared.pin)")
+            self?.wirelessSession?.state = .disconnected(String(localized: "Enter this code on the iPhone: \(AppSettings.shared.pin)"))
         }
         receiver.onSourceSize = { [weak self] size in
             if size.width > 0, size.height > 0 { self?.wirelessSession?.sourcePixelSize = size }
@@ -123,7 +123,7 @@ final class AppModel: ObservableObject {
         guard let session = wirelessSession else { return }
         session.stopRecording()
         if case .disconnected = session.state { return }
-        session.state = .disconnected("Getrennt – auf dem iPhone erneut «\(settings.receiverName)» wählen")
+        session.state = .disconnected(String(localized: "Disconnected – choose “\(settings.receiverName)” on the iPhone again"))
         session.sink.clear()
     }
 
@@ -160,7 +160,7 @@ final class AppModel: ObservableObject {
         capture.onAudio = { sample in sink.recordAudio(sample) }
         capture.onStop = { [weak session] reason in
             session?.stopRecording()
-            session?.state = .disconnected(reason ?? "Kabel getrennt")
+            session?.state = .disconnected(reason ?? String(localized: "Cable disconnected"))
         }
         session.onMuteChange = { [weak capture] muted in capture?.muted = muted }
         session.onClose = { [weak self] in
@@ -171,7 +171,7 @@ final class AppModel: ObservableObject {
             try capture.start(device: captureDevice)
         } catch {
             let alert = NSAlert()
-            alert.messageText = "\(device.name) lässt sich nicht öffnen"
+            alert.messageText = String(localized: "\(device.name) can’t be opened")
             alert.informativeText = error.localizedDescription
             alert.runModal()
             return
@@ -195,10 +195,10 @@ final class AppModel: ObservableObject {
 
     private func showCameraAccessAlert() {
         let alert = NSAlert()
-        alert.messageText = "Kamerazugriff nötig"
-        alert.informativeText = "macOS stellt den Bildschirm eines per Kabel verbundenen iPhones wie eine Kamera bereit. Bitte MirrorAct unter Datenschutz & Sicherheit → Kamera erlauben."
-        alert.addButton(withTitle: "Einstellungen öffnen")
-        alert.addButton(withTitle: "Abbrechen")
+        alert.messageText = String(localized: "Camera access required")
+        alert.informativeText = String(localized: "macOS provides the screen of an iPhone connected by cable like a camera. Please allow MirrorAct under Privacy & Security → Camera.")
+        alert.addButton(withTitle: String(localized: "Open Settings"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         if alert.runModal() == .alertFirstButtonReturn,
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
             NSWorkspace.shared.open(url)
@@ -212,12 +212,8 @@ final class AppModel: ObservableObject {
             return
         }
         let alert = NSAlert()
-        alert.messageText = "Kein Gerät per Kabel verbunden"
-        alert.informativeText = """
-        Per Kabel: iPhone anschliessen und entsperren, dann hier erneut wählen.
-
-        Kabellos: Auf dem iPhone Kontrollzentrum → Bildschirmsynchronisierung → «\(settings.receiverName)» wählen. Code: \(settings.pin)
-        """
+        alert.messageText = String(localized: "No device connected by cable")
+        alert.informativeText = String(localized: "Cable: connect and unlock the iPhone, then choose this again.\n\nWireless: on the iPhone, open Control Center → Screen Mirroring → “\(settings.receiverName)”. Code: \(settings.pin)")
         alert.runModal()
     }
 
@@ -236,8 +232,8 @@ final class AppModel: ObservableObject {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg, .heic, .movie]
         panel.allowsMultipleSelection = true
-        panel.message = "Screenshots (eins, oder zwei für Duo) oder eine Bildschirmaufnahme wählen"
-        panel.prompt = "Bearbeiten"
+        panel.message = String(localized: "Choose screenshots (one, or two for a duo) or a screen recording")
+        panel.prompt = String(localized: "Edit")
         guard panel.runModal() == .OK else { return }
         openEditor(urls: panel.urls)
     }

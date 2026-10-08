@@ -8,10 +8,10 @@ struct SettingsView: View {
     var body: some View {
         TabView(selection: $tab) {
             GeneralSettingsView()
-                .tabItem { Label("Allgemein", systemImage: "gearshape") }
+                .tabItem { Label("General", systemImage: "gearshape") }
                 .tag("general")
             DesignSettingsView()
-                .tabItem { Label("Gestaltung", systemImage: "paintpalette") }
+                .tabItem { Label("Style", systemImage: "paintpalette") }
                 .tag("design")
         }
         .frame(width: 500)
@@ -35,31 +35,42 @@ struct GeneralSettingsView: View {
             || fps != settings.maxFPS || hevc != settings.hevc || peerToPeer != settings.peerToPeer
     }
 
+    @State private var language = AppSettings.shared.appLanguage
+    @State private var languageChanged = false
+
+    private var languageSelection: Binding<String> {
+        Binding(get: { language }, set: { value in
+            language = value
+            settings.appLanguage = value
+            languageChanged = true
+        })
+    }
+
     private var pinValid: Bool { pin.count == 4 && pin.allSatisfy(\.isNumber) && pin != "0000" }
 
     var body: some View {
         Form {
-            Section("Kabelloser Empfang (AirPlay)") {
-                TextField("Name auf dem iPhone", text: $name)
-                Toggle("Direktverbindung über Apple-Funk (AWDL)", isOn: $peerToPeer)
-                Text("Nötig, wenn das iPhone den Mac im WLAN nicht findet. Verlangt beim ersten Verbinden einen Code.")
+            Section("Wireless receiver (AirPlay)") {
+                TextField("Name on the iPhone", text: $name)
+                Toggle("Direct connection over Apple Wireless (AWDL)", isOn: $peerToPeer)
+                Text("Needed when the iPhone does not find the Mac on Wi-Fi. Asks for a code on first connection.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextField("Code (4 Ziffern)", text: $pin)
+                TextField("Code (4 digits)", text: $pin)
                     .disabled(!peerToPeer)
-                Picker("Auflösung", selection: $height) {
-                    Text("1080 Pixel Höhe").tag(1080)
-                    Text("1440 Pixel Höhe").tag(1440)
-                    Text("2160 Pixel Höhe").tag(2160)
+                Picker("Resolution", selection: $height) {
+                    Text("1080 pixels high").tag(1080)
+                    Text("1440 pixels high").tag(1440)
+                    Text("2160 pixels high").tag(2160)
                 }
-                Picker("Bildrate", selection: $fps) {
-                    Text("30 Bilder/s").tag(30)
-                    Text("60 Bilder/s").tag(60)
+                Picker("Frame rate", selection: $fps) {
+                    Text("30 fps").tag(30)
+                    Text("60 fps").tag(60)
                 }
-                Toggle("HEVC erlauben (nötig über 1080)", isOn: $hevc)
+                Toggle("Allow HEVC (needed above 1080)", isOn: $hevc)
                 HStack {
                     Spacer()
-                    Button("Übernehmen und neu starten") {
+                    Button("Apply and restart") {
                         settings.receiverName = name.trimmingCharacters(in: .whitespaces)
                         settings.pin = pin
                         settings.streamHeight = height
@@ -72,14 +83,30 @@ struct GeneralSettingsView: View {
                     .keyboardShortcut(.defaultAction)
                 }
             }
-            Section("Fenster") {
-                Toggle("Gerätrahmen anzeigen", isOn: $settings.showFrame)
-                Toggle("Immer im Vordergrund", isOn: $settings.alwaysOnTop)
-                Toggle("Ton wiedergeben", isOn: $settings.playAudio)
+            Section("Language") {
+                Picker("Language", selection: languageSelection) {
+                    Text("System language").tag("system")
+                    ForEach(AppSettings.languages, id: \.id) { language in
+                        Text(verbatim: language.name).tag(language.id)
+                    }
+                }
+                if languageChanged {
+                    HStack {
+                        Text("Takes effect after a restart.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Restart Now") { AppSettings.relaunch() }
+                    }
+                }
             }
-            Section("Aufnahme") {
-                Toggle("Mit Gerätrahmen aufnehmen", isOn: $settings.recordWithFrame)
-                Text("Hintergrund, Abstand und Format kommen aus «Gestaltung». Bei transparentem Hintergrund entsteht HEVC mit Transparenz, sonst H.264. Ablage: Schreibtisch.")
+            Section("Window") {
+                Toggle("Show device frame", isOn: $settings.showFrame)
+                Toggle("Keep on top", isOn: $settings.alwaysOnTop)
+                Toggle("Play sound", isOn: $settings.playAudio)
+            }
+            Section("Recording") {
+                Toggle("Record with device frame", isOn: $settings.recordWithFrame)
+                Text("Background, padding and aspect ratio come from “Style”. A transparent background produces HEVC with transparency, otherwise H.264. Saved to the Desktop.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -103,7 +130,7 @@ struct DesignSettingsView: View {
             }
             StyleControls(style: $settings.style, showFrame: $settings.showFrame)
             Section {
-                Text("Standard für Screenshots, Aufnahmen und die Präsentation (⌃⌘F). Im Spiegelfenster bleibt der Hintergrund weg. Im Editor (⌘E) lässt sich die Gestaltung pro Datei ändern.")
+                Text("Default for screenshots, recordings and presenting (⌃⌘F). The mirror window shows no background. In the editor (⌘E) you can change the style per file.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

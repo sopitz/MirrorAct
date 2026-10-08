@@ -68,7 +68,7 @@ static void on_conn_feedback(void *cls) {
 }
 
 static void on_conn_reset(void *cls, int reason) {
-    bridge_log(LOGGER_INFO, "Verbindung zurückgesetzt (Grund %d)", reason);
+    bridge_log(LOGGER_INFO, "connection reset (reason %d)", reason);
     atomic_store(&reset_requested, true);
 }
 
@@ -112,7 +112,7 @@ static void on_video_report_size(void *cls, float *width_source, float *height_s
 
 static void on_report_client_request(void *cls, char *device_id, char *model, char *name, bool *admit) {
     *admit = true;
-    bridge_log(LOGGER_INFO, "Verbindungsanfrage von %s (%s), ID %s", name, model, device_id);
+    bridge_log(LOGGER_INFO, "connection request from %s (%s), ID %s", name, model, device_id);
     if (cb.client) cb.client(cb.ctx, device_id, model, name);
 }
 
@@ -183,10 +183,10 @@ static void *service_loop(void *arg) {
             for (int i = 1; i < count; i++) {
                 if (fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
                     service_failed[services[i]] = true;
-                    bridge_log(LOGGER_ERR, "Bonjour-Socket für Dienst %d ausgefallen", services[i]);
+                    bridge_log(LOGGER_ERR, "Bonjour socket for service %d failed", services[i]);
                 } else if ((fds[i].revents & POLLIN) && dnssd_process_service(dnssd, services[i]) != 0) {
                     service_failed[services[i]] = true;
-                    bridge_log(LOGGER_ERR, "Bonjour-Dienst %d antwortet nicht mehr", services[i]);
+                    bridge_log(LOGGER_ERR, "Bonjour service %d stopped responding", services[i]);
                 }
             }
         }
@@ -196,7 +196,7 @@ static void *service_loop(void *arg) {
             last_tick = now;
             if (atomic_load(&open_connections) > 0) {
                 if (atomic_fetch_add(&missed_feedback, 1) + 1 > MISSED_FEEDBACK_LIMIT) {
-                    bridge_log(LOGGER_INFO, "kein Heartbeat seit %d s, trenne", MISSED_FEEDBACK_LIMIT);
+                    bridge_log(LOGGER_INFO, "no heartbeat for %d s, disconnecting", MISSED_FEEDBACK_LIMIT);
                     atomic_store(&reset_requested, true);
                 }
             } else {
@@ -237,7 +237,7 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
 
     unsigned int hw[6];
     if (sscanf(config->device_id, "%x:%x:%x:%x:%x:%x", &hw[0], &hw[1], &hw[2], &hw[3], &hw[4], &hw[5]) != 6) {
-        bridge_log(LOGGER_ERR, "ungültige Geräte-ID %s", config->device_id);
+        bridge_log(LOGGER_ERR, "invalid device ID %s", config->device_id);
         return -2;
     }
     char hw_addr[6];
@@ -247,7 +247,7 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     int error = 0;
     dnssd = dnssd_init(config->name, (int)strlen(config->name), hw_addr, 6, pin_pw, &error);
     if (error || !dnssd) {
-        bridge_log(LOGGER_ERR, "dnssd_init fehlgeschlagen (%d)", error);
+        bridge_log(LOGGER_ERR, "dnssd_init failed (%d)", error);
         dnssd = NULL;
         return -3;
     }
@@ -324,11 +324,11 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     raop_set_dnssd(raop, dnssd);
 
     if (dnssd_register_raop(dnssd, port) || dnssd_register_airplay(dnssd, port)) {
-        bridge_log(LOGGER_ERR, "Bonjour-Registrierung fehlgeschlagen");
+        bridge_log(LOGGER_ERR, "Bonjour registration failed");
         teardown();
         return -6;
     }
-    bridge_log(LOGGER_INFO, "AirPlay-Empfänger «%s» auf Port %u", config->name, port);
+    bridge_log(LOGGER_INFO, "AirPlay receiver \"%s\" on port %u", config->name, port);
 
     if (pipe(wake_pipe) != 0) {
         teardown();

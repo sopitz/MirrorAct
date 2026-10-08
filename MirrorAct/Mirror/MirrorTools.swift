@@ -39,32 +39,32 @@ struct MirrorToolRail: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            RailButton(symbol: "xmark", title: "Schliessen", small: true, action: actions.close)
+            RailButton(symbol: "xmark", title: String(localized: "Close"), small: true, action: actions.close)
                 .padding(.bottom, 4)
                 .railItem(visible)
             recordButton
-            RailButton(symbol: "camera.fill", title: "Foto",
-                       help: "Klick: Screenshot auf den Schreibtisch · ⌥-Klick: kopieren · Ziehen: direkt in eine App",
+            RailButton(symbol: "camera.fill", title: String(localized: "Photo"),
+                       help: String(localized: "Click: screenshot to the Desktop · ⌥-click: copy · Drag: straight into an app"),
                        action: {
                            NSEvent.modifierFlags.contains(.option) ? actions.copyScreenshot() : actions.saveScreenshot()
                        })
                 .onDrag { screenshotProvider() }
                 .railItem(visible)
             RailButton(symbol: session.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                       title: session.muted ? "Stumm" : "Ton") {
+                       title: session.muted ? String(localized: "Muted") : String(localized: "Sound")) {
                 session.muted.toggle()
                 settings.playAudio = !session.muted
             }
             .railItem(visible)
-            RailButton(symbol: settings.alwaysOnTop ? "pin.fill" : "pin", title: "Oben",
-                       help: "Immer im Vordergrund (⌘T)", active: settings.alwaysOnTop) {
+            RailButton(symbol: settings.alwaysOnTop ? "pin.fill" : "pin", title: String(localized: "On Top"),
+                       help: String(localized: "Keep on top (⌘T)"), active: settings.alwaysOnTop) {
                 settings.alwaysOnTop.toggle()
             }
             .railItem(visible)
-            RailButton(symbol: "arrow.up.left.and.arrow.down.right", title: "Vollbild",
-                       help: "Präsentieren (⌃⌘F, Esc beendet)", action: actions.present)
+            RailButton(symbol: "arrow.up.left.and.arrow.down.right", title: String(localized: "Full Screen"),
+                       help: String(localized: "Present full screen (⌃⌘F, Esc to exit)"), action: actions.present)
                 .railItem(visible)
-            RailButton(symbol: "paintpalette.fill", title: "Stil", active: chrome.styleOpen) {
+            RailButton(symbol: "paintpalette.fill", title: String(localized: "Style"), active: chrome.styleOpen) {
                 chrome.styleOpen.toggle()
             }
             .popover(isPresented: $chrome.styleOpen, arrowEdge: .trailing) {
@@ -98,7 +98,7 @@ struct MirrorToolRail: View {
             if let start = session.recordingStartedAt {
                 TimelineView(.periodic(from: start, by: 1)) { context in
                     RailButton(symbol: "stop.circle.fill", title: Self.elapsed(from: start, to: context.date),
-                               help: "Aufnahme beenden (⌘R)", tint: .red, action: actions.toggleRecording)
+                               help: String(localized: "Stop recording (⌘R)"), tint: .red, action: actions.toggleRecording)
                 }
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -106,7 +106,7 @@ struct MirrorToolRail: View {
                         .opacity(visible ? 0 : 1)
                 )
             } else {
-                RailButton(symbol: "record.circle", title: "Aufnahme", help: "Video aufnehmen (⌘R)",
+                RailButton(symbol: "record.circle", title: String(localized: "Record"), help: String(localized: "Record video (⌘R)"),
                            action: actions.toggleRecording)
                     .railItem(visible)
             }
@@ -114,8 +114,8 @@ struct MirrorToolRail: View {
     }
 
     private func lastFileButton(_ url: URL) -> some View {
-        RailButton(symbol: url.pathExtension == "mov" ? "film" : "photo", title: "Zuletzt",
-                   help: "\(url.lastPathComponent) – ziehen zum Teilen, klicken zum Bearbeiten", tint: .accentColor) {
+        RailButton(symbol: url.pathExtension == "mov" ? "film" : "photo", title: String(localized: "Latest"),
+                   help: String(localized: "\(url.lastPathComponent) – drag to share, click to edit"), tint: .accentColor) {
             if let editable = session.lastEditable {
                 AppModel.shared.openEditor(urls: [editable])
             } else {
@@ -125,9 +125,9 @@ struct MirrorToolRail: View {
         .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
         .contextMenu {
             if let editable = session.lastEditable {
-                Button("Bearbeiten …") { AppModel.shared.openEditor(urls: [editable]) }
+                Button("Edit …") { AppModel.shared.openEditor(urls: [editable]) }
             }
-            Button("Im Finder zeigen") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         }
     }
 
@@ -211,18 +211,18 @@ struct StylePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            group("Grösse") {
+            group(String(localized: "Size")) {
                 HStack(spacing: 6) {
-                    tile("Lebens-\ngross", symbol: "ruler", action: actions.lifeSize)
-                    tile("Pixel-\ngenau", symbol: "square.grid.3x3", action: actions.pixelPerfect)
-                    tile("Punkt-\ngenau", symbol: "iphone", action: actions.actualSize)
-                    tile("Bildschirm\nfüllen", symbol: "arrow.up.and.down", action: actions.fitToScreen)
+                    tile(String(localized: "Life-\nsize"), symbol: "ruler", action: actions.lifeSize)
+                    tile(String(localized: "Pixel-\nperfect"), symbol: "square.grid.3x3", action: actions.pixelPerfect)
+                    tile(String(localized: "Point-\nperfect"), symbol: "iphone", action: actions.actualSize)
+                    tile(String(localized: "Fit to\nscreen"), symbol: "arrow.up.and.down", action: actions.fitToScreen)
                 }
             }
-            group("Gerät") {
+            group(String(localized: "Device")) {
                 Picker("", selection: $settings.showFrame) {
-                    Text("Mit Rahmen").tag(true)
-                    Text("Nur Bildschirm").tag(false)
+                    Text("With frame").tag(true)
+                    Text("Screen only").tag(false)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -244,9 +244,9 @@ struct StylePanel: View {
                 .opacity(settings.showFrame ? 1 : 0.35)
                 .disabled(!settings.showFrame)
             }
-            group("Hintergrund für Fotos, Videos und Vollbild") {
+            group(String(localized: "Background for photos, videos and full screen")) {
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(38), spacing: 6), count: 6), spacing: 6) {
-                    backgroundTile(selected: settings.style.background == .transparent, help: "Transparent") {
+                    backgroundTile(selected: settings.style.background == .transparent, help: String(localized: "Transparent")) {
                         Checkerboard()
                     } action: { setBackground(.transparent) }
                     ForEach(GradientPreset.allCases) { preset in
@@ -259,26 +259,26 @@ struct StylePanel: View {
                             setBackground(.gradient)
                         }
                     }
-                    backgroundTile(selected: settings.style.background == .color, help: "Farbe") {
+                    backgroundTile(selected: settings.style.background == .color, help: String(localized: "Color")) {
                         Color(nsColor: settings.style.color.nsColor)
                     } action: { setBackground(.color) }
-                    backgroundTile(selected: settings.style.background == .image, help: "Eigenes Bild") {
+                    backgroundTile(selected: settings.style.background == .image, help: String(localized: "Custom image")) {
                         Image(systemName: "photo").font(.system(size: 14)).foregroundStyle(.secondary)
                     } action: { setBackground(.image) }
                 }
                 if settings.style.background == .color {
-                    ColorPicker("Farbe", selection: Binding(
+                    ColorPicker("Color", selection: Binding(
                         get: { Color(nsColor: settings.style.color.nsColor) },
                         set: { settings.style.color = RGBA(NSColor($0)) }), supportsOpacity: false)
                 }
                 HStack {
-                    Text("Abstand").frame(width: 62, alignment: .leading)
+                    Text("Padding").frame(width: 62, alignment: .leading)
                     Slider(value: $settings.style.padding, in: 0...0.5)
                 }
                 HStack {
-                    Toggle("Schatten", isOn: $settings.style.shadow)
+                    Toggle("Shadow", isOn: $settings.style.shadow)
                     Spacer()
-                    Picker("Format", selection: $settings.style.aspect) {
+                    Picker("Aspect ratio", selection: $settings.style.aspect) {
                         ForEach(CanvasAspect.allCases) { Text($0.title).tag($0) }
                     }
                     .frame(width: 150)
@@ -286,10 +286,10 @@ struct StylePanel: View {
             }
             Divider()
             HStack {
-                Toggle("Werkzeuge immer zeigen", isOn: $settings.alwaysShowTools)
+                Toggle("Always show tools", isOn: $settings.alwaysShowTools)
                     .toggleStyle(.checkbox)
                 Spacer()
-                Button("Alle Einstellungen …") {
+                Button("All Settings …") {
                     UserDefaults.standard.set("design", forKey: "settingsTab")
                     openSettings()
                 }
@@ -317,7 +317,7 @@ struct StylePanel: View {
             }
             Spacer()
             if session.kind == .wireless {
-                Button("Trennen", action: actions.disconnect)
+                Button("Disconnect", action: actions.disconnect)
                     .controlSize(.small)
             }
         }
@@ -371,7 +371,7 @@ struct StylePanel: View {
         if kind == .image, style.imagePath == nil {
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.image]
-            panel.message = "Hintergrundbild wählen"
+            panel.message = String(localized: "Choose background image")
             guard panel.runModal() == .OK, let url = panel.url else { return }
             let target = AppSettings.shared.supportDirectory
                 .appendingPathComponent("Hintergrund-\(UUID().uuidString.prefix(8)).\(url.pathExtension)")

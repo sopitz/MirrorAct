@@ -49,7 +49,7 @@ enum FrameRenderer {
             guard let framed = render(screen: image, profile: profile, showFrame: showFrame, style: style)
             else { continue }
             let base = url.deletingPathExtension().lastPathComponent
-            let out = url.deletingLastPathComponent().appendingPathComponent("\(base) (Rahmen).png")
+            let out = url.deletingLastPathComponent().appendingPathComponent(String(localized: "\(base) (Framed).png"))
             if writePNG(framed, to: out) { outputs.append(out) }
         }
         return outputs

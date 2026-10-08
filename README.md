@@ -28,7 +28,7 @@ the device.
 - **Editor:** frame existing screenshots and screen recordings afterwards, trim videos, two screenshots as a **duo** (side by side, staggered, tilted, perspective).
 - **Shortcuts:** "Frame screenshot" (usable as a Finder Quick Action), "Screenshot from iPhone", "Start or stop recording".
 
-The user interface is currently German. An English localization is planned.
+The user interface is available in English and German; choose the language under Settings → General (System language, Deutsch, English).
 
 ## Requirements
 
@@ -79,6 +79,7 @@ Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |
 | `MirrorAct/Launcher` | start window, settings |
+| `MirrorAct/Localization` | String Catalogs (English source, German translation), Info.plist and Siri phrases |
 
 Without a device you can check the rendering:
 

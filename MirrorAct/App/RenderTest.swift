@@ -53,9 +53,9 @@ enum RenderTest {
         MainActor.assumeIsolated {
             renderView(LauncherView(), to: directory.appendingPathComponent("launcher.png"))
             let cards = HStack(alignment: .top, spacing: 16) {
-                DeviceCard(model: .init(id: "a", name: "Test-iPhone", modelIdentifier: "iPhone14,2", status: "Per Kabel bereit",
+                DeviceCard(model: .init(id: "a", name: "Test-iPhone", modelIdentifier: "iPhone14,2", status: "Ready via cable",
                                         state: .ready, transport: .cable, cableDevice: nil)) {}
-                DeviceCard(model: .init(id: "b", name: "Test iPhone 15", modelIdentifier: "iPhone16,1", status: "Kabellos",
+                DeviceCard(model: .init(id: "b", name: "Test iPhone 15", modelIdentifier: "iPhone16,1", status: "Wireless",
                                         state: .offline, transport: .wireless, cableDevice: nil)) {}
                 WirelessCard(receiverName: "MirrorAct", pin: "5321", usesPin: true, state: .ready) {}
                 AddDeviceCard {}
@@ -99,7 +99,7 @@ enum RenderTest {
             guard let recorder = try? MirrorRecorder(url: url, frameSize: CGSize(width: 1170, height: 2532),
                                                      profile: profile, withFrame: withFrame, style: style,
                                                      audioSampleRate: withFrame ? nil : AirPlayAudioPlayer.sampleRate)
-            else { print("Rekorder-Fehler"); continue }
+            else { print("recorder error"); continue }
             if !withFrame {
                 // Ton wie bei AirPlay: AAC-ELD-Pakete alle ~11 ms
                 player.recordTap = { recorder.appendAudio($0) }
@@ -133,9 +133,9 @@ enum RenderTest {
                                 size = natural
                             }
                             let audioTracks = (try? await asset.loadTracks(withMediaType: .audio)) ?? []
-                            var audioInfo = "ohne Ton"
+                            var audioInfo = "no audio"
                             if let track = audioTracks.first, let range = try? await track.load(.timeRange) {
-                                audioInfo = String(format: "Ton %.2f s ab %.2f s", range.duration.seconds, range.start.seconds)
+                                audioInfo = String(format: "audio %.2f s from %.2f s", range.duration.seconds, range.start.seconds)
                             }
                             print("\(url.lastPathComponent): \(String(format: "%.2f", duration)) s, \(Int(size.width))x\(Int(size.height)), \(audioInfo)")
                             let generator = AVAssetImageGenerator(asset: asset)
@@ -148,7 +148,7 @@ enum RenderTest {
                             group.leave()
                         }
                     case let .failure(error):
-                        print("Aufnahme fehlgeschlagen: \(error)")
+                        print("recording failed: \(error)")
                         group.leave()
                     }
                 }
@@ -175,7 +175,7 @@ enum RenderTest {
                         FrameRenderer.writePNG(image, to: directory.appendingPathComponent("editor-video.png"))
                     }
                 } catch {
-                    print("Editor-Video fehlgeschlagen: \(error.localizedDescription)")
+                    print("editor video failed: \(error.localizedDescription)")
                 }
                 done()
             }

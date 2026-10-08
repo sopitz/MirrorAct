@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
+  developmentLanguage: en
 
 settings:
   base:
@@ -12,6 +13,8 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 
 configFiles:
   Debug: Config/Base.xcconfig
@@ -34,6 +37,10 @@ targets:
       path: MirrorAct/Info.plist
       properties:
         CFBundleName: MirrorAct
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations:
+          - en
+          - de
         CFBundleDisplayName: MirrorAct
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -43,9 +50,9 @@ targets:
         NSHighResolutionCapable: true
         NSPrincipalClass: NSApplication
         NSHumanReadableCopyright: "GPL-3.0-or-later"
-        NSCameraUsageDescription: MirrorAct zeigt den Bildschirm eines per Kabel verbundenen iPhones oder iPads an.
-        NSMicrophoneUsageDescription: MirrorAct gibt den Ton eines per Kabel verbundenen iPhones oder iPads wieder.
-        NSLocalNetworkUsageDescription: MirrorAct ist als AirPlay-Empfänger für die Bildschirmsynchronisierung erreichbar.
+        NSCameraUsageDescription: MirrorAct shows the screen of an iPhone or iPad connected by cable.
+        NSMicrophoneUsageDescription: MirrorAct plays the sound of an iPhone or iPad connected by cable.
+        NSLocalNetworkUsageDescription: MirrorAct can be reached as an AirPlay receiver for Screen Mirroring.
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp

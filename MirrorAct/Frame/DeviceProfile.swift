@@ -78,7 +78,7 @@ struct DeviceProfile: Equatable {
         case "iPhone12,1": return phone("iPhone 11", notchXR, corner: 0.100, points: p414, pixels: 828, ppi: 326)
         case "iPhone12,3": return phone("iPhone 11 Pro", notchX, corner: 0.104, points: p375, ppi: 458)
         case "iPhone12,5": return phone("iPhone 11 Pro Max", notchMax, corner: 0.096, points: p414, ppi: 458)
-        case "iPhone12,8": return homeButtonPhone("iPhone SE (2. Gen.)", points: p375se)
+        case "iPhone12,8": return homeButtonPhone(String(localized: "iPhone SE (2nd generation)"), points: p375se)
         case "iPhone13,1": return phone("iPhone 12 mini", notchX, corner: 0.117, points: p375, pixels: 1080, ppi: 476)
         case "iPhone13,2": return phone("iPhone 12", notch12, corner: 0.121, points: p390)
         case "iPhone13,3": return phone("iPhone 12 Pro", notch12, corner: 0.121, points: p390)
@@ -87,7 +87,7 @@ struct DeviceProfile: Equatable {
         case "iPhone14,5": return phone("iPhone 13", notch13, corner: 0.121, points: p390)
         case "iPhone14,2": return phone("iPhone 13 Pro", notch13, corner: 0.121, points: p390)
         case "iPhone14,3": return phone("iPhone 13 Pro Max", .notch(width: 0.379, height: 0.077), corner: 0.125, points: p428, ppi: 458)
-        case "iPhone14,6": return homeButtonPhone("iPhone SE (3. Gen.)", points: p375se)
+        case "iPhone14,6": return homeButtonPhone(String(localized: "iPhone SE (3rd generation)"), points: p375se)
         case "iPhone14,7": return phone("iPhone 14", notch13, corner: 0.121, points: p390)
         case "iPhone14,8": return phone("iPhone 14 Plus", .notch(width: 0.379, height: 0.077), corner: 0.125, points: p428, ppi: 458)
         case "iPhone15,2": return phone("iPhone 14 Pro", island, corner: 0.140, points: p393)
@@ -163,8 +163,8 @@ struct DeviceProfile: Equatable {
                    "iPhone12,5", "iPhone12,3", "iPhone12,1", "iPhone11,8", "iPhone11,6", "iPhone11,2", "iPhone10,3",
                    "iPhone14,6", "iPhone12,8"]
         var list = ids.compactMap { id in forModelIdentifier(id)?.marketingName.map { (id: id, name: $0) } }
-        list.append((id: "iPad-modern", name: "iPad (ohne Home-Button)"))
-        list.append((id: "iPad-home", name: "iPad (mit Home-Button)"))
+        list.append((id: "iPad-modern", name: String(localized: "iPad (without Home button)")))
+        list.append((id: "iPad-home", name: String(localized: "iPad (with Home button)")))
         return list
     }()
 

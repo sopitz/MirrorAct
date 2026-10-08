@@ -1,0 +1,2258 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    " · mirroring wirelessly" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · spiegelt kabellos"
+          }
+        }
+      }
+    },
+    "“%@”" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«%@»"
+          }
+        }
+      }
+    },
+    "%@ – drag to share, click to edit" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ – ziehen zum Teilen, klicken zum Bearbeiten"
+          }
+        }
+      }
+    },
+    "%@ (Duo).png" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (Duo).png"
+          }
+        }
+      }
+    },
+    "%@ (Framed).mov" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (Rahmen).mov"
+          }
+        }
+      }
+    },
+    "%@ (Framed).png" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (Rahmen).png"
+          }
+        }
+      }
+    },
+    "%@ can’t be opened" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lässt sich nicht öffnen"
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld devices via cable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Geräte per Kabel"
+          }
+        }
+      }
+    },
+    "1 device via cable – click to mirror" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 Gerät per Kabel – klicken zum Spiegeln"
+          }
+        }
+      }
+    },
+    "1 device via cable · mirroring wirelessly" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 Gerät per Kabel · spiegelt kabellos"
+          }
+        }
+      }
+    },
+    "30 fps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 Bilder/s"
+          }
+        }
+      }
+    },
+    "60 fps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60 Bilder/s"
+          }
+        }
+      }
+    },
+    "1080 pixels high" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1080 Pixel Höhe"
+          }
+        }
+      }
+    },
+    "1440 pixels high" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1440 Pixel Höhe"
+          }
+        }
+      }
+    },
+    "2160 pixels high" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2160 Pixel Höhe"
+          }
+        }
+      }
+    },
+    "All Settings …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Einstellungen …"
+          }
+        }
+      }
+    },
+    "Allow HEVC (needed above 1080)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HEVC erlauben (nötig über 1080)"
+          }
+        }
+      }
+    },
+    "Always show tools" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkzeuge immer zeigen"
+          }
+        }
+      }
+    },
+    "Always Show Tools" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werkzeuge immer zeigen"
+          }
+        }
+      }
+    },
+    "Apply and restart" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übernehmen und neu starten"
+          }
+        }
+      }
+    },
+    "Aspect ratio" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Format"
+          }
+        }
+      }
+    },
+    "Automatic" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch"
+          }
+        }
+      }
+    },
+    "Automatic (by resolution)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch (nach Auflösung)"
+          }
+        }
+      }
+    },
+    "Background" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hintergrund"
+          }
+        }
+      }
+    },
+    "Background for photos, videos and full screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hintergrund für Fotos, Videos und Vollbild"
+          }
+        }
+      }
+    },
+    "Background, padding and aspect ratio come from “Style”. A transparent background produces HEVC with transparency, otherwise H.264. Saved to the Desktop." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hintergrund, Abstand und Format kommen aus «Stil». Bei transparentem Hintergrund entsteht HEVC mit Transparenz, sonst H.264. Ablage: Schreibtisch."
+          }
+        }
+      }
+    },
+    "Black" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schwarz"
+          }
+        }
+      }
+    },
+    "Blue" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blau"
+          }
+        }
+      }
+    },
+    "Cable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per Kabel"
+          }
+        }
+      }
+    },
+    "Cable disconnected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kabel getrennt"
+          }
+        }
+      }
+    },
+    "Cable not connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kabel nicht verbunden"
+          }
+        }
+      }
+    },
+    "Cable or Wi-Fi – how it works" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kabel oder WLAN – so geht's"
+          }
+        }
+      }
+    },
+    "Cable: connect and unlock the iPhone, then choose this again.\n\nWireless: on the iPhone, open Control Center → Screen Mirroring → “%@”. Code: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per Kabel: iPhone anschliessen und entsperren, dann hier erneut wählen.\n\nKabellos: Auf dem iPhone Kontrollzentrum → Bildschirmsynchronisierung → «%1$@» wählen. Code: %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cable: connect and unlock the iPhone, then choose this again.\n\nWireless: on the iPhone, open Control Center → Screen Mirroring → “%1$@”. Code: %2$@"
+          }
+        }
+      }
+    },
+    "Camera access required" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamerazugriff nötig"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Choose “%@”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«%@» wählen."
+          }
+        }
+      }
+    },
+    "Choose background image" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hintergrundbild wählen"
+          }
+        }
+      }
+    },
+    "Choose Image …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild wählen …"
+          }
+        }
+      }
+    },
+    "Choose in Control Center:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Kontrollzentrum wählen:"
+          }
+        }
+      }
+    },
+    "Choose screenshots (one, or two for a duo) or a screen recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshots (eins, oder zwei für Duo) oder eine Bildschirmaufnahme wählen"
+          }
+        }
+      }
+    },
+    "Click: screenshot to the Desktop · ⌥-click: copy · Drag: straight into an app" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klick: Screenshot auf den Schreibtisch · ⌥-Klick: kopieren · Ziehen: direkt in eine App"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schliessen"
+          }
+        }
+      }
+    },
+    "Close Window" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fenster schliessen"
+          }
+        }
+      }
+    },
+    "CODE" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CODE"
+          }
+        }
+      }
+    },
+    "Code (4 digits)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code (4 Ziffern)"
+          }
+        }
+      }
+    },
+    "Code on first connection: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code beim ersten Verbinden: %@"
+          }
+        }
+      }
+    },
+    "Color" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Farbe"
+          }
+        }
+      }
+    },
+    "Connect a Device" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerät verbinden"
+          }
+        }
+      }
+    },
+    "Connect a device by cable or wirelessly" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerät anschliessen oder kabellos verbinden"
+          }
+        }
+      }
+    },
+    "Connect the iPhone or iPad to the Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone oder iPad mit dem Mac verbinden."
+          }
+        }
+      }
+    },
+    "Connecting …\nUnlock the device if needed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinde …\nGerät entsperren, falls nötig"
+          }
+        }
+      }
+    },
+    "Connecting via cable …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinde per Kabel …"
+          }
+        }
+      }
+    },
+    "Copied to the clipboard" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In die Zwischenablage kopiert"
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopieren"
+          }
+        }
+      }
+    },
+    "Copy Screenshot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshot kopieren"
+          }
+        }
+      }
+    },
+    "Custom image" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eigenes Bild"
+          }
+        }
+      }
+    },
+    "Deep Purple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dunkellila"
+          }
+        }
+      }
+    },
+    "Default for screenshots, recordings and presenting (⌃⌘F). The mirror window shows no background. In the editor (⌘E) you can change the style per file." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard für Screenshots, Aufnahmen und die Präsentation (⌃⌘F). Im Spiegelfenster bleibt der Hintergrund weg. Im Editor (⌘E) lässt sich der Stil pro Datei ändern."
+          }
+        }
+      }
+    },
+    "Device" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerät"
+          }
+        }
+      }
+    },
+    "Device Frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerätrahmen"
+          }
+        }
+      }
+    },
+    "Direct connection over Apple Wireless (AWDL)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Direktverbindung über Apple-Funk (AWDL)"
+          }
+        }
+      }
+    },
+    "Disconnect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trennen"
+          }
+        }
+      }
+    },
+    "Disconnect Device" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerät trennen"
+          }
+        }
+      }
+    },
+    "Disconnected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getrennt"
+          }
+        }
+      }
+    },
+    "Disconnected – choose “%@” on the iPhone again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getrennt – auf dem iPhone erneut «%@» wählen"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig"
+          }
+        }
+      }
+    },
+    "Done – no code needed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig – ohne Code."
+          }
+        }
+      }
+    },
+    "Drag the image out to share it, or save/copy it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild herausziehen zum Teilen, oder sichern/kopieren."
+          }
+        }
+      }
+    },
+    "Duo" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duo"
+          }
+        }
+      }
+    },
+    "Edit" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearbeiten"
+          }
+        }
+      }
+    },
+    "Edit – %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearbeiten – %@"
+          }
+        }
+      }
+    },
+    "Edit …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearbeiten …"
+          }
+        }
+      }
+    },
+    "Edit Last File …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzte Datei bearbeiten …"
+          }
+        }
+      }
+    },
+    "Edit Screenshot or Video …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshot oder Video bearbeiten …"
+          }
+        }
+      }
+    },
+    "Enter this code on the iPhone: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code auf dem iPhone eingeben: %@"
+          }
+        }
+      }
+    },
+    "Evening" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abend"
+          }
+        }
+      }
+    },
+    "Export failed: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export fehlgeschlagen: %@"
+          }
+        }
+      }
+    },
+    "Export preset not available" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportprofil nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Export: H.264 (.mov), up to 4K" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export: H.264 (.mov), höchstens 4K"
+          }
+        }
+      }
+    },
+    "Export: HEVC with transparency (.mov)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export: HEVC mit Transparenz (.mov)"
+          }
+        }
+      }
+    },
+    "Exporting …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportiere …"
+          }
+        }
+      }
+    },
+    "Fit to\nscreen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildschirm\nfüllen"
+          }
+        }
+      }
+    },
+    "Fit to Screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An Bildschirm anpassen"
+          }
+        }
+      }
+    },
+    "Forest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wald"
+          }
+        }
+      }
+    },
+    "Frame ${files}" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${files} einrahmen"
+          }
+        }
+      }
+    },
+    "Frame color" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rahmenfarbe"
+          }
+        }
+      }
+    },
+    "Frame Color" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rahmenfarbe"
+          }
+        }
+      }
+    },
+    "Frame rate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildrate"
+          }
+        }
+      }
+    },
+    "Frame Screenshot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshot einrahmen"
+          }
+        }
+      }
+    },
+    "Frame screenshots (also two as a duo) or videos (⌘E)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshots (auch zwei als Duo) oder Videos einrahmen (⌘E)"
+          }
+        }
+      }
+    },
+    "Full Screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vollbild"
+          }
+        }
+      }
+    },
+    "General" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allgemein"
+          }
+        }
+      }
+    },
+    "Gold" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold"
+          }
+        }
+      }
+    },
+    "Gradient" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verlauf"
+          }
+        }
+      }
+    },
+    "Graphite" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Graphit"
+          }
+        }
+      }
+    },
+    "If “%@” does not appear: turn on AirPlay Receiver in macOS under General → AirDrop & Handoff. Keep Wi-Fi and Bluetooth on the device turned on." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erscheint «%@» nicht: in macOS unter Allgemein → AirDrop & Handoff den AirPlay-Empfänger einschalten. WLAN und Bluetooth am Gerät eingeschaltet lassen."
+          }
+        }
+      }
+    },
+    "Image" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild"
+          }
+        }
+      }
+    },
+    "iPad (with Home button)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad (mit Home-Button)"
+          }
+        }
+      }
+    },
+    "iPad (without Home button)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad (ohne Home-Button)"
+          }
+        }
+      }
+    },
+    "iPhone SE (2nd generation)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone SE (2. Gen.)"
+          }
+        }
+      }
+    },
+    "iPhone SE (3rd generation)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone SE (3. Gen.)"
+          }
+        }
+      }
+    },
+    "Keep on top" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immer im Vordergrund"
+          }
+        }
+      }
+    },
+    "Keep on Top" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immer im Vordergrund"
+          }
+        }
+      }
+    },
+    "Keep on top (⌘T)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immer im Vordergrund (⌘T)"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprache"
+          }
+        }
+      }
+    },
+    "Larger" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grösser"
+          }
+        }
+      }
+    },
+    "Latest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt"
+          }
+        }
+      }
+    },
+    "Life-\nsize" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lebens-\ngross"
+          }
+        }
+      }
+    },
+    "Life-Size" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lebensgross"
+          }
+        }
+      }
+    },
+    "Life-size: size of the display or device unknown" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lebensgross: Grösse des Monitors oder Geräts unbekannt"
+          }
+        }
+      }
+    },
+    "Light" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hell"
+          }
+        }
+      }
+    },
+    "Lilac" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flieder"
+          }
+        }
+      }
+    },
+    "Lowest latency. Other apps such as QuickTime must not have the device open at the same time." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geringste Verzögerung. Andere Apps wie QuickTime dürfen das Gerät nicht gleichzeitig geöffnet haben."
+          }
+        }
+      }
+    },
+    "macOS provides the screen of an iPhone connected by cable like a camera. Please allow MirrorAct under Privacy & Security → Camera." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS stellt den Bildschirm eines per Kabel verbundenen iPhones wie eine Kamera bereit. Bitte MirrorAct unter Datenschutz & Sicherheit → Kamera erlauben."
+          }
+        }
+      }
+    },
+    "Mirror" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spiegeln"
+          }
+        }
+      }
+    },
+    "Mirror %@ wirelessly" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kabellos spiegeln"
+          }
+        }
+      }
+    },
+    "Mirror iPhone or iPad …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone oder iPad spiegeln …"
+          }
+        }
+      }
+    },
+    "MirrorAct" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MirrorAct"
+          }
+        }
+      }
+    },
+    "Mirroring" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird gespiegelt"
+          }
+        }
+      }
+    },
+    "Mirroring wirelessly" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spiegelt kabellos"
+          }
+        }
+      }
+    },
+    "Model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modell"
+          }
+        }
+      }
+    },
+    "Muted" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stumm"
+          }
+        }
+      }
+    },
+    "Name on the iPhone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name auf dem iPhone"
+          }
+        }
+      }
+    },
+    "Natural Titanium" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Titan Natur"
+          }
+        }
+      }
+    },
+    "Needed when the iPhone does not find the Mac on Wi-Fi. Asks for a code on first connection." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nötig, wenn das iPhone den Mac im WLAN nicht findet. Verlangt beim ersten Verbinden einen Code."
+          }
+        }
+      }
+    },
+    "No device connected by cable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Gerät per Kabel verbunden"
+          }
+        }
+      }
+    },
+    "No device is being mirrored right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Gerät wird gerade gespiegelt."
+          }
+        }
+      }
+    },
+    "No image chosen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Bild gewählt"
+          }
+        }
+      }
+    },
+    "No readable images were passed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine lesbaren Bilder übergeben."
+          }
+        }
+      }
+    },
+    "No video to record yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch kein Bild zum Aufnehmen"
+          }
+        }
+      }
+    },
+    "Ocean" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ozean"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "On the device: Control Center → Screen Mirroring → “%@”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dem Gerät: Kontrollzentrum → Bildschirmsynchronisierung → «%@»."
+          }
+        }
+      }
+    },
+    "On Top" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oben"
+          }
+        }
+      }
+    },
+    "Open Control Center on the device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dem Gerät das Kontrollzentrum öffnen."
+          }
+        }
+      }
+    },
+    "Open Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen öffnen"
+          }
+        }
+      }
+    },
+    "Padding" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abstand"
+          }
+        }
+      }
+    },
+    "Perspective" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perspektive"
+          }
+        }
+      }
+    },
+    "Photo" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto"
+          }
+        }
+      }
+    },
+    "Pixel-\nperfect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pixel-\ngenau"
+          }
+        }
+      }
+    },
+    "Pixel-Perfect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pixelgenau"
+          }
+        }
+      }
+    },
+    "Play sound" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton wiedergeben"
+          }
+        }
+      }
+    },
+    "Play Sound" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton wiedergeben"
+          }
+        }
+      }
+    },
+    "Point-\nperfect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Punkt-\ngenau"
+          }
+        }
+      }
+    },
+    "Point-Perfect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Punktgenau"
+          }
+        }
+      }
+    },
+    "Point-Perfect (as on the iPhone)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Punktgenau (wie auf dem iPhone)"
+          }
+        }
+      }
+    },
+    "Pose" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pose"
+          }
+        }
+      }
+    },
+    "Present" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Präsentieren"
+          }
+        }
+      }
+    },
+    "Present full screen (⌃⌘F, Esc to exit)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Präsentieren (⌃⌘F, Esc beendet)"
+          }
+        }
+      }
+    },
+    "Puts iPhone or iPad screenshots into the device frame, using the style from MirrorAct (frame color, background, aspect ratio)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setzt iPhone- oder iPad-Screenshots in den Gerätrahmen, mit der Gestaltung aus MirrorAct (Rahmenfarbe, Hintergrund, Format)."
+          }
+        }
+      }
+    },
+    "Ready via cable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per Kabel bereit"
+          }
+        }
+      }
+    },
+    "Receiver failed – see the log" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empfang fehlgeschlagen – Details im Log"
+          }
+        }
+      }
+    },
+    "Record" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme"
+          }
+        }
+      }
+    },
+    "Record video (⌘R)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video aufnehmen (⌘R)"
+          }
+        }
+      }
+    },
+    "Record with device frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Gerätrahmen aufnehmen"
+          }
+        }
+      }
+    },
+    "Record with Device Frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme mit Gerätrahmen"
+          }
+        }
+      }
+    },
+    "Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme"
+          }
+        }
+      }
+    },
+    "Recording failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Recording saved – drag it out to share" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme gesichert – zum Teilen herausziehen"
+          }
+        }
+      }
+    },
+    "Recording started" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme läuft"
+          }
+        }
+      }
+    },
+    "Recording stopped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme beendet"
+          }
+        }
+      }
+    },
+    "Resolution" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auflösung"
+          }
+        }
+      }
+    },
+    "Restart" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neu starten"
+          }
+        }
+      }
+    },
+    "Restart Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt neu starten"
+          }
+        }
+      }
+    },
+    "Save …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern …"
+          }
+        }
+      }
+    },
+    "Save Screenshot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshot sichern"
+          }
+        }
+      }
+    },
+    "Save Screenshot to Desktop" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshot auf den Schreibtisch"
+          }
+        }
+      }
+    },
+    "Save Video …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video sichern …"
+          }
+        }
+      }
+    },
+    "Saved to the Desktop" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dem Schreibtisch gesichert"
+          }
+        }
+      }
+    },
+    "Saved: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesichert: %@"
+          }
+        }
+      }
+    },
+    "Saving failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Screen only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Bildschirm"
+          }
+        }
+      }
+    },
+    "Screenshot from iPhone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshot vom iPhone"
+          }
+        }
+      }
+    },
+    "Screenshot of the device currently mirrored, using the style from MirrorAct." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshot des gerade gespiegelten Geräts, mit der Gestaltung aus MirrorAct."
+          }
+        }
+      }
+    },
+    "Screenshots" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshots"
+          }
+        }
+      }
+    },
+    "Settings (⌘,)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen (⌘,)"
+          }
+        }
+      }
+    },
+    "Shadow" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schatten"
+          }
+        }
+      }
+    },
+    "Share" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teilen"
+          }
+        }
+      }
+    },
+    "Show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anzeigen"
+          }
+        }
+      }
+    },
+    "Show device frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerätrahmen anzeigen"
+          }
+        }
+      }
+    },
+    "Show Device Frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerätrahmen anzeigen"
+          }
+        }
+      }
+    },
+    "Show in Finder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Finder zeigen"
+          }
+        }
+      }
+    },
+    "Side by side" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nebeneinander"
+          }
+        }
+      }
+    },
+    "Silver" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Silber"
+          }
+        }
+      }
+    },
+    "Size" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grösse"
+          }
+        }
+      }
+    },
+    "Smaller" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kleiner"
+          }
+        }
+      }
+    },
+    "Sound" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton"
+          }
+        }
+      }
+    },
+    "Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle"
+          }
+        }
+      }
+    },
+    "Staggered" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versetzt"
+          }
+        }
+      }
+    },
+    "Start / Stop Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video aufnehmen / beenden"
+          }
+        }
+      }
+    },
+    "Start or Stop Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme starten oder beenden"
+          }
+        }
+      }
+    },
+    "Start Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video aufnehmen"
+          }
+        }
+      }
+    },
+    "Start/Stop Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme starten/beenden"
+          }
+        }
+      }
+    },
+    "Starts or stops the video recording of the mirrored device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startet bzw. beendet die Videoaufnahme des gespiegelten Geräts."
+          }
+        }
+      }
+    },
+    "Stop Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme beenden"
+          }
+        }
+      }
+    },
+    "Stop recording (⌘R)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme beenden (⌘R)"
+          }
+        }
+      }
+    },
+    "Style" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stil"
+          }
+        }
+      }
+    },
+    "Style …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stil …"
+          }
+        }
+      }
+    },
+    "System language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Systemsprache"
+          }
+        }
+      }
+    },
+    "Takes effect after a restart." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird nach einem Neustart wirksam."
+          }
+        }
+      }
+    },
+    "Tap “Screen Mirroring”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Bildschirmsynchronisierung» tippen."
+          }
+        }
+      }
+    },
+    "The device appears in the start window – click it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Gerät erscheint im Startfenster – anklicken."
+          }
+        }
+      }
+    },
+    "The device is already open in another app (such as QuickTime)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Gerät ist bereits in einer anderen App geöffnet (z. B. QuickTime)."
+          }
+        }
+      }
+    },
+    "The file contains no video track." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei enthält keine Videospur."
+          }
+        }
+      }
+    },
+    "The first time, allow camera access for MirrorAct." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim ersten Mal den Kamerazugriff für MirrorAct erlauben."
+          }
+        }
+      }
+    },
+    "The first time, enter the code %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim ersten Mal den Code %@ eingeben."
+          }
+        }
+      }
+    },
+    "The recording could not be started." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Aufnahme konnte nicht gestartet werden."
+          }
+        }
+      }
+    },
+    "Tilted" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gekippt"
+          }
+        }
+      }
+    },
+    "Transparent" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transparent"
+          }
+        }
+      }
+    },
+    "Trim …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kürzen …"
+          }
+        }
+      }
+    },
+    "Trim with “Trim …”; the preview shows half resolution." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kürzen über «Kürzen …»; die Vorschau zeigt halbe Auflösung."
+          }
+        }
+      }
+    },
+    "Unlock the device and confirm “Trust This Computer”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerät entsperren und «Diesem Computer vertrauen» bestätigen."
+          }
+        }
+      }
+    },
+    "Use as Default" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Standard übernehmen"
+          }
+        }
+      }
+    },
+    "Used as default" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Standard übernommen"
+          }
+        }
+      }
+    },
+    "Video" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Video"
+          }
+        }
+      }
+    },
+    "Waiting for video …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warte auf Bild …"
+          }
+        }
+      }
+    },
+    "Window" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fenster"
+          }
+        }
+      }
+    },
+    "Wireless" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kabellos"
+          }
+        }
+      }
+    },
+    "Wireless receiver (AirPlay)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kabelloser Empfang (AirPlay)"
+          }
+        }
+      }
+    },
+    "Wireless receiver off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kabelloser Empfang aus"
+          }
+        }
+      }
+    },
+    "With Device Frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Gerätrahmen"
+          }
+        }
+      }
+    },
+    "With frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Rahmen"
+          }
+        }
+      }
+    },
+    "Without frame: round corners like the device" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Rahmen: Ecken wie das Gerät abrunden"
+          }
+        }
+      }
+    },
+    "yyyy-MM-dd 'at' HH.mm.ss" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "yyyy-MM-dd 'um' HH.mm.ss"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
