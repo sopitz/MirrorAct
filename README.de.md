@@ -17,6 +17,40 @@ Gerätrahmen auf dem Mac – für Demos, Präsentationen, Screenshots und Bildsc
 Android-Telefone und, mit einem kleinen Test-Agent, auch iPhone und iPad lassen sich dabei mit Maus
 und Tastatur bedienen.
 
+## Loslegen
+
+### 1. Installieren
+
+Mit [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask sopitz/tap/mirroract
+```
+
+Oder `MirrorAct-<version>.zip` unter [Releases](https://github.com/sopitz/MirrorAct/releases)
+laden, entpacken und MirrorAct in den Ordner Programme ziehen. MirrorAct braucht macOS 15 oder
+neuer auf einem Mac mit Apple Silicon. Die App ist mit einer Developer ID signiert und von Apple
+notarisiert. Aktualisieren mit `brew upgrade --cask mirroract`.
+
+### 2. Gerät verbinden
+
+MirrorAct öffnen. Das Startfenster zeigt deine Geräte, den Code für kabellos und eine Anleitung
+zum Verbinden.
+
+- **iPhone oder iPad per Kabel:** Gerät anschliessen und entsperren, «Diesem Computer vertrauen» bestätigen, dann im Startfenster anklicken. Beim ersten Mal fragt macOS nach dem Kamerazugriff – so stellt macOS den Gerätebildschirm bereit.
+- **iPhone oder iPad kabellos:** Auf dem Gerät Kontrollzentrum → Bildschirmsynchronisierung → «MirrorAct». Beim ersten Mal den Code aus dem Startfenster eingeben. Erscheint «MirrorAct» nicht, in macOS den AirPlay-Empfänger einschalten (Allgemein → AirDrop & Handoff).
+- **Android-Telefon:** MirrorAct braucht adb, aus Homebrew (`brew install android-platform-tools`) oder aus dem Android-SDK (`~/Library/Android/sdk`). Einmalig USB-Debugging einschalten (Einstellungen → Telefoninfo → siebenmal auf «Build-Nummer» tippen, dann Einstellungen → Entwickleroptionen → USB-Debugging), Telefon anschliessen, auf dem Telefon «Zulassen» tippen und es im Startfenster anklicken. Für WLAN: Rechtsklick auf das Telefon im Startfenster → «WLAN statt Kabel verwenden» und danach das Kabel abziehen – ein offenes Fenster läuft über WLAN weiter –, oder ohne Kabel unter Gerät verbinden → Android koppeln (ab Android 11).
+
+### 3. Rahmen, festhalten, präsentieren
+
+Das Spiegelfenster zeigt nur das Gerät im Rahmen. Fährt die Maus darüber, erscheint daneben eine
+Werkzeugleiste; ein Rechtsklick zeigt alle Funktionen.
+
+- ⌘S macht einen Screenshot, ⌘R startet und beendet eine Aufnahme. Screenshots lassen sich direkt aus dem Fenster ziehen.
+- ⌘K öffnet das Stil-Panel: Grösse, Rahmenfarbe, Hintergrund, Abstand, Schatten, Format.
+- ⌃⌘F präsentiert das Gerät im Vollbild auf dem Hintergrund.
+- ⌘E öffnet den Editor, für Screenshots und Aufnahmen, die du schon hast.
+
 ## Screenshots
 
 | Startfenster | Editor |
@@ -33,7 +67,7 @@ Die Bilder zeigen die englische Oberfläche.
 
 - **Kabel (USB):** Bildabgriff wie bei QuickTime (CoreMediaIO, AVFoundation). Geringste Verzögerung, mit Ton.
 - **Kabellos:** eigener AirPlay-Empfänger für die Bildschirmsynchronisierung. VideoToolbox dekodiert ohne Puffer, Ton inklusive. Neben dem WLAN bietet er sich auch über AWDL an (Apples Direktfunk), damit es auch klappt, wenn der Router Bonjour nicht weiterleitet.
-- **Android:** über USB-Debugging, per Kabel oder WLAN, mit dem Server von [scrcpy](https://github.com/Genymobile/scrcpy) auf dem Telefon: Video ohne Puffer dekodiert, Ton ab Android 11, Bedienen mit Maus, Trackpad und Tastatur, Zwischenablage in beide Richtungen.
+- **Android:** über USB-Debugging, per Kabel oder WLAN, mit dem Server von [scrcpy](https://github.com/Genymobile/scrcpy) auf dem Telefon: Video ohne Puffer dekodiert, Ton ab Android 11, Bedienen mit Maus, Trackpad und Tastatur, Zwischenablage in beide Richtungen; siehe [Android-Telefon bedienen](#android-telefon-bedienen).
 - **iPhone und iPad bedienen** (optional, für Entwickler): Maus, Trackpad und Tastatur über einen Test-Agent auf dem Gerät (WebDriverAgent), per Kabel oder kabellos; siehe [iPhone oder iPad bedienen](#iphone-oder-ipad-bedienen).
 - **Gerätrahmen** pro Modell gezeichnet: Notch, Dynamic Island, Home-Button, iPad, Android mit Kameraloch (Lage und Eckenradius liest MirrorAct vom Telefon), hoch und quer. Sieben Rahmenfarben.
 - **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Ton, Oben, Vollbild, Stil. Ein Rechtsklick zeigt alle Funktionen.
@@ -45,75 +79,28 @@ Die Bilder zeigen die englische Oberfläche.
 
 Die Oberfläche gibt es auf Englisch und Deutsch; die Sprache lässt sich unter Einstellungen → Allgemein wählen (Systemsprache, Deutsch, English).
 
-## Installation
+## Tastatur und Einstellungen
 
-Mit [Homebrew](https://brew.sh):
-
-```bash
-brew install --cask sopitz/tap/mirroract
-```
-
-Oder `MirrorAct-<version>.zip` unter [Releases](https://github.com/sopitz/MirrorAct/releases)
-laden, entpacken und MirrorAct in den Ordner Programme ziehen. Die App ist mit einer Developer ID
-signiert und von Apple notarisiert. Sie braucht macOS 15 oder neuer auf einem Mac mit Apple Silicon.
-Aktualisieren mit `brew upgrade --cask mirroract`.
-
-Für Android nutzt MirrorAct adb aus Homebrew (`brew install android-platform-tools`) oder aus dem
-Android-SDK (`~/Library/Android/sdk`).
-
-## Selbst bauen
-
-Dafür braucht es:
-
-- macOS 15 oder neuer (getestet auf Apple Silicon)
-- Xcode 16 oder neuer
-- [Homebrew](https://brew.sh)-Pakete:
-
-```bash
-brew install xcodegen cmake pkgconf libplist openssl@3 gstreamer
-```
-
-GStreamer braucht nur UxPlays CMake beim Konfigurieren, MirrorAct selbst nutzt es nicht. OpenSSL
-und libplist werden statisch gelinkt, die fertige App braucht kein Homebrew.
-
-Dann:
-
-```bash
-scripts/build.sh
-```
-
-Das Skript holt UxPlay mit festem Commit nach `Vendor/`, baut nur dessen AirPlay-Bibliothek,
-lädt den scrcpy-Server für Android (feste Version, per SHA-256 geprüft),
-erzeugt das Xcode-Projekt mit XcodeGen, baut die App und installiert sie nach
-`~/Applications/MirrorAct.app`. `--debug` baut die Debug-Konfiguration, `--no-install` lässt die
-Installation weg.
-
-Standardmässig wird ad-hoc signiert. macOS fragt dann nach jedem Build erneut nach dem
-Kamerazugriff. Damit die Freigabe bleibt, mit eigenem Zertifikat signieren:
-`Config/Local.xcconfig.example` nach `Config/Local.xcconfig` kopieren und Signatur und Team
-eintragen.
-
-### Release
-
-`scripts/release.sh` baut die App zum Weitergeben: mit Developer ID signiert, von Apple notarisiert
-und als `build/release/MirrorAct-<version>.zip` gepackt. Dafür braucht es das Zertifikat «Developer
-ID Application» im Schlüsselbund und einmalig ein notarytool-Profil:
-
-```bash
-xcrun notarytool store-credentials mirroract-notary --apple-id <Apple-ID> --team-id <Team>
-```
-
-Mit `--publish` legt es zusätzlich das GitHub-Release `v<version>` für den getaggten Commit an und
-führt den Cask in [sopitz/homebrew-tap](https://github.com/sopitz/homebrew-tap) nach.
-
-## Benutzung
-
-- **Kabel:** Gerät anschliessen und entsperren, «Diesem Computer vertrauen» bestätigen, dann im Startfenster anklicken. Beim ersten Mal fragt macOS nach dem Kamerazugriff – so stellt macOS den Gerätebildschirm bereit.
-- **Kabellos:** Auf dem Gerät Kontrollzentrum → Bildschirmsynchronisierung → «MirrorAct». Beim ersten Mal den Code aus dem Startfenster eingeben. Erscheint «MirrorAct» nicht, in macOS den AirPlay-Empfänger einschalten (Allgemein → AirDrop & Handoff).
-- **Android:** Einmalig USB-Debugging einschalten (Einstellungen → Telefoninfo → siebenmal auf «Build-Nummer» tippen, dann Einstellungen → Entwickleroptionen → USB-Debugging), Telefon anschliessen, auf dem Telefon «Zulassen» tippen und es im Startfenster anklicken. Für WLAN: Rechtsklick auf das Telefon im Startfenster → «WLAN statt Kabel verwenden» und danach das Kabel abziehen – ein offenes Fenster läuft über WLAN weiter –, oder ohne Kabel unter Gerät verbinden → Android koppeln (ab Android 11).
-- **Tastatur:** ⌘R Aufnahme, ⌘S Screenshot, ⇧⌘C Screenshot kopieren, ⌘K Stil-Panel, ⌃⌘F Präsentieren, ⌘T immer im Vordergrund, ⌘1 lebensgross, ⌘2 pixelgenau, ⌘0 punktgenau, ⌘E Editor.
+⌘R Aufnahme, ⌘S Screenshot, ⇧⌘C Screenshot kopieren, ⌘K Stil-Panel, ⌃⌘F Präsentieren,
+⌘T immer im Vordergrund, ⌘1 lebensgross, ⌘2 pixelgenau, ⌘0 punktgenau, ⌘E Editor.
 
 Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/MirrorAct.log`.
+
+## Android-Telefon bedienen
+
+Sobald ein Android-Telefon gespiegelt wird, bedient das Spiegelfenster es:
+
+<p align="center"><img src="docs/android.jpg" width="800" alt="MirrorAct spiegelt ein Android-Telefon, mit Zurück, Home und Letzte Apps in der Werkzeugleiste"></p>
+
+- Klick: tippen, Ziehen: wischen (der Finger folgt der Maus live), ⌘-Ziehen verschiebt das Fenster
+- Trackpad oder Mausrad: scrollen, Mittelklick: Home
+- Tippen geht ans Telefon, auch Umlaute und andere Zeichen; Esc ist Zurück, ⌘V fügt die Zwischenablage des Macs ein, auf dem Telefon kopierter Text landet in der Zwischenablage des Macs
+- Zurück, Home und Letzte Apps in der Werkzeugleiste, in Reihenfolge und Aussehen der Navigationsleiste des Telefons (Samsung: Letzte Apps, Home, Zurück); Mitteilungen, Lautstärke, Bildschirm ein/aus und Drehen im Kontextmenü
+
+Dauerhaft installiert wird nichts: Während der Spiegelung läuft der scrcpy-Server aus einer
+temporären Datei auf dem Telefon und endet, wenn das Fenster geschlossen wird. Ton gibt es ab
+Android 11; er spielt dann auf dem Mac statt auf dem Telefon. Apps, die ihre Inhalte schützen
+(Banking, Streaming), bleiben schwarz.
 
 ## iPhone oder iPad bedienen
 
@@ -126,12 +113,13 @@ UI-Test auf dem Gerät und wird mit `xcodebuild` gestartet.
 Dafür braucht es:
 
 - Xcode in einer Version, die die iOS-Version des Geräts unterstützt
-- ein Apple-Entwicklerteam in `Config/Local.xcconfig` (eine kostenlose Apple-ID geht auch, die Signatur läuft aber nach 7 Tagen ab)
+- ein Apple-Entwicklerteam (eine kostenlose Apple-ID geht auch, die Signatur läuft aber nach 7 Tagen ab)
 - auf dem Gerät: **Entwicklermodus** (Einstellungen → Datenschutz & Sicherheit → Entwicklermodus; das Gerät startet neu) und danach unter Einstellungen → Entwickler die **UI-Automatisierung**
 
-Den Agent einmal aus einem Klon dieses Repositorys bauen (erneut nach einem Wechsel von Team oder
-Xcode-Version). Das geht auch mit MirrorAct aus Homebrew; es braucht nur Xcode, nicht die
-Build-Pakete:
+Dieses Repository klonen, `Config/Local.xcconfig.example` nach `Config/Local.xcconfig` kopieren und
+die eigene Team-ID als `DEVELOPMENT_TEAM` eintragen. Dann den Agent einmal bauen (erneut nach einem
+Wechsel von Team oder Xcode-Version). Das geht auch mit MirrorAct aus Homebrew; es braucht nur
+Xcode, nicht die Pakete, mit denen MirrorAct selbst gebaut wird:
 
 ```bash
 scripts/build-agent.sh
@@ -160,44 +148,6 @@ lokale Netz. Gesten werden beim Loslassen der Maustaste geschickt, der Finger fo
 nicht live. Ein Gerät mit Code lässt sich so nicht entsperren. Die Ausgabe von `xcodebuild` steht in
 `~/Library/Logs/MirrorAct-Agent.log`.
 
-## Android-Telefon bedienen
-
-Sobald ein Android-Telefon gespiegelt wird, bedient das Spiegelfenster es:
-
-<p align="center"><img src="docs/android.jpg" width="800" alt="MirrorAct spiegelt ein Android-Telefon, mit Zurück, Home und Letzte Apps in der Werkzeugleiste"></p>
-
-- Klick: tippen, Ziehen: wischen (der Finger folgt der Maus live), ⌘-Ziehen verschiebt das Fenster
-- Trackpad oder Mausrad: scrollen, Mittelklick: Home
-- Tippen geht ans Telefon, auch Umlaute und andere Zeichen; Esc ist Zurück, ⌘V fügt die Zwischenablage des Macs ein, auf dem Telefon kopierter Text landet in der Zwischenablage des Macs
-- Zurück, Home und Letzte Apps in der Werkzeugleiste, in Reihenfolge und Aussehen der Navigationsleiste des Telefons (Samsung: Letzte Apps, Home, Zurück); Mitteilungen, Lautstärke, Bildschirm ein/aus und Drehen im Kontextmenü
-
-Dauerhaft installiert wird nichts: Während der Spiegelung läuft der scrcpy-Server aus einer
-temporären Datei auf dem Telefon und endet, wenn das Fenster geschlossen wird. Ton gibt es ab
-Android 11; er spielt dann auf dem Mac statt auf dem Telefon. Apps, die ihre Inhalte schützen
-(Banking, Streaming), bleiben schwarz.
-
-## Aufbau
-
-Siehe Tabelle im [englischen README](README.md#how-it-works). Ohne Gerät lässt sich die Darstellung
-prüfen:
-
-```bash
-~/Applications/MirrorAct.app/Contents/MacOS/MirrorAct --render-test /tmp/mirroract-render
-```
-
-## Branches
-
-MirrorAct arbeitet mit Git Flow: `main` enthält die letzte Veröffentlichung, `develop` die Arbeit
-für die nächste. Pull Requests gehen nach `develop`.
-
-| Branch | Zweck |
-|---|---|
-| `main` | Veröffentlichte Versionen, jede mit Tag `v<version>` |
-| `develop` | Nächste Veröffentlichung, Ziel für Pull Requests |
-| `feature/<thema>`, `chore/<thema>` | Zweigen von `develop` ab, kommen zurück nach `develop` |
-| `release/<version>` | Zweigt von `develop` ab, geht nach `main` und `develop` |
-| `hotfix/<version>` | Zweigt von `main` ab, geht nach `main` und `develop` |
-
 ## Datenschutz
 
 MirrorAct arbeitet lokal, sendet keine Daten und hat keine Telemetrie. Netzwerkzugriff gibt es nur
@@ -215,6 +165,12 @@ iOS; sie lassen sich nicht spiegeln.
 Android ist eine Marke von Google LLC; MirrorAct steht in keiner Verbindung zu Google. Die
 Android-Spiegelung nutzt den Server des Projekts [scrcpy](https://github.com/Genymobile/scrcpy)
 von Genymobile.
+
+## Rückmeldungen und Mitarbeit
+
+Einen Fehler gefunden oder fehlt etwas? Dafür gibt es die [Issues](https://github.com/sopitz/MirrorAct/issues).
+Wer MirrorAct selbst bauen oder daran mitarbeiten will – aus dem Quellcode bauen, Aufbau des Codes,
+Branches und Releases –, findet alles in [CONTRIBUTING.de.md](CONTRIBUTING.de.md).
 
 ## Unterstützen
 

@@ -17,6 +17,40 @@ your Mac in a device frame – for demos, presentations, screenshots and screen 
 phones and, with a small test agent, iPhones and iPads can also be controlled with mouse and
 keyboard.
 
+## Get started
+
+### 1. Install
+
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask sopitz/tap/mirroract
+```
+
+Or download `MirrorAct-<version>.zip` from [Releases](https://github.com/sopitz/MirrorAct/releases),
+unzip it and move MirrorAct to Applications. MirrorAct needs macOS 15 or later on a Mac with Apple
+silicon. It is signed with a Developer ID and notarized by Apple. Update with
+`brew upgrade --cask mirroract`.
+
+### 2. Connect a device
+
+Open MirrorAct. The start window shows your devices, the code for wireless mirroring and a guide
+for connecting a device.
+
+- **iPhone or iPad by cable:** connect and unlock the device, confirm "Trust This Computer", then click it in the start window. On first use, macOS asks for camera access – that is how macOS provides the device screen.
+- **iPhone or iPad wirelessly:** on the device, open Control Center → Screen Mirroring → "MirrorAct". The first time, enter the code shown in the start window. If "MirrorAct" does not appear, turn on AirPlay Receiver in macOS (General → AirDrop & Handoff).
+- **Android phone:** MirrorAct needs adb, from Homebrew (`brew install android-platform-tools`) or from the Android SDK (`~/Library/Android/sdk`). Turn on USB debugging once (Settings → About phone → tap "Build number" seven times, then Settings → Developer options → USB debugging), connect the phone, tap "Allow" on the phone and click it in the start window. For Wi-Fi, right-click the phone in the start window → "Use Wi-Fi Instead of Cable" and then unplug the cable – an open window continues over Wi-Fi – or pair it without a cable under Connect a Device → Android (Android 11 or later).
+
+### 3. Frame, capture, present
+
+The mirror window shows only the device in its frame. Move the mouse over it and a tool rail
+appears next to it; right-click shows every function.
+
+- ⌘S takes a screenshot, ⌘R starts and stops a recording. Drag screenshots straight out of the window.
+- ⌘K opens the style panel: size, frame color, background, padding, shadow, aspect ratio.
+- ⌃⌘F presents the device full screen on your background.
+- ⌘E opens the editor, for screenshots and recordings you already have.
+
 ## Screenshots
 
 | Start window | Editor |
@@ -31,7 +65,7 @@ keyboard.
 
 - **Cable (USB):** captures the screen the way QuickTime does (CoreMediaIO, AVFoundation). Lowest latency, with audio.
 - **Wireless:** built-in AirPlay screen mirroring receiver. Decoding with VideoToolbox without buffering, audio included. Besides the local network it also advertises itself over AWDL (Apple's peer-to-peer Wi-Fi), so it works when the router does not forward Bonjour.
-- **Android:** over USB debugging, by cable or Wi-Fi, with the [scrcpy](https://github.com/Genymobile/scrcpy) server on the phone: video decoded without buffering, sound from Android 11, control with mouse, trackpad and keyboard, clipboard in both directions.
+- **Android:** over USB debugging, by cable or Wi-Fi, with the [scrcpy](https://github.com/Genymobile/scrcpy) server on the phone: video decoded without buffering, sound from Android 11, control with mouse, trackpad and keyboard, clipboard in both directions; see [Controlling an Android phone](#controlling-an-android-phone).
 - **iPhone and iPad control** (optional, for developers): mouse, trackpad and keyboard through a test agent on the device (WebDriverAgent), by cable or wirelessly; see [Controlling an iPhone or iPad](#controlling-an-iphone-or-ipad).
 - **Device frames** drawn for each model: notch, Dynamic Island, home button, iPad, Android with punch-hole camera (position and corner radius read from the phone), portrait and landscape. Seven frame colors.
 - **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: record, screenshot, sound, keep on top, full screen, style. Right-click shows every function.
@@ -43,74 +77,27 @@ keyboard.
 
 The user interface is available in English and German; choose the language under Settings → General (System language, Deutsch, English).
 
-## Install
+## Keyboard and settings
 
-With [Homebrew](https://brew.sh):
-
-```bash
-brew install --cask sopitz/tap/mirroract
-```
-
-Or download `MirrorAct-<version>.zip` from [Releases](https://github.com/sopitz/MirrorAct/releases),
-unzip it and move MirrorAct to Applications. The app is signed with a Developer ID and notarized by
-Apple. It needs macOS 15 or later on a Mac with Apple silicon. Update with
-`brew upgrade --cask mirroract`.
-
-For Android, MirrorAct uses adb from Homebrew (`brew install android-platform-tools`) or from the
-Android SDK (`~/Library/Android/sdk`).
-
-## Build from source
-
-You need:
-
-- macOS 15 or later (tested on Apple silicon)
-- Xcode 16 or later
-- [Homebrew](https://brew.sh) packages:
-
-```bash
-brew install xcodegen cmake pkgconf libplist openssl@3 gstreamer
-```
-
-GStreamer is only needed because UxPlay's CMake looks for it while configuring; MirrorAct does not
-use it. OpenSSL and libplist are linked statically, so the finished app does not depend on Homebrew.
-
-Then:
-
-```bash
-scripts/build.sh
-```
-
-The script fetches UxPlay at a pinned commit into `Vendor/`, builds only its AirPlay library,
-downloads the scrcpy server for Android (pinned version, checked against its SHA-256),
-generates the Xcode project with XcodeGen, builds the app and installs it to
-`~/Applications/MirrorAct.app`. `--debug` builds the debug configuration, `--no-install` skips the
-installation.
-
-By default the app is signed ad hoc. macOS then asks for camera access again after every build.
-To keep the permission, sign with your own certificate: copy `Config/Local.xcconfig.example` to
-`Config/Local.xcconfig` and enter your signing identity and team.
-
-### Release
-
-`scripts/release.sh` builds the app for distribution: signed with a Developer ID, notarized by Apple
-and packed as `build/release/MirrorAct-<version>.zip`. It needs a "Developer ID Application"
-certificate in the keychain and, once, a notarytool profile:
-
-```bash
-xcrun notarytool store-credentials mirroract-notary --apple-id <Apple ID> --team-id <team>
-```
-
-With `--publish` it also creates the GitHub release `v<version>` for the tagged commit and updates
-the cask in [sopitz/homebrew-tap](https://github.com/sopitz/homebrew-tap).
-
-## Usage
-
-- **Cable:** connect and unlock the device, confirm "Trust This Computer", then click it in the start window. On first use, macOS asks for camera access – that is how macOS provides the device screen.
-- **Wireless:** on the device, open Control Center → Screen Mirroring → "MirrorAct". The first time, enter the code shown in the start window. If "MirrorAct" does not appear, turn on AirPlay Receiver in macOS (General → AirDrop & Handoff).
-- **Android:** turn on USB debugging once (Settings → About phone → tap "Build number" seven times, then Settings → Developer options → USB debugging), connect the phone, tap "Allow" on the phone and click it in the start window. For Wi-Fi, right-click the phone in the start window → "Use Wi-Fi Instead of Cable" and then unplug the cable – an open window continues over Wi-Fi – or pair it without a cable under Connect a Device → Android (Android 11 or later).
-- **Keyboard:** ⌘R record, ⌘S screenshot, ⇧⌘C copy screenshot, ⌘K style panel, ⌃⌘F present, ⌘T keep on top, ⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor.
+⌘R record, ⌘S screenshot, ⇧⌘C copy screenshot, ⌘K style panel, ⌃⌘F present, ⌘T keep on top,
+⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor.
 
 Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct.log`.
+
+## Controlling an Android phone
+
+As soon as an Android phone is mirrored, the mirror window controls it:
+
+<p align="center"><img src="docs/android.jpg" width="800" alt="MirrorAct mirroring an Android phone, with Back, Home and Recent Apps in the tool rail"></p>
+
+- click: tap, drag: swipe (the finger follows the mouse live), ⌘-drag moves the window
+- trackpad or mouse wheel: scroll, middle click: Home
+- typing goes to the phone, including umlauts and other characters; Esc is Back, ⌘V pastes the Mac clipboard, text copied on the phone lands in the Mac clipboard
+- Back, Home and Recent Apps are in the tool rail, in the order and look of the phone's navigation bar (Samsung: Recent Apps, Home, Back); notifications, volume, screen on/off and rotation in the context menu
+
+Nothing is installed permanently: while mirroring, the scrcpy server runs from a temporary file on
+the phone and ends when the window is closed. Sound needs Android 11 or later and plays on the Mac
+instead of the phone. Apps that protect their content (banking, streaming) stay black.
 
 ## Controlling an iPhone or iPad
 
@@ -122,11 +109,13 @@ does it the way Xcode automates apps: [WebDriverAgent](https://github.com/appium
 You need:
 
 - Xcode in a version that supports the iOS version of the device
-- an Apple developer team in `Config/Local.xcconfig` (a free Apple ID works too, but its signature expires after 7 days)
+- an Apple developer team (a free Apple ID works too, but its signature expires after 7 days)
 - on the device: **Developer Mode** (Settings → Privacy & Security → Developer Mode; the device restarts) and, afterwards, **Enable UI Automation** under Settings → Developer
 
-Build the agent once from a clone of this repository (again after a change of team or Xcode
-version). This works with MirrorAct from Homebrew too; it needs only Xcode, not the build packages:
+Clone this repository, copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` and enter
+your team ID as `DEVELOPMENT_TEAM`. Then build the agent once (again after a change of team or
+Xcode version). This works with MirrorAct from Homebrew too; it needs only Xcode, not the packages
+for building MirrorAct itself:
 
 ```bash
 scripts/build-agent.sh
@@ -154,65 +143,6 @@ or over the local network. Gestures are sent when you release the mouse button, 
 not follow the mouse live. A device with a passcode cannot be unlocked this way. The output of
 `xcodebuild` is in `~/Library/Logs/MirrorAct-Agent.log`.
 
-## Controlling an Android phone
-
-As soon as an Android phone is mirrored, the mirror window controls it:
-
-<p align="center"><img src="docs/android.jpg" width="800" alt="MirrorAct mirroring an Android phone, with Back, Home and Recent Apps in the tool rail"></p>
-
-- click: tap, drag: swipe (the finger follows the mouse live), ⌘-drag moves the window
-- trackpad or mouse wheel: scroll, middle click: Home
-- typing goes to the phone, including umlauts and other characters; Esc is Back, ⌘V pastes the Mac clipboard, text copied on the phone lands in the Mac clipboard
-- Back, Home and Recent Apps are in the tool rail, in the order and look of the phone's navigation bar (Samsung: Recent Apps, Home, Back); notifications, volume, screen on/off and rotation in the context menu
-
-Nothing is installed permanently: while mirroring, the scrcpy server runs from a temporary file on
-the phone and ends when the window is closed. Sound needs Android 11 or later and plays on the Mac
-instead of the phone. Apps that protect their content (banking, streaming) stay black.
-
-## How it works
-
-| Folder | Content |
-|---|---|
-| `MirrorAct/AirPlay` | `airplay_bridge.c` – thin C layer over UxPlay's AirPlay library (Bonjour, heartbeat, restart), `AirPlayReceiver` |
-| `MirrorAct/Android` | `ADB` (adb, device list, Wi-Fi), `ScrcpyClient` (scrcpy protocol: video, audio, control sockets), `AndroidControl` (mouse and keyboard as scrcpy control messages) |
-| `MirrorAct/Audio` | `AACAudioPlayer` (AAC-ELD from AirPlay, AAC-LC from Android, without buffering) |
-| `MirrorAct/Video` | `AnnexBDecoder` (H.264/HEVC → VideoToolbox), `FrameSink` / `VideoDisplayView` (AVSampleBufferDisplayLayer) |
-| `MirrorAct/USB` | device discovery and capture (`AVCaptureDevice`, `.muxed`) |
-| `MirrorAct/Frame` | device profiles, frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
-| `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
-| `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
-| `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
-| `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
-| `MirrorAct/Intents` | App Intents for Shortcuts |
-| `MirrorAct/Launcher` | start window, settings |
-| `MirrorAct/Localization` | String Catalogs (English source, German translation), Info.plist and Siri phrases |
-
-Without a device you can check the rendering:
-
-```bash
-~/Applications/MirrorAct.app/Contents/MacOS/MirrorAct --render-test /tmp/mirroract-render
-```
-
-This writes frames, styles, duo poses and UI parts as PNG files, records two short test videos
-(with rotation and with AAC-ELD audio as sent over AirPlay) and frames one of them like the editor.
-
-The screenshots above are drawn by the app itself from its real views (debug builds,
-`MirrorAct --showcase <folder>`, or while mirroring via the distributed notification
-`io.github.sopitz.MirrorAct.showcase`); the device screen is the live mirrored frame.
-
-## Branches
-
-MirrorAct uses git flow: `main` holds the latest release, `develop` the work for the next one.
-Pull requests go to `develop`.
-
-| Branch | Purpose |
-|---|---|
-| `main` | Released versions, each tagged `v<version>` |
-| `develop` | Next release, target for pull requests |
-| `feature/<topic>`, `chore/<topic>` | Branch off `develop`, merge back into `develop` |
-| `release/<version>` | Branches off `develop`, merges into `main` and `develop` |
-| `hotfix/<version>` | Branches off `main`, merges into `main` and `develop` |
-
 ## Privacy
 
 MirrorAct works locally. It does not send any data anywhere and has no telemetry. Network access
@@ -229,6 +159,12 @@ example from streaming apps) is blocked by iOS and cannot be mirrored.
 
 Android is a trademark of Google LLC; MirrorAct is not affiliated with Google. Android mirroring
 uses the server of the [scrcpy](https://github.com/Genymobile/scrcpy) project by Genymobile.
+
+## Feedback and contributing
+
+Found a bug or missing something? Open an [issue](https://github.com/sopitz/MirrorAct/issues).
+To build MirrorAct yourself or work on it – build from source, code structure, branches and
+releases – see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Support
 
