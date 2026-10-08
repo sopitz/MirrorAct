@@ -6,6 +6,7 @@ import SwiftUI
 /// Test der Android-Spiegelung ohne Klicken (nur Debug-Builds), über die
 /// DistributedNotification "io.github.sopitz.MirrorAct.android-test" mit userInfo:
 ///   cmd=open serial=<adb-Seriennummer>       Fenster öffnen
+///   cmd=wifi serial=…  ·  cmd=devices          auf WLAN umstellen · Geräteliste ins Log
 ///   cmd=touch phase=began|moved|ended x=0…1 y=0…1
 ///   cmd=scroll x y dy [precise=1]
 ///   cmd=text text=…  ·  cmd=press button=back|home|recents|…
@@ -40,6 +41,13 @@ enum AndroidDebug {
                 return
             }
             model.openAndroidDevice(device)
+        case "wifi":
+            guard let device = model.android.devices.first(where: { $0.serial == info["serial"] }) else { return }
+            model.switchAndroidToWiFi(device)
+        case "devices":
+            for device in model.android.devices {
+                Log.info("AndroidDebug device \(device.serial) \(device.state) wireless \(device.isWireless) id \(device.stableID)")
+            }
         case "touch":
             let phase: TouchPhase = info["phase"] == "began" ? .began : info["phase"] == "moved" ? .moved : .ended
             session?.control?.touch(phase, at: CGPoint(x: number("x"), y: number("y")))

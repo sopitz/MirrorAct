@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Combine
+import Darwin
 import CoreGraphics
 import Foundation
 
@@ -342,6 +343,10 @@ enum AndroidWireless {
         var lastError: Error?
         for _ in 0..<10 {
             Thread.sleep(forTimeInterval: 0.6)
+            // schlafende Telefone antworten oft nicht auf ARP; ein Paket vom Telefon zum Mac weckt die Verbindung
+            if let mac = localAddress(near: address) {
+                _ = try? ADB.run(["shell", "ping", "-c", "1", "-W", "1", mac], serial: serial, timeout: 5)
+            }
             do {
                 try connect(address: "\(address):\(tcpPort)")
                 return
@@ -350,6 +355,27 @@ enum AndroidWireless {
             }
         }
         throw lastError ?? ADB.Failure(message: "adb connect")
+    }
+
+    /// eigene IPv4-Adresse im selben Netz wie `address`
+    static func localAddress(near address: String) -> String? {
+        var target = in_addr()
+        guard inet_pton(AF_INET, address, &target) == 1 else { return nil }
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0, let first = list else { return nil }
+        defer { freeifaddrs(list) }
+        for entry in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            guard let addr = entry.pointee.ifa_addr, addr.pointee.sa_family == sa_family_t(AF_INET),
+                  let mask = entry.pointee.ifa_netmask else { continue }
+            let own = addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr }
+            let net = mask.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr }
+            guard net != 0, own & net == target.s_addr & net else { continue }
+            var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            var value = in_addr(s_addr: own)
+            inet_ntop(AF_INET, &value, &buffer, socklen_t(INET_ADDRSTRLEN))
+            return String(cString: buffer)
+        }
+        return nil
     }
 
     /// "Gerät mit Kopplungscode koppeln": Adresse und Code aus dem Dialog auf dem Gerät

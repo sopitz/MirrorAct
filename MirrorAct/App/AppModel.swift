@@ -316,12 +316,18 @@ final class AppModel: ObservableObject {
             }
         }
         client.onStop = { [weak self, weak session, weak client] reason in
-            guard let self, let client, self.androidClients[key] === client else { return }
+            guard let self, let session, let client, self.androidClients[key] === client else { return }
             self.androidClients[key] = nil
             self.androidAudio[key]?.stop()
-            session?.stopRecording()
-            session?.control = nil
-            session?.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
+            session.stopRecording()
+            session.control = nil
+            session.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
+            // Kabel ab, WLAN noch da (oder umgekehrt): über die andere Verbindung weiter
+            if let other = self.android.devices.first(where: {
+                $0.state == .ready && $0.serial != device.serial && $0.info != nil && Self.androidKey($0) == key
+            }) {
+                self.connectAndroid(other, session: session)
+            }
         }
         if let info = device.info {
             session.deviceName = info.displayName
