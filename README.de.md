@@ -14,7 +14,8 @@ Open Source, alles bleibt auf deinem Mac.
 Apples *iPhone Mirroring* gibt es in der EU nicht; Apple begründet das mit dem Digital Markets
 Act. Daher der Name. MirrorAct zeigt den Bildschirm von iPhone, iPad oder Android-Telefon im
 Gerätrahmen auf dem Mac – für Demos, Präsentationen, Screenshots und Bildschirmaufnahmen.
-Android-Telefone lassen sich dabei auch mit Maus und Tastatur bedienen.
+Android-Telefone und, mit einem kleinen Test-Agent, auch iPhone und iPad lassen sich dabei mit Maus
+und Tastatur bedienen.
 
 ## Screenshots
 
@@ -33,6 +34,7 @@ Die Bilder zeigen die englische Oberfläche.
 - **Kabel (USB):** Bildabgriff wie bei QuickTime (CoreMediaIO, AVFoundation). Geringste Verzögerung, mit Ton.
 - **Kabellos:** eigener AirPlay-Empfänger für die Bildschirmsynchronisierung. VideoToolbox dekodiert ohne Puffer, Ton inklusive. Neben dem WLAN bietet er sich auch über AWDL an (Apples Direktfunk), damit es auch klappt, wenn der Router Bonjour nicht weiterleitet.
 - **Android:** über USB-Debugging, per Kabel oder WLAN, mit dem Server von [scrcpy](https://github.com/Genymobile/scrcpy) auf dem Telefon: Video ohne Puffer dekodiert, Ton ab Android 11, Bedienen mit Maus, Trackpad und Tastatur, Zwischenablage in beide Richtungen.
+- **iPhone und iPad bedienen** (optional, für Entwickler): Maus, Trackpad und Tastatur über einen Test-Agent auf dem Gerät (WebDriverAgent), per Kabel oder kabellos; siehe [iPhone oder iPad bedienen](#iphone-oder-ipad-bedienen).
 - **Gerätrahmen** pro Modell gezeichnet: Notch, Dynamic Island, Home-Button, iPad, Android mit Kameraloch (Lage und Eckenradius liest MirrorAct vom Telefon), hoch und quer. Sieben Rahmenfarben.
 - **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Ton, Oben, Vollbild, Stil. Ein Rechtsklick zeigt alle Funktionen.
 - **Stil-Panel:** Grösse (lebensgross, pixelgenau, punktgenau, Bildschirm füllen), Rahmen an/aus, Rahmenfarbe, Hintergrund (transparent, Verläufe, Farbe, Bild), Abstand, Schatten, Format (1:1, 16:9, 9:16, 4:3).
@@ -85,6 +87,49 @@ eintragen.
 
 Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/MirrorAct.log`.
 
+## iPhone oder iPad bedienen
+
+Optional, für Entwickler: Mit einem kleinen Test-Agent auf dem Gerät gibt MirrorAct Klicks, Ziehen,
+Scrollen und Tippen an das iPhone oder iPad weiter. iOS erlaubt das nur für UI-Tests, deshalb geht
+MirrorAct den Weg, auf dem Xcode Apps automatisiert:
+[WebDriverAgent](https://github.com/appium/WebDriverAgent) (aus dem Appium-Projekt) läuft als
+UI-Test auf dem Gerät und wird mit `xcodebuild` gestartet.
+
+Dafür braucht es:
+
+- Xcode in einer Version, die die iOS-Version des Geräts unterstützt
+- ein Apple-Entwicklerteam in `Config/Local.xcconfig` (eine kostenlose Apple-ID geht auch, die Signatur läuft aber nach 7 Tagen ab)
+- auf dem Gerät: **Entwicklermodus** (Einstellungen → Datenschutz & Sicherheit → Entwicklermodus; das Gerät startet neu) und danach unter Einstellungen → Entwickler die **UI-Automatisierung**
+
+Den Agent einmal bauen (erneut nach einem Wechsel von Team oder Xcode-Version):
+
+```bash
+scripts/build-agent.sh
+```
+
+Er wird mit dem eigenen Team signiert und liegt dann in
+`~/Library/Application Support/MirrorAct/Agent`. Ist das Gerät noch nicht im Team registriert, es
+anschliessen und seine Kennung aus Xcode → Devices and Simulators mitgeben:
+`scripts/build-agent.sh --device <UDID>`.
+
+Die Bedienung startet von selbst, sobald das Gerät verbunden ist; der Agent braucht auf dem Gerät
+einige Sekunden. Klappt das nicht, etwa weil das Gerät gesperrt ist, bleibt in der Werkzeugleiste
+der Knopf **Bedienen**; ein Klick darauf (oder Gerät → Gerät bedienen, ⌥⌘C) prüft erneut und sagt,
+was fehlt. Wer die Bedienung nur bei Bedarf will, schaltet unter MirrorAct → Einstellungen →
+Allgemein «Bedienung beim Verbinden starten» aus. Nach dem Ausschalten oder Schliessen des Fensters
+läuft der Agent noch fünf Minuten auf dem Gerät weiter, damit die Bedienung sofort wieder da ist;
+beim Beenden von MirrorAct wird er gestoppt. Danach:
+
+- Klick: Tippen, Halten: langes Drücken, Ziehen: Wischen
+- Trackpad oder Mausrad: Scrollen (den Schwung ergänzt iOS selbst)
+- Tippen geht in das aktive Textfeld, ⌘V tippt den Text aus der Zwischenablage des Macs
+- Home, App-Umschalter, Mitteilungszentrale, Lautstärke und Sperren in der Werkzeugleiste und im Kontextmenü
+
+Das geht per Kabel und kabellos; MirrorAct erreicht den Agent über usbmuxd (wie Xcode) oder über das
+lokale Netz. Gesten werden beim Loslassen der Maustaste geschickt, der Finger folgt der Maus also
+nicht live. Ein Gerät mit Code lässt sich so nicht entsperren. Die Ausgabe von `xcodebuild` steht in
+`~/Library/Logs/MirrorAct-Agent.log`.
+
 ## Android-Telefon bedienen
 
 Sobald ein Android-Telefon gespiegelt wird, bedient das Spiegelfenster es:
@@ -113,8 +158,9 @@ prüfen:
 ## Datenschutz
 
 MirrorAct arbeitet lokal, sendet keine Daten und hat keine Telemetrie. Netzwerkzugriff gibt es nur
-für den AirPlay-Empfänger im lokalen Netz und über AWDL sowie für adb zu Android-Telefonen (per
-Kabel oder, bei WLAN, im lokalen Netz).
+für den AirPlay-Empfänger im lokalen Netz und über AWDL, für adb zu Android-Telefonen (per Kabel
+oder, bei WLAN, im lokalen Netz) sowie, während ein iPhone oder iPad bedient wird, zum Agent auf
+diesem Gerät.
 
 ## Rechtliches
 

@@ -104,6 +104,18 @@ struct GeneralSettingsView: View {
                 Toggle("Keep on top", isOn: $settings.alwaysOnTop)
                 Toggle("Play sound", isOn: $settings.playAudio)
             }
+            Section("iPhone and iPad control") {
+                Toggle("Start control when a device connects", isOn: $settings.autoStartControl)
+                Group {
+                    if IOSControl.isAgentBuilt {
+                        Text("Otherwise click “Control” in the mirror window. Needs Xcode and Developer Mode on the device.")
+                    } else {
+                        Text("The agent is not built yet: run scripts/build-agent.sh in the MirrorAct folder. Also needs Xcode and Developer Mode on the device.")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
             Section("Recording") {
                 Toggle("Record with device frame", isOn: $settings.recordWithFrame)
                 Text("Background, padding and aspect ratio come from “Style”. A transparent background produces HEVC with transparency, otherwise H.264. Saved to the Desktop.")

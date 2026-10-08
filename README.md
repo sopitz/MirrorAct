@@ -14,7 +14,8 @@ Open source, everything stays on your Mac.
 Apple's *iPhone Mirroring* is not available in the EU; Apple cites the Digital Markets Act.
 MirrorAct is named after that gap. It shows the screen of your iPhone, iPad or Android phone on
 your Mac in a device frame – for demos, presentations, screenshots and screen recordings. Android
-phones can also be controlled with mouse and keyboard.
+phones and, with a small test agent, iPhones and iPads can also be controlled with mouse and
+keyboard.
 
 ## Screenshots
 
@@ -31,6 +32,7 @@ phones can also be controlled with mouse and keyboard.
 - **Cable (USB):** captures the screen the way QuickTime does (CoreMediaIO, AVFoundation). Lowest latency, with audio.
 - **Wireless:** built-in AirPlay screen mirroring receiver. Decoding with VideoToolbox without buffering, audio included. Besides the local network it also advertises itself over AWDL (Apple's peer-to-peer Wi-Fi), so it works when the router does not forward Bonjour.
 - **Android:** over USB debugging, by cable or Wi-Fi, with the [scrcpy](https://github.com/Genymobile/scrcpy) server on the phone: video decoded without buffering, sound from Android 11, control with mouse, trackpad and keyboard, clipboard in both directions.
+- **iPhone and iPad control** (optional, for developers): mouse, trackpad and keyboard through a test agent on the device (WebDriverAgent), by cable or wirelessly; see [Controlling an iPhone or iPad](#controlling-an-iphone-or-ipad).
 - **Device frames** drawn for each model: notch, Dynamic Island, home button, iPad, Android with punch-hole camera (position and corner radius read from the phone), portrait and landscape. Seven frame colors.
 - **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: record, screenshot, sound, keep on top, full screen, style. Right-click shows every function.
 - **Style panel:** size (life-size, pixel-perfect, point-perfect, fit), frame on/off, frame color, background (transparent, gradients, color, image), padding, shadow, aspect ratio (1:1, 16:9, 9:16, 4:3).
@@ -82,6 +84,47 @@ To keep the permission, sign with your own certificate: copy `Config/Local.xccon
 
 Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct.log`.
 
+## Controlling an iPhone or iPad
+
+Optional, for developers: with a small test agent on the device, MirrorAct passes clicks, drags,
+scrolling and typing on to the iPhone or iPad. iOS allows this only for UI tests, so MirrorAct
+does it the way Xcode automates apps: [WebDriverAgent](https://github.com/appium/WebDriverAgent)
+(from the Appium project) runs as a UI test on the device, started with `xcodebuild`.
+
+You need:
+
+- Xcode in a version that supports the iOS version of the device
+- an Apple developer team in `Config/Local.xcconfig` (a free Apple ID works too, but its signature expires after 7 days)
+- on the device: **Developer Mode** (Settings → Privacy & Security → Developer Mode; the device restarts) and, afterwards, **Enable UI Automation** under Settings → Developer
+
+Build the agent once (again after a change of team or Xcode version):
+
+```bash
+scripts/build-agent.sh
+```
+
+It is signed with your team and placed in `~/Library/Application Support/MirrorAct/Agent`. If the
+device is not yet registered with your team, connect it and pass its identifier from Xcode →
+Devices and Simulators: `scripts/build-agent.sh --device <UDID>`.
+
+Control starts by itself as soon as the device connects; starting the agent on the device takes a
+few seconds. If it cannot start, for example because the device is locked, the **Control** button
+stays in the tool rail; clicking it (or Device → Control Device, ⌥⌘C) checks again and says what is
+missing. To start control only when you want, turn off "Start control when a device connects" under
+MirrorAct → Settings → General. After you turn control off or close the window, the agent keeps
+running on the device for five minutes, so control is back at once; quitting MirrorAct stops it.
+Then:
+
+- click: tap, hold: long press, drag: swipe
+- trackpad or mouse wheel: scroll (iOS adds the momentum itself)
+- typing goes to the active text field, ⌘V types the text from the Mac clipboard
+- Home, App Switcher, Notification Center, volume and lock are in the tool rail and the context menu
+
+This works over the cable and wirelessly; MirrorAct reaches the agent through usbmuxd (like Xcode)
+or over the local network. Gestures are sent when you release the mouse button, so the finger does
+not follow the mouse live. A device with a passcode cannot be unlocked this way. The output of
+`xcodebuild` is in `~/Library/Logs/MirrorAct-Agent.log`.
+
 ## Controlling an Android phone
 
 As soon as an Android phone is mirrored, the mirror window controls it:
@@ -108,6 +151,7 @@ instead of the phone. Apps that protect their content (banking, streaming) stay 
 | `MirrorAct/USB` | device discovery and capture (`AVCaptureDevice`, `.muxed`) |
 | `MirrorAct/Frame` | device profiles, frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
+| `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |
@@ -130,8 +174,9 @@ The screenshots above are drawn by the app itself from its real views (debug bui
 ## Privacy
 
 MirrorAct works locally. It does not send any data anywhere and has no telemetry. Network access
-is limited to the AirPlay receiver on your local network and over AWDL, and to adb for Android
-phones (by cable, or on your local network when you use Wi-Fi).
+is limited to the AirPlay receiver on your local network and over AWDL, to adb for Android phones
+(by cable, or on your local network when you use Wi-Fi), and, while you control an iPhone or iPad,
+to the agent on that device.
 
 ## Legal
 
