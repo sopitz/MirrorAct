@@ -31,7 +31,7 @@ VERSION=$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"$/\1/p' project.yml)
 [[ -n $VERSION ]] || { echo "MARKETING_VERSION fehlt in project.yml"; exit 1; }
 TEAM=$(security find-identity -v -p codesigning \
   | sed -n "s/.*\"$IDENTITY: .*(\([A-Z0-9]*\))\"\$/\1/p" | head -1)
-[[ -n $TEAM ]] || { echo "Kein Zertifikat «$IDENTITY» im Schlüsselbund (siehe README)"; exit 1; }
+[[ -n $TEAM ]] || { echo "Kein Zertifikat «$IDENTITY» im Schlüsselbund (siehe CONTRIBUTING.md)"; exit 1; }
 xcrun notarytool history --keychain-profile $NOTARY_PROFILE > /dev/null 2>&1 \
   || { echo "notarytool-Profil «$NOTARY_PROFILE» fehlt (siehe Kopf dieses Skripts)"; exit 1; }
 if (( PUBLISH )); then

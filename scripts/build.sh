@@ -24,7 +24,7 @@ for arg in "$@"; do
 done
 
 for tool in xcodegen xcodebuild cmake brew; do
-  command -v $tool > /dev/null || { echo "Fehlt: $tool (siehe README)"; exit 1; }
+  command -v $tool > /dev/null || { echo "Fehlt: $tool (siehe CONTRIBUTING.md)"; exit 1; }
 done
 BREW_PREFIX=$(brew --prefix)
 DERIVED=${MIRRORACT_DERIVED:-$HOME/Library/Caches/MirrorAct/DerivedData}
