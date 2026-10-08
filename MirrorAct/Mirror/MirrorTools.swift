@@ -102,7 +102,7 @@ struct MirrorToolRail: View {
             if state == .ready {
                 HStack(spacing: 0) {
                     ForEach(control.buttons.prefix(3)) { button in
-                        NavButton(button: button) { actions.press(button) }
+                        NavButton(glyph: control.glyph(for: button), title: button.title) { actions.press(button) }
                     }
                 }
                 .padding(.bottom, 4)
@@ -185,14 +185,16 @@ extension View {
 
 /// kleine Gerätetaste (drei nebeneinander in der Werkzeugleiste)
 private struct NavButton: View {
-    let button: DeviceButton
+    let glyph: DeviceButton.Glyph
+    let title: String
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: button.symbol)
+            Image(systemName: glyph.symbol)
                 .font(.system(size: 11, weight: .semibold))
+                .rotationEffect(.degrees(glyph.rotation))
                 .frame(width: 18, height: 26)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -202,7 +204,7 @@ private struct NavButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help(button.title)
+        .help(title)
     }
 }
 
@@ -360,12 +362,12 @@ struct StylePanel: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: session.profile.family == .iPad ? "ipad" : "iphone")
+            Image(systemName: session.profile.family == .iPad ? "ipad" : session.profile.family == .android ? "smartphone" : "iphone")
                 .font(.system(size: 24, weight: .light))
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.deviceName).font(.system(size: 13, weight: .semibold))
                 HStack(spacing: 4) {
-                    Image(systemName: session.kind == .cable ? "cable.connector" : "wifi")
+                    Image(systemName: session.kind == .wireless ? "wifi" : "cable.connector")
                         .font(.system(size: 9, weight: .semibold))
                     Text(session.subtitle)
                 }

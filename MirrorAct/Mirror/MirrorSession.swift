@@ -3,10 +3,10 @@ import AppKit
 import Combine
 import CoreGraphics
 
-/// Ein gespiegeltes Gerät: Quelle (Kabel oder AirPlay), Zustand, Bildgrösse, Profil, Bedienung.
+/// Ein gespiegeltes Gerät: Quelle (Kabel, AirPlay oder Android), Zustand, Bildgrösse, Profil, Bedienung.
 @MainActor
 final class MirrorSession: ObservableObject, Identifiable {
-    enum Kind { case cable, wireless }
+    enum Kind { case cable, wireless, android }
 
     enum State: Equatable {
         case connecting
@@ -34,6 +34,9 @@ final class MirrorSession: ObservableObject, Identifiable {
     /// Abtastrate des Tons dieser Quelle (für Aufnahmen); nil = ohne Ton
     var audioSampleRate: Double?
     var isRecording: Bool { recordingStartedAt != nil }
+
+    /// Profil aus den Angaben des Geräts (Android); hat Vorrang vor Modellkennung und Auflösung
+    var profileOverride: DeviceProfile? { didSet { updateProfile() } }
 
     /// Bedienung über das Fenster (nil = nur anzeigen)
     var control: DeviceControl? {
@@ -74,15 +77,20 @@ final class MirrorSession: ObservableObject, Identifiable {
 
     private func updateProfile() {
         let size = frameSize == .zero ? CGSize(width: 1170, height: 2532) : frameSize
-        let resolved = DeviceProfile.resolve(modelIdentifier: modelIdentifier, screenPixels: sourcePixelSize,
-                                             frameSize: size)
+        let resolved = profileOverride
+            ?? DeviceProfile.resolve(modelIdentifier: modelIdentifier, screenPixels: sourcePixelSize, frameSize: size)
         if resolved != profile { profile = resolved }
     }
 
     var subtitle: String {
         if let toast { return toast }
         switch state {
-        case .connecting: return kind == .cable ? String(localized: "Connecting via cable …") : String(localized: "Waiting for video …")
+        case .connecting:
+            switch kind {
+            case .cable: return String(localized: "Connecting via cable …")
+            case .wireless: return String(localized: "Waiting for video …")
+            case .android: return String(localized: "Connecting …")
+            }
         case .live: return profile.marketingName ?? profile.displayName
         case let .disconnected(reason): return reason ?? String(localized: "Disconnected")
         }

@@ -33,6 +33,8 @@ targets:
           - "**/*.md"
       - path: Resources/AppIcon.icns
         buildPhase: resources
+      - path: Vendor/scrcpy/scrcpy-server
+        buildPhase: resources
     info:
       path: MirrorAct/Info.plist
       properties:

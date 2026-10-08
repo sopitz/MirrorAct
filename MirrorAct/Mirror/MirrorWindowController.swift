@@ -175,7 +175,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             if session.isControlReady {
                 for button in control.buttons {
                     let item = ActionMenuItem(button.title) { a.press(button) }
-                    item.image = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)
+                    let glyph = control.glyph(for: button)
+                    item.image = NSImage(systemSymbolName: glyph.rotation == 0 ? glyph.symbol : button.symbol,
+                                         accessibilityDescription: nil)
                     menu.addItem(item)
                 }
             }
@@ -513,9 +515,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             frameView.placeholder.isHidden = true
         case .connecting:
             frameView.placeholder.isHidden = false
-            frameView.placeholder.stringValue = session.kind == .cable
-                ? String(localized: "Connecting …\nUnlock the device if needed")
-                : String(localized: "Waiting for video …")
+            frameView.placeholder.stringValue = session.kind == .wireless
+                ? String(localized: "Waiting for video …")
+                : String(localized: "Connecting …\nUnlock the device if needed")
         case let .disconnected(reason):
             frameView.placeholder.isHidden = false
             frameView.placeholder.stringValue = reason ?? String(localized: "Disconnected")

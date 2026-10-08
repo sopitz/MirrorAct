@@ -130,8 +130,8 @@ final class AppSettings: ObservableObject {
 
     struct KnownDevice: Codable, Hashable, Identifiable {
         var id: String { "\(transport.rawValue):\(key)" }
-        enum Transport: String, Codable { case cable, wireless }
-        var key: String            // AirPlay-Geräte-ID bzw. AVCaptureDevice.uniqueID
+        enum Transport: String, Codable { case cable, wireless, android }
+        var key: String            // AirPlay-Geräte-ID, AVCaptureDevice.uniqueID bzw. Android-Seriennummer
         var transport: Transport
         var name: String
         var modelIdentifier: String?
