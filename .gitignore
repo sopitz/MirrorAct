@@ -10,8 +10,9 @@ Resources/AppIcon-1024.png
 # lokale Signatur
 Config/Local.xcconfig
 
-# xcodegen erzeugt Info.plist aus project.yml
+# xcodegen erzeugt Info.plist und Entitlements aus project.yml
 MirrorAct/Info.plist
+MirrorAct/MirrorAct.entitlements
 
 .DS_Store
 *.xcuserstate

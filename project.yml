@@ -58,6 +58,11 @@ targets:
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp
+    entitlements:
+      path: MirrorAct/MirrorAct.entitlements
+      properties:
+        com.apple.security.device.camera: true
+        com.apple.security.device.audio-input: true
     settings:
       base:
         PRODUCT_NAME: MirrorAct
@@ -80,7 +85,7 @@ targets:
           - $(SRCROOT)/Vendor/uxplay-build/lib/dns_sd/libdnssd.a
           - $(HOMEBREW_PREFIX)/opt/openssl@3/lib/libcrypto.a
           - $(HOMEBREW_PREFIX)/opt/libplist/lib/libplist-2.0.a
-        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         GENERATE_INFOPLIST_FILE: NO
