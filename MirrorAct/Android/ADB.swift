@@ -108,6 +108,7 @@ struct AndroidDeviceInfo: Equatable {
             "echo density=$(wm density | tail -n 1)",
             "echo dpi=$(dumpsys display 2>/dev/null | grep -m 1 -o '[0-9.]* x [0-9.]* dpi')",
             "echo cutout=$(dumpsys display 2>/dev/null | grep -m 1 -o 'boundingRect={Bounds=[^}]*}')",
+            "echo spec=$( (dumpsys display; dumpsys window) 2>/dev/null | grep -m 1 -o 'cutoutSpec={M[^}]*}')",
             "echo radius=$(dumpsys window 2>/dev/null | grep -m 1 -o 'RoundedCorner{position=TopLeft, radius=[0-9]*')",
         ].joined(separator: "; ")
         let output = try ADB.run(["shell", script], serial: serial, timeout: 10)
@@ -142,14 +143,48 @@ struct AndroidDeviceInfo: Equatable {
         if let dpi = value("dpi")?.split(separator: " ").first.flatMap({ Double($0) }), dpi > 50 {
             info.physicalPPI = dpi
         }
+        // Form der Aussparung als Pfad (genau), sonst ihre Begrenzung
         // "boundingRect={Bounds=[Rect(0, 0 - 0, 0), Rect(498, 0 - 582, 145), …]}"
-        if let cutout = value("cutout") {
+        if let spec = value("spec"), let width = info.screenPixels?.width,
+           let circle = Self.parseCutoutCircle(spec, screenWidth: width, density: info.densityDpi ?? 160) {
+            info.cutoutRect = circle
+        } else if let cutout = value("cutout") {
             info.cutoutRect = Self.parseRects(cutout).first { !$0.isEmpty }
         }
         if let radius = value("radius")?.split(separator: "=").last.flatMap({ Double($0) }) {
             info.cornerRadius = radius
         }
         return info
+    }
+
+    /// Kreis aus der Pfadbeschreibung der Aussparung, z. B. Samsung
+    /// "M 0,0 M 0, 8.53 a 12.44,12.44 0 1,0 0,24.89 a … Z @dp" oder "M 40,83 a 42.75,42.75 0 1 0 85.5,0 … @left".
+    /// x zählt von der Bildschirmmitte (@left: vom linken, @right: vom rechten Rand), @dp: in dp statt Pixeln.
+    static func parseCutoutCircle(_ spec: String, screenWidth: CGFloat, density: CGFloat) -> CGRect? {
+        let body = spec.replacingOccurrences(of: "cutoutSpec={", with: "").replacingOccurrences(of: "}", with: "")
+        guard let arc = body.firstIndex(where: { $0 == "a" || $0 == "A" }), body[arc] == "a",
+              let move = body[..<arc].lastIndex(of: "M") else { return nil }
+        func numbers(_ text: Substring) -> [CGFloat] {
+            text.split(whereSeparator: { $0 == "," || $0 == " " }).compactMap { Double($0) }.map { CGFloat($0) }
+        }
+        let start = numbers(body[body.index(after: move)..<arc])
+        let arcEnd = body[body.index(after: arc)...].firstIndex(where: { $0.isLetter }) ?? body.endIndex
+        let values = numbers(body[body.index(after: arc)..<arcEnd])
+        // erster Halbkreis: Radius, dann Endpunkt relativ zum Start (gegenüberliegender Punkt)
+        guard start.count >= 2, values.count >= 7, values[0] > 0 else { return nil }
+        let scale = body.contains("@dp") ? density / 160 : 1
+        let radius = values[0] * scale
+        var center = CGPoint(x: (start[0] + values[5] / 2) * scale, y: (start[1] + values[6] / 2) * scale)
+        if body.contains("@left") {
+            // schon vom linken Rand
+        } else if body.contains("@right") {
+            center.x = screenWidth - center.x
+        } else {
+            center.x += screenWidth / 2
+        }
+        let rect = CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius)
+        guard rect.minX >= 0, rect.maxX <= screenWidth, rect.minY >= 0, radius < screenWidth / 4 else { return nil }
+        return rect
     }
 
     /// "Rect(l, t - r, b)" → CGRect
