@@ -4,7 +4,7 @@ import AppKit
 import SwiftUI
 
 /// Test der Android-Spiegelung ohne Klicken (nur Debug-Builds), über die
-/// DistributedNotification "io.github.sopitz.MirrorAct.android" mit userInfo:
+/// DistributedNotification "io.github.sopitz.MirrorAct.android-test" mit userInfo:
 ///   cmd=open serial=<adb-Seriennummer>       Fenster öffnen
 ///   cmd=touch phase=began|moved|ended x=0…1 y=0…1
 ///   cmd=scroll x y dy [precise=1]
@@ -12,9 +12,10 @@ import SwiftUI
 ///   cmd=frame path=<datei.png>               letztes Bild (ungerahmt) sichern
 ///   cmd=window path=<datei.png>              Screenshot mit Rahmen
 ///   cmd=guide|launcher|rail path=<datei.png>  Ansicht zeichnen
+///   device=<Seriennummer> wählt das Fenster (sonst das vorderste), pid=<Prozess> die Instanz
 @MainActor
 enum AndroidDebug {
-    static let notification = Notification.Name("io.github.sopitz.MirrorAct.android")
+    static let notification = Notification.Name("io.github.sopitz.MirrorAct.android-test")
 
     static func install() {
         DistributedNotificationCenter.default().addObserver(forName: notification, object: nil, queue: .main) { note in
@@ -24,9 +25,14 @@ enum AndroidDebug {
     }
 
     private static func handle(_ info: [String: String]) {
+        // pid=<Prozess>: nur diese Instanz (es können mehrere MirrorAct laufen)
+        if let pid = info["pid"], pid != String(ProcessInfo.processInfo.processIdentifier) { return }
         let model = AppModel.shared
         func number(_ key: String) -> CGFloat { CGFloat(Double(info[key] ?? "") ?? 0) }
-        let session = model.keyMirror?.session
+        // device=<Seriennummer>: dieses Fenster, sonst das vorderste
+        let mirrors = NSApp.windows.compactMap { $0.windowController as? MirrorWindowController }
+        let session = info["device"].flatMap { id in mirrors.first { $0.session.id.hasSuffix(id) }?.session }
+            ?? model.keyMirror?.session
         switch info["cmd"] {
         case "open":
             guard let device = model.android.devices.first(where: { $0.serial == info["serial"] }) else {

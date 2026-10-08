@@ -80,8 +80,9 @@ struct DeviceProfile: Equatable {
         if let pixels = screenPixels, pixels.width > 0 {
             let W = pixels.width
             if let rect = cutoutRect, rect.width > 0, rect.height > 0 {
-                // Begrenzung des Kameralochs; meist etwas grösser als das Loch selbst
-                let diameter = min(rect.width, rect.height) * 0.8
+                // quadratisch: das Loch selbst (Samsung); höher als breit: reicht bis zum oberen Rand (Pixel)
+                let square = abs(rect.width - rect.height) < 0.2 * max(rect.width, rect.height)
+                let diameter = min(rect.width, rect.height) * (square ? 1 : 0.85)
                 cutout = .hole(centerX: rect.midX / W, centerY: rect.midY / W, diameter: diameter / W)
             }
             if let cornerRadius, cornerRadius > 0 { corner = cornerRadius / W }
