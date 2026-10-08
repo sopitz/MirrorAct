@@ -76,6 +76,42 @@ To keep the permission, sign with your own certificate: copy `Config/Local.xccon
 
 Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct.log`.
 
+## Controlling an iPhone or iPad
+
+Optional, for developers: with a small test agent on the device, MirrorAct passes clicks, drags,
+scrolling and typing on to the iPhone or iPad. iOS allows this only for UI tests, so MirrorAct
+does it the way Xcode automates apps: [WebDriverAgent](https://github.com/appium/WebDriverAgent)
+(from the Appium project) runs as a UI test on the device, started with `xcodebuild`.
+
+You need:
+
+- Xcode in a version that supports the iOS version of the device
+- an Apple developer team in `Config/Local.xcconfig` (a free Apple ID works too, but its signature expires after 7 days)
+- on the device: **Developer Mode** (Settings → Privacy & Security → Developer Mode; the device restarts) and, afterwards, **Enable UI Automation** under Settings → Developer
+
+Build the agent once (again after a change of team or Xcode version):
+
+```bash
+scripts/build-agent.sh
+```
+
+It is signed with your team and placed in `~/Library/Application Support/MirrorAct/Agent`. If the
+device is not yet registered with your team, connect it and pass its identifier from Xcode →
+Devices and Simulators: `scripts/build-agent.sh --device <UDID>`.
+
+In the mirror window, click **Control** in the tool rail (or Device → Control Device, ⌥⌘C).
+Starting the agent on the device takes a few seconds. Then:
+
+- click: tap, hold: long press, drag: swipe
+- trackpad or mouse wheel: scroll (iOS adds the momentum itself)
+- typing goes to the active text field, ⌘V types the text from the Mac clipboard
+- Home, App Switcher, Notification Center, volume and lock are in the tool rail and the context menu
+
+This works over the cable and wirelessly; MirrorAct reaches the agent through usbmuxd (like Xcode)
+or over the local network. Gestures are sent when you release the mouse button, so the finger does
+not follow the mouse live. A device with a passcode cannot be unlocked this way. The output of
+`xcodebuild` is in `~/Library/Logs/MirrorAct-Agent.log`.
+
 ## How it works
 
 | Folder | Content |
@@ -85,6 +121,7 @@ Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct
 | `MirrorAct/USB` | device discovery and capture (`AVCaptureDevice`, `.muxed`) |
 | `MirrorAct/Frame` | device profiles, frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
+| `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |
@@ -107,7 +144,8 @@ The screenshots above are drawn by the app itself from its real views (debug bui
 ## Privacy
 
 MirrorAct works locally. It does not send any data anywhere and has no telemetry. Network access
-is limited to the AirPlay receiver on your local network and over AWDL.
+is limited to the AirPlay receiver on your local network and over AWDL, and, while you control a
+device, to the agent on that device.
 
 ## Legal
 

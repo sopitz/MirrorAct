@@ -13,6 +13,7 @@ libplist come from Homebrew. A distributed build of MirrorAct contains these com
 | UxPlay `lib/srp.c` | SRP pairing | MIT |
 | [OpenSSL](https://www.openssl.org) 3.x (statically linked) | Cryptography for AirPlay pairing | Apache-2.0 |
 | [libplist](https://github.com/libimobiledevice/libplist) (statically linked) | Property lists in the AirPlay protocol | LGPL-2.1-or-later |
+| [WebDriverAgent](https://github.com/appium/WebDriverAgent) (tag `v16.14.1`) | Optional agent for controlling an iPhone or iPad; fetched and built locally by `scripts/build-agent.sh`, runs on the device, not part of the app | BSD-3-Clause |
 
 Apple system frameworks (AVFoundation, CoreMediaIO, VideoToolbox, Core Image, SwiftUI, AppKit,
 App Intents) are used as system libraries.

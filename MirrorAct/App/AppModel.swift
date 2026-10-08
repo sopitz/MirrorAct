@@ -113,6 +113,7 @@ final class AppModel: ObservableObject {
         receiver.audio.muted = session.muted
         receiver.sink = session.sink
         wirelessSession = session
+        session.control = IOSControl(session: session)
         let controller = MirrorWindowController(session: session)
         controllers[session.id] = controller
         controller.present()
@@ -177,6 +178,7 @@ final class AppModel: ObservableObject {
             return
         }
         captures[key] = capture
+        session.control = IOSControl(session: session)
         let controller = MirrorWindowController(session: session)
         controllers[key] = controller
         controller.present()
@@ -264,9 +266,21 @@ final class AppModel: ObservableObject {
     func frameScreenshots() { openEditorPanel() }
 }
 
-/// Modellkennung eines per Kabel verbundenen Geräts über `xcrun devicectl` (falls Xcode da ist)
+/// Geräte, die Xcode kennt, über `xcrun devicectl` (falls Xcode da ist)
 enum DeviceInfoLookup {
+    struct Device {
+        let name: String
+        let productType: String?
+        let udid: String?
+        let developerModeEnabled: Bool
+    }
+
+    /// Modellkennung eines per Kabel verbundenen Geräts
     static func productType(forDeviceNamed name: String) -> String? {
+        devices().first { $0.name == name }?.productType
+    }
+
+    static func devices() -> [Device] {
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("mirroract-devices-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: output) }
         let process = Process()
@@ -274,22 +288,22 @@ enum DeviceInfoLookup {
         process.arguments = ["devicectl", "list", "devices", "--quiet", "--json-output", output.path]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
+        do { try process.run() } catch { return [] }
         let deadline = Date().addingTimeInterval(15)
         while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
-        if process.isRunning { process.terminate(); return nil }
+        if process.isRunning { process.terminate(); return [] }
 
         guard let data = try? Data(contentsOf: output),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let result = json["result"] as? [String: Any],
-              let devices = result["devices"] as? [[String: Any]] else { return nil }
-        for device in devices {
+              let devices = result["devices"] as? [[String: Any]] else { return [] }
+        return devices.compactMap { device in
             let properties = device["deviceProperties"] as? [String: Any]
             let hardware = device["hardwareProperties"] as? [String: Any]
-            if properties?["name"] as? String == name, let type = hardware?["productType"] as? String {
-                return type
-            }
+            guard let name = properties?["name"] as? String else { return nil }
+            return Device(name: name, productType: hardware?["productType"] as? String,
+                          udid: hardware?["udid"] as? String,
+                          developerModeEnabled: properties?["developerModeStatus"] as? String == "enabled")
         }
-        return nil
     }
 }

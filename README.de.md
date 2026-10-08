@@ -79,6 +79,44 @@ eintragen.
 
 Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/MirrorAct.log`.
 
+## iPhone oder iPad bedienen
+
+Optional, für Entwickler: Mit einem kleinen Test-Agent auf dem Gerät gibt MirrorAct Klicks, Ziehen,
+Scrollen und Tippen an das iPhone oder iPad weiter. iOS erlaubt das nur für UI-Tests, deshalb geht
+MirrorAct den Weg, auf dem Xcode Apps automatisiert:
+[WebDriverAgent](https://github.com/appium/WebDriverAgent) (aus dem Appium-Projekt) läuft als
+UI-Test auf dem Gerät und wird mit `xcodebuild` gestartet.
+
+Dafür braucht es:
+
+- Xcode in einer Version, die die iOS-Version des Geräts unterstützt
+- ein Apple-Entwicklerteam in `Config/Local.xcconfig` (eine kostenlose Apple-ID geht auch, die Signatur läuft aber nach 7 Tagen ab)
+- auf dem Gerät: **Entwicklermodus** (Einstellungen → Datenschutz & Sicherheit → Entwicklermodus; das Gerät startet neu) und danach unter Einstellungen → Entwickler die **UI-Automatisierung**
+
+Den Agent einmal bauen (erneut nach einem Wechsel von Team oder Xcode-Version):
+
+```bash
+scripts/build-agent.sh
+```
+
+Er wird mit dem eigenen Team signiert und liegt dann in
+`~/Library/Application Support/MirrorAct/Agent`. Ist das Gerät noch nicht im Team registriert, es
+anschliessen und seine Kennung aus Xcode → Devices and Simulators mitgeben:
+`scripts/build-agent.sh --device <UDID>`.
+
+Im Spiegelfenster in der Werkzeugleiste auf **Bedienen** klicken (oder Gerät → Gerät bedienen,
+⌥⌘C). Der Agent startet auf dem Gerät in einigen Sekunden. Danach:
+
+- Klick: Tippen, Halten: langes Drücken, Ziehen: Wischen
+- Trackpad oder Mausrad: Scrollen (den Schwung ergänzt iOS selbst)
+- Tippen geht in das aktive Textfeld, ⌘V tippt den Text aus der Zwischenablage des Macs
+- Home, App-Umschalter, Mitteilungszentrale, Lautstärke und Sperren in der Werkzeugleiste und im Kontextmenü
+
+Das geht per Kabel und kabellos; MirrorAct erreicht den Agent über usbmuxd (wie Xcode) oder über das
+lokale Netz. Gesten werden beim Loslassen der Maustaste geschickt, der Finger folgt der Maus also
+nicht live. Ein Gerät mit Code lässt sich so nicht entsperren. Die Ausgabe von `xcodebuild` steht in
+`~/Library/Logs/MirrorAct-Agent.log`.
+
 ## Aufbau
 
 Siehe Tabelle im [englischen README](README.md#how-it-works). Ohne Gerät lässt sich die Darstellung
@@ -91,7 +129,8 @@ prüfen:
 ## Datenschutz
 
 MirrorAct arbeitet lokal, sendet keine Daten und hat keine Telemetrie. Netzwerkzugriff gibt es nur
-für den AirPlay-Empfänger im lokalen Netz und über AWDL.
+für den AirPlay-Empfänger im lokalen Netz und über AWDL sowie, während ein Gerät bedient wird, zum
+Agent auf diesem Gerät.
 
 ## Rechtliches
 

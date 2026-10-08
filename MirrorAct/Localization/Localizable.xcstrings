@@ -14,6 +14,146 @@
         }
       }
     },
+    "Control was interrupted: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bedienung unterbrochen: %@"
+          }
+        }
+      }
+    },
+    "no details" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "keine Details"
+          }
+        }
+      }
+    },
+    "The agent could not be started on the device:\n%@\n\nFull output: ~/Library/Logs/MirrorAct-Agent.log" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Agent konnte auf dem Gerät nicht gestartet werden:\n%@\n\nVollständige Ausgabe: ~/Library/Logs/MirrorAct-Agent.log"
+          }
+        }
+      }
+    },
+    "The agent did not open a session." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Agent hat keine Sitzung geöffnet."
+          }
+        }
+      }
+    },
+    "the agent on the device stopped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "der Agent auf dem Gerät wurde beendet"
+          }
+        }
+      }
+    },
+    "The agent started, but the Mac can’t reach it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Agent läuft, aber der Mac erreicht ihn nicht."
+          }
+        }
+      }
+    },
+    "The control agent is not built yet. In the MirrorAct folder, run: scripts/build-agent.sh" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Agent für die Bedienung ist noch nicht gebaut. Im MirrorAct-Ordner ausführen: scripts/build-agent.sh"
+          }
+        }
+      }
+    },
+    "Trust the developer certificate on the device: Settings → General → VPN & Device Management." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dem Entwicklerzertifikat auf dem Gerät vertrauen: Einstellungen → Allgemein → VPN & Geräteverwaltung."
+          }
+        }
+      }
+    },
+    "Turn on Developer Mode on the device: Settings → Privacy & Security → Developer Mode. The device restarts; confirm afterwards." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entwicklermodus auf dem Gerät einschalten: Einstellungen → Datenschutz & Sicherheit → Entwicklermodus. Das Gerät startet neu; danach bestätigen."
+          }
+        }
+      }
+    },
+    "Turn on UI automation on the device: Settings → Developer → Enable UI Automation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UI-Automatisierung auf dem Gerät einschalten: Einstellungen → Entwickler → UI-Automatisierung aktivieren."
+          }
+        }
+      }
+    },
+    "Unlock the device and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerät entsperren und noch einmal versuchen."
+          }
+        }
+      }
+    },
+    "Xcode (xcodebuild) could not be started." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode (xcodebuild) konnte nicht gestartet werden."
+          }
+        }
+      }
+    },
+    "Xcode can’t reach the device. Connect it by cable and unlock it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode erreicht das Gerät nicht. Per Kabel verbinden und entsperren."
+          }
+        }
+      }
+    },
+    "Xcode doesn’t know “%@” yet. Connect it by cable once, unlock it and trust this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode kennt «%@» noch nicht. Einmal per Kabel verbinden, entsperren und diesem Mac vertrauen."
+          }
+        }
+      }
+    },
     "%@ can’t be controlled" : {
       "localizations" : {
         "de" : {
