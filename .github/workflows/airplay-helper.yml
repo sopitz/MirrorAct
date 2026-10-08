@@ -1,0 +1,114 @@
+name: AirPlay helper
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - AirPlayHelper/**
+      - MirrorAct/AirPlay/airplay_bridge.*
+      - scripts/bootstrap-uxplay.sh
+      - .github/workflows/airplay-helper.yml
+  pull_request:
+    paths:
+      - AirPlayHelper/**
+      - MirrorAct/AirPlay/airplay_bridge.*
+      - scripts/bootstrap-uxplay.sh
+      - .github/workflows/airplay-helper.yml
+  workflow_dispatch:
+
+env:
+  HOMEBREW_NO_ANALYTICS: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: brew install cmake pkgconf libplist openssl@3 gstreamer
+      - name: Build the UxPlay library
+        run: scripts/bootstrap-uxplay.sh
+      - name: Configure
+        run: cmake -S AirPlayHelper -B build/airplay-helper -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/airplay-helper
+      - name: Smoke test
+        run: |
+          build/airplay-helper/mirroract-airplay --help
+          otool -L build/airplay-helper/mirroract-airplay
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mirroract-airplay-macos
+          path: build/airplay-helper/mirroract-airplay
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-openssl
+            mingw-w64-ucrt-x86_64-libplist
+            mingw-w64-ucrt-x86_64-pkg-config
+      - name: Fetch UxPlay at the pinned commit
+        shell: bash
+        run: |
+          commit=$(sed -n 's/^UXPLAY_COMMIT=//p' scripts/bootstrap-uxplay.sh)
+          git init -q Vendor/UxPlay
+          git -C Vendor/UxPlay fetch -q --depth 1 https://github.com/FDH2/UxPlay.git "$commit"
+          git -C Vendor/UxPlay checkout -q --detach FETCH_HEAD
+      - name: Configure
+        env:
+          PKG_CONFIG_PATH: /ucrt64/lib/pkgconfig
+        run: cmake -S AirPlayHelper -B build/airplay-helper -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/airplay-helper
+      - name: Check that only system DLLs are used
+        run: |
+          ldd build/airplay-helper/mirroract-airplay.exe
+          if ldd build/airplay-helper/mirroract-airplay.exe | grep '=>' | grep -v '???' | grep -iv '/c/windows/'; then
+            echo "::error::mirroract-airplay.exe depends on DLLs outside C:\\Windows"
+            exit 1
+          fi
+      - name: Smoke test
+        run: build/airplay-helper/mirroract-airplay.exe --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mirroract-airplay-windows
+          path: build/airplay-helper/mirroract-airplay.exe
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build pkg-config libplist-dev libssl-dev
+      - name: Fetch UxPlay at the pinned commit
+        run: |
+          commit=$(sed -n 's/^UXPLAY_COMMIT=//p' scripts/bootstrap-uxplay.sh)
+          git init -q Vendor/UxPlay
+          git -C Vendor/UxPlay fetch -q --depth 1 https://github.com/FDH2/UxPlay.git "$commit"
+          git -C Vendor/UxPlay checkout -q --detach FETCH_HEAD
+      - name: Configure
+        run: cmake -S AirPlayHelper -B build/airplay-helper -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/airplay-helper
+      - name: Smoke test
+        run: build/airplay-helper/mirroract-airplay --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mirroract-airplay-linux
+          path: build/airplay-helper/mirroract-airplay

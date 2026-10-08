@@ -45,7 +45,8 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 
 | Ordner | Inhalt |
 |---|---|
-| `MirrorAct/AirPlay` | `airplay_bridge.c` – dünne C-Schicht über UxPlays AirPlay-Bibliothek (Bonjour, Heartbeat, Neustart), `AirPlayReceiver` |
+| `MirrorAct/AirPlay` | `airplay_bridge.c` – dünne C-Schicht über UxPlays AirPlay-Bibliothek (Bonjour oder UxPlays eigener mDNS-Responder, Heartbeat, Neustart; baut auf macOS, Linux und Windows), `AirPlayReceiver` |
+| `AirPlayHelper` | `mirroract-airplay` – derselbe Empfänger als eigenes Programm für andere Apps (Rahmen über stdout, Befehle über stdin; Protokoll und Build in [`AirPlayHelper/README.md`](AirPlayHelper/README.md), Englisch); `.github/workflows/airplay-helper.yml` baut ihn für macOS, Windows und Linux |
 | `MirrorAct/Android` | `ADB` (adb, Geräteliste, WLAN), `ScrcpyClient` (scrcpy-Protokoll: Video-, Ton- und Steuer-Socket), `AndroidControl` (Maus und Tastatur als scrcpy-Steuernachrichten) |
 | `MirrorAct/Audio` | `AACAudioPlayer` (AAC-ELD von AirPlay, AAC-LC von Android, ohne Puffer) |
 | `MirrorAct/Video` | `AnnexBDecoder` (H.264/HEVC → VideoToolbox), `FrameSink` / `VideoDisplayView` (AVSampleBufferDisplayLayer) |
