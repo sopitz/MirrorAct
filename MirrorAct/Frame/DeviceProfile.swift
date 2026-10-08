@@ -2,15 +2,17 @@
 import CoreGraphics
 import Foundation
 
-/// Aussehen eines Geräts: Bildschirmecken, Notch/Dynamic Island, Home-Button.
+/// Aussehen eines Geräts: Bildschirmecken, Notch/Dynamic Island/Kameraloch, Home-Button.
 /// Alle Verhältnisse beziehen sich auf die Bildschirmbreite im Hochformat.
 struct DeviceProfile: Equatable {
-    enum Family: Equatable { case iPhone, iPad }
+    enum Family: Equatable { case iPhone, iPad, android }
 
     enum Cutout: Equatable {
         case none
         case notch(width: CGFloat, height: CGFloat)
         case island(width: CGFloat, height: CGFloat, top: CGFloat)
+        /// rundes Kameraloch (Android), Mittelpunkt von links/oben
+        case hole(centerX: CGFloat, centerY: CGFloat, diameter: CGFloat)
     }
 
     var family: Family
@@ -30,7 +32,14 @@ struct DeviceProfile: Equatable {
         return px / ppi * 25.4
     }
 
-    var displayName: String { marketingName ?? (family == .iPad ? "iPad" : "iPhone") }
+    var displayName: String {
+        if let marketingName { return marketingName }
+        switch family {
+        case .iPhone: return "iPhone"
+        case .iPad: return "iPad"
+        case .android: return "Android"
+        }
+    }
 
     // MARK: Bekannte Bauformen
 
@@ -60,6 +69,29 @@ struct DeviceProfile: Equatable {
         DeviceProfile(family: .iPad, marketingName: name, homeButton: homeButton, cutout: .none,
                       screenCornerRatio: homeButton ? 0 : corner, pointSize: points,
                       nativePixelWidth: points.map { $0.width * 2 }, ppi: ppi)
+    }
+
+    /// Android-Gerät nach seinen eigenen Angaben (Pixel, dpi-Stufe, Aussparung, Eckenradius)
+    static func android(name: String?, screenPixels: CGSize? = nil, densityDpi: CGFloat? = nil, ppi: CGFloat? = nil,
+                        cutoutRect: CGRect? = nil, cornerRadius: CGFloat? = nil) -> DeviceProfile {
+        var cutout = Cutout.hole(centerX: 0.5, centerY: 0.045, diameter: 0.034)
+        var corner: CGFloat = 0.085
+        var points: CGSize?
+        if let pixels = screenPixels, pixels.width > 0 {
+            let W = pixels.width
+            if let rect = cutoutRect, rect.width > 0, rect.height > 0 {
+                // Begrenzung des Kameralochs; meist etwas grösser als das Loch selbst
+                let diameter = min(rect.width, rect.height) * 0.8
+                cutout = .hole(centerX: rect.midX / W, centerY: rect.midY / W, diameter: diameter / W)
+            }
+            if let cornerRadius, cornerRadius > 0 { corner = cornerRadius / W }
+            if let densityDpi, densityDpi > 0 {
+                points = CGSize(width: pixels.width * 160 / densityDpi, height: pixels.height * 160 / densityDpi)
+            }
+        }
+        return DeviceProfile(family: .android, marketingName: name, homeButton: false, cutout: cutout,
+                             screenCornerRatio: corner, pointSize: points, nativePixelWidth: screenPixels?.width,
+                             ppi: ppi)
     }
 
     /// Modellkennung (z. B. "iPhone14,2") → Profil
@@ -102,6 +134,9 @@ struct DeviceProfile: Equatable {
         case "iPhone17,2": return phone("iPhone 16 Pro Max", island, corner: 0.141, points: p440)
         case "iPhone17,5": return phone("iPhone 16e", notch13, corner: 0.121, points: p390)
         default:
+            if identifier.hasPrefix("android") {
+                return android(name: nil)
+            }
             if identifier.hasPrefix("iPad") {
                 return pad(nil, homeButton: false, corner: 0.022, points: nil)
             }

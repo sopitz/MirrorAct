@@ -360,12 +360,12 @@ struct StylePanel: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: session.profile.family == .iPad ? "ipad" : "iphone")
+            Image(systemName: session.profile.family == .iPad ? "ipad" : session.profile.family == .android ? "smartphone" : "iphone")
                 .font(.system(size: 24, weight: .light))
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.deviceName).font(.system(size: 13, weight: .semibold))
                 HStack(spacing: 4) {
-                    Image(systemName: session.kind == .cable ? "cable.connector" : "wifi")
+                    Image(systemName: session.kind == .wireless ? "wifi" : "cable.connector")
                         .font(.system(size: 9, weight: .semibold))
                     Text(session.subtitle)
                 }

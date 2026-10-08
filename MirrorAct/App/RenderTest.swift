@@ -14,6 +14,10 @@ enum RenderTest {
             ("iphone12", DeviceProfile.forModelIdentifier("iPhone13,2")!, CGSize(width: 1170, height: 2532)),
             ("iphonese", DeviceProfile.forModelIdentifier("iPhone14,6")!, CGSize(width: 750, height: 1334)),
             ("ipad", DeviceProfile.forScreenPixels(CGSize(width: 1640, height: 2360))!, CGSize(width: 1640, height: 2360)),
+            ("android", DeviceProfile.android(name: "Android", screenPixels: CGSize(width: 1080, height: 2340), densityDpi: 420,
+                                              cutoutRect: CGRect(x: 498, y: 0, width: 84, height: 100), cornerRadius: 105),
+             CGSize(width: 1080, height: 2340)),
+            ("android-quer", DeviceProfile.android(name: "Android"), CGSize(width: 2340, height: 1080)),
         ]
         for (name, profile, size) in cases {
             guard let screen = testScreen(size: size),
@@ -88,7 +92,7 @@ enum RenderTest {
         let profile = DeviceProfile.forModelIdentifier("iPhone14,2")!
         let group = DispatchGroup()
         let audioPackets = eldTestPackets()
-        let player = AirPlayAudioPlayer()
+        let player = AACAudioPlayer(format: .airPlay)
         player.muted = true
         for withFrame in [false, true] {
             let url = directory.appendingPathComponent(withFrame ? "aufnahme-rahmen.mov" : "aufnahme.mov")
@@ -98,7 +102,7 @@ enum RenderTest {
                 : FrameStyle()
             guard let recorder = try? MirrorRecorder(url: url, frameSize: CGSize(width: 1170, height: 2532),
                                                      profile: profile, withFrame: withFrame, style: style,
-                                                     audioSampleRate: withFrame ? nil : AirPlayAudioPlayer.sampleRate)
+                                                     audioSampleRate: withFrame ? nil : player.sampleRate)
             else { print("recorder error"); continue }
             if !withFrame {
                 // Ton wie bei AirPlay: AAC-ELD-Pakete alle ~11 ms

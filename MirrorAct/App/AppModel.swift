@@ -18,6 +18,7 @@ final class AppModel: ObservableObject {
     let settings = AppSettings.shared
     let usb = USBDeviceMonitor()
     let receiver = AirPlayReceiver()
+    let android = AndroidDeviceMonitor()
 
     @Published private(set) var receiverState: ReceiverState = .stopped
     @Published private(set) var activeWirelessClient: AirPlayReceiver.Client?
@@ -62,6 +63,7 @@ final class AppModel: ObservableObject {
             if size.width > 0, size.height > 0 { self?.wirelessSession?.sourcePixelSize = size }
         }
         restartReceiver()
+        startAndroid()
     }
 
     // MARK: Kabellos (AirPlay)
@@ -102,7 +104,7 @@ final class AppModel: ObservableObject {
 
         let session = MirrorSession(id: "airplay", kind: .wireless, deviceName: client.name,
                                     modelIdentifier: client.model, muted: !settings.playAudio)
-        session.audioSampleRate = AirPlayAudioPlayer.sampleRate
+        session.audioSampleRate = AACAudioPlayer.Format.airPlay.sampleRate
         session.onMuteChange = { [weak self] muted in self?.receiver.audio.muted = muted }
         session.onClose = { [weak self] in
             guard let self else { return }
@@ -205,10 +207,158 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Android (adb + scrcpy-Server)
+
+    private var androidClients: [String: ScrcpyClient] = [:]
+    private var androidAudio: [String: AACAudioPlayer] = [:]
+    private var rememberedAndroid: Set<String> = []
+
+    private static func androidKey(_ device: AndroidDeviceMonitor.Device) -> String { "android:\(device.stableID)" }
+
+    func isMirroring(androidDevice device: AndroidDeviceMonitor.Device) -> Bool {
+        openSessionIDs.contains(Self.androidKey(device))
+    }
+
+    private func startAndroid() {
+        android.start()
+        android.$devices.sink { [weak self] devices in
+            DispatchQueue.main.async { self?.androidDevicesChanged(devices) }
+        }.store(in: &cancellables)
+    }
+
+    func stopAndroid() {
+        android.stop()
+        androidClients.values.forEach { $0.stop() }
+        androidClients = [:]
+    }
+
+    private func androidDevicesChanged(_ devices: [AndroidDeviceMonitor.Device]) {
+        for device in devices where device.state == .ready {
+            guard let info = device.info else { continue }
+            if rememberedAndroid.insert(device.serial).inserted {
+                settings.remember(.init(key: device.stableID, transport: .android, name: info.displayName,
+                                        modelIdentifier: "android", lastSeen: Date()))
+            }
+            // Fenster noch offen, Gerät wieder da (Kabel neu eingesteckt): weiterspiegeln
+            let key = Self.androidKey(device)
+            if let controller = controllers[key], androidClients[key] == nil {
+                connectAndroid(device, session: controller.session)
+            }
+        }
+        rememberedAndroid.formIntersection(devices.map(\.serial))
+    }
+
+    func openAndroidDevice(_ device: AndroidDeviceMonitor.Device) {
+        switch device.state {
+        case .ready:
+            break
+        case .unauthorized:
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Allow USB debugging on \(device.name)")
+            alert.informativeText = String(localized: "Unlock the phone and tap “Allow” in the dialog “Allow USB debugging?”. If no dialog appears, unplug the cable and connect it again.")
+            alert.runModal()
+            return
+        case .offline:
+            NSSound.beep()
+            return
+        }
+        guard device.info != nil else {
+            // Angaben (Name, Bildschirm) zuerst lesen, sonst ändert sich die Kennung des Fensters
+            Task {
+                var loaded = device
+                loaded.info = try? await Task.detached { try AndroidDeviceInfo.read(serial: device.serial) }.value
+                if loaded.info == nil { loaded.info = AndroidDeviceInfo(model: device.model) }
+                openAndroidDevice(loaded)
+            }
+            return
+        }
+        let key = Self.androidKey(device)
+        if let controller = controllers[key] {
+            controller.present()
+            return
+        }
+        let session = MirrorSession(id: key, kind: .android, deviceName: device.name, modelIdentifier: "android",
+                                    muted: !settings.playAudio)
+        let audio = AACAudioPlayer(format: .android)
+        audio.muted = session.muted
+        audio.recordTap = { [weak sink = session.sink] sample in sink?.recordAudio(sample) }
+        session.audioSampleRate = audio.sampleRate
+        session.onMuteChange = { muted in audio.muted = muted }
+        androidAudio[key] = audio
+        session.onClose = { [weak self] in
+            self?.androidClients[key]?.stop()
+            self?.androidClients[key] = nil
+            self?.androidAudio[key]?.stop()
+            self?.androidAudio[key] = nil
+        }
+        let controller = MirrorWindowController(session: session)
+        controllers[key] = controller
+        connectAndroid(device, session: session)
+        controller.present()
+    }
+
+    private func connectAndroid(_ device: AndroidDeviceMonitor.Device, session: MirrorSession) {
+        let key = session.id
+        var options = ScrcpyClient.Options()
+        options.maxFPS = settings.maxFPS
+        options.videoBitRate = device.isWireless ? 8_000_000 : 16_000_000
+        let client = ScrcpyClient(serial: device.serial, options: options)
+        let sink = session.sink
+        client.onFrame = { buffer in sink.push(buffer) }
+        if let audio = androidAudio[key] {
+            client.onAudioConfig = { cookie in audio.setCookie(cookie) }
+            client.onAudioPacket = { packet in audio.play(packet) }
+        }
+        client.onClipboard = { text in
+            DispatchQueue.main.async {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+        }
+        client.onStop = { [weak self, weak session, weak client] reason in
+            guard let self, let client, self.androidClients[key] === client else { return }
+            self.androidClients[key] = nil
+            self.androidAudio[key]?.stop()
+            session?.stopRecording()
+            session?.control = nil
+            session?.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
+        }
+        if let info = device.info {
+            session.deviceName = info.displayName
+            session.profileOverride = info.profile
+        }
+        session.state = .connecting
+        session.sink.clear()
+        session.control = AndroidControl(client: client)
+        androidClients[key] = client
+        client.start()
+    }
+
+    /// per Kabel verbundenes Android-Gerät auf WLAN umstellen; ein offenes Fenster verbindet sich neu
+    func switchAndroidToWiFi(_ device: AndroidDeviceMonitor.Device) {
+        let name = device.name
+        Task {
+            do {
+                try await Task.detached { try AndroidWireless.switchToWiFi(serial: device.serial) }.value
+                controllers[Self.androidKey(device)]?.session
+                    .showToast(String(localized: "Connected via Wi-Fi – you can unplug the cable"))
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = String(localized: "\(name) can’t be switched to Wi-Fi")
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
+        }
+    }
+
     /// "iPhone oder iPad spiegeln …"
     func mirrorFirstAvailable() {
         if let device = usb.devices.first(where: { !isMirroring(cableDevice: $0.id) }) ?? usb.devices.first {
             openCableDevice(device)
+            return
+        }
+        if let device = android.devices.first(where: { $0.state == .ready && !isMirroring(androidDevice: $0) }) {
+            openAndroidDevice(device)
             return
         }
         let alert = NSAlert()

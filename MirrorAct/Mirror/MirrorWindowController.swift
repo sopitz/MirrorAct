@@ -513,9 +513,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             frameView.placeholder.isHidden = true
         case .connecting:
             frameView.placeholder.isHidden = false
-            frameView.placeholder.stringValue = session.kind == .cable
-                ? String(localized: "Connecting …\nUnlock the device if needed")
-                : String(localized: "Waiting for video …")
+            frameView.placeholder.stringValue = session.kind == .wireless
+                ? String(localized: "Waiting for video …")
+                : String(localized: "Connecting …\nUnlock the device if needed")
         case let .disconnected(reason):
             frameView.placeholder.isHidden = false
             frameView.placeholder.stringValue = reason ?? String(localized: "Disconnected")

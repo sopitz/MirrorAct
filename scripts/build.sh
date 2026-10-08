@@ -28,6 +28,7 @@ DERIVED=$HOME/Library/Caches/MirrorAct/DerivedData
 APP_DEST=$HOME/Applications/MirrorAct.app
 
 [[ -f $ROOT/Vendor/uxplay-build/lib/libairplay.a ]] || $ROOT/scripts/bootstrap-uxplay.sh
+$ROOT/scripts/bootstrap-scrcpy.sh
 [[ -f $ROOT/Resources/AppIcon.icns ]] || $ROOT/scripts/make-icon.sh
 
 cd $ROOT

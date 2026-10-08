@@ -2,24 +2,38 @@
 import AVFoundation
 import Foundation
 
-/// Ton der AirPlay-Bildschirmsynchronisierung: AAC-ELD, 44.1 kHz, stereo, 480 Frames je Paket.
-/// Wird ohne Puffer abgespielt; staut sich etwas, werden Pakete verworfen (Latenz vor Lückenlosigkeit).
-final class AirPlayAudioPlayer: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "mirroract.airplay.audio", qos: .userInteractive)
+/// Spielt AAC-Pakete ohne Puffer ab: AirPlay (AAC-ELD, 44.1 kHz, 480 Frames je Paket) und Android
+/// (AAC-LC, 48 kHz, 1024 Frames). Staut sich etwas, werden Pakete verworfen (Latenz vor Lückenlosigkeit).
+final class AACAudioPlayer: @unchecked Sendable {
+    struct Format {
+        var formatID: AudioFormatID
+        var sampleRate: Double
+        var framesPerPacket: UInt32
+        /// AudioSpecificConfig; bei Android kommt sie erst mit dem ersten Paket (setCookie)
+        var cookie: Data?
+
+        static let airPlay = Format(formatID: kAudioFormatMPEG4AAC_ELD, sampleRate: 44100, framesPerPacket: 480,
+                                    cookie: Data([0xF8, 0xE8, 0x50, 0x00]))   // ELD 44.1k/2ch/480
+        static let android = Format(formatID: kAudioFormatMPEG4AAC, sampleRate: 48000, framesPerPacket: 1024)
+    }
+
+    private let queue = DispatchQueue(label: "mirroract.audio", qos: .userInteractive)
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    private let format: Format
     private let inputFormat: AVAudioFormat
-    private let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+    private let outputFormat: AVAudioFormat
+    private var cookie: Data?
     private var converter: AVAudioConverter?
     private var started = false
     private var queued = 0
     private var gain: Float = 1
     private var isMuted = false
 
-    /// höchstens so viele Pakete (à ~11 ms) in der Warteschlange
-    private let maxQueued = 12
+    /// höchstens so viele Pakete in der Warteschlange (etwa 140 ms)
+    private let maxQueued: Int
 
-    static let sampleRate: Double = 44100
+    let sampleRate: Double
     private let tapLock = NSLock()
     private var tap: ((CMSampleBuffer) -> Void)?
     private var audioFormatDescription: CMAudioFormatDescription?
@@ -30,11 +44,17 @@ final class AirPlayAudioPlayer: @unchecked Sendable {
         set { tapLock.lock(); tap = newValue; tapLock.unlock() }
     }
 
-    init() {
+    init(format: Format = .airPlay) {
+        self.format = format
+        sampleRate = format.sampleRate
+        cookie = format.cookie
+        maxQueued = max(4, Int(0.14 * format.sampleRate / Double(format.framesPerPacket)))
         var description = AudioStreamBasicDescription(
-            mSampleRate: 44100, mFormatID: kAudioFormatMPEG4AAC_ELD, mFormatFlags: 0, mBytesPerPacket: 0,
-            mFramesPerPacket: 480, mBytesPerFrame: 0, mChannelsPerFrame: 2, mBitsPerChannel: 0, mReserved: 0)
+            mSampleRate: format.sampleRate, mFormatID: format.formatID, mFormatFlags: 0, mBytesPerPacket: 0,
+            mFramesPerPacket: format.framesPerPacket, mBytesPerFrame: 0, mChannelsPerFrame: 2, mBitsPerChannel: 0,
+            mReserved: 0)
         inputFormat = AVAudioFormat(streamDescription: &description)!
+        outputFormat = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 2)!
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: outputFormat)
     }
@@ -54,7 +74,20 @@ final class AirPlayAudioPlayer: @unchecked Sendable {
 
     func handle(_ data: Data, compressionType: UInt8) {
         guard compressionType == 8 else { return }   // nur AAC-ELD (Spiegelung)
+        play(data)
+    }
+
+    /// ein AAC-Paket (ohne ADTS-Kopf)
+    func play(_ data: Data) {
         queue.async { self.decodeAndPlay(data) }
+    }
+
+    /// AudioSpecificConfig des Stroms (Android: erstes Paket)
+    func setCookie(_ data: Data) {
+        queue.async {
+            self.cookie = data
+            self.converter = nil
+        }
     }
 
     func stop() {
@@ -75,7 +108,7 @@ final class AirPlayAudioPlayer: @unchecked Sendable {
                                            extensions: nil, formatDescriptionOut: &audioFormatDescription)
         }
         guard let description = audioFormatDescription else { return nil }
-        var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: CMTimeScale(Self.sampleRate)),
+        var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: CMTimeScale(sampleRate)),
                                         presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
                                         decodeTimeStamp: .invalid)
         var sample: CMSampleBuffer?
@@ -97,8 +130,9 @@ final class AirPlayAudioPlayer: @unchecked Sendable {
 
     private func decodeAndPlay(_ data: Data) {
         if converter == nil {
+            guard let cookie else { return }
             converter = AVAudioConverter(from: inputFormat, to: outputFormat)
-            converter?.magicCookie = Data([0xF8, 0xE8, 0x50, 0x00])   // AudioSpecificConfig ELD 44.1k/2ch/480
+            converter?.magicCookie = cookie
         }
         guard let converter else { return }
         if queued > maxQueued { return }
@@ -110,7 +144,7 @@ final class AirPlayAudioPlayer: @unchecked Sendable {
         packet.packetDescriptions?[0] = AudioStreamPacketDescription(
             mStartOffset: 0, mVariableFramesInPacket: 0, mDataByteSize: UInt32(data.count))
 
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 960) else { return }
+        guard let pcm = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: format.framesPerPacket * 2) else { return }
         var supplied = false
         var error: NSError?
         let status = converter.convert(to: pcm, error: &error) { _, inputStatus in

@@ -50,11 +50,16 @@ struct FrameLayout {
         }
 
         let isPad = profile.family == .iPad
+        let isAndroid = profile.family == .android
         let side: CGFloat, top: CGFloat, bottom: CGFloat
         if profile.homeButton {
             side = (isPad ? 0.075 : 0.065) * W
             top = (isPad ? 0.11 : 0.205) * W
             bottom = top
+        } else if isAndroid {
+            side = 0.036 * W
+            top = side
+            bottom = 0.042 * W
         } else {
             side = (isPad ? 0.045 : 0.052) * W
             top = side
@@ -70,7 +75,13 @@ struct FrameLayout {
         let portraitTotal = CGSize(width: body.width + 2 * protrusion, height: body.height)
 
         var buttons: [CGRect] = []
-        if !isPad {
+        if isAndroid {
+            // Lautstärke und Ein/Aus rechts
+            for (y, h) in [(0.200, 0.105), (0.335, 0.055)] as [(CGFloat, CGFloat)] {
+                buttons.append(CGRect(x: body.maxX - rim, y: body.minY + y * body.height,
+                                      width: protrusion + rim, height: h * body.height))
+            }
+        } else if !isPad {
             let left: [(CGFloat, CGFloat)] = profile.homeButton
                 ? [(0.120, 0.040), (0.190, 0.070), (0.280, 0.070)]
                 : [(0.165, 0.036), (0.235, 0.072), (0.330, 0.072)]
@@ -95,6 +106,10 @@ struct FrameLayout {
             let rect = CGRect(x: screen.midX - widthRatio * W / 2, y: screen.minY + topRatio * W,
                               width: widthRatio * W, height: heightRatio * W)
             cutout = CGPath(roundedRect: rect, cornerWidth: rect.height / 2, cornerHeight: rect.height / 2, transform: nil)
+        case let .hole(centerX, centerY, diameter):
+            let d = diameter * W
+            cutout = CGPath(ellipseIn: CGRect(x: screen.minX + centerX * W - d / 2, y: screen.minY + centerY * W - d / 2,
+                                              width: d, height: d), transform: nil)
         }
 
         var homeButton: CGRect?, earpiece: CGRect?, camera: CGRect?

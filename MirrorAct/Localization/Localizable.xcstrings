@@ -24,12 +24,142 @@
         }
       }
     },
+    "%@ can’t be switched to Wi-Fi" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lässt sich nicht auf WLAN umstellen"
+          }
+        }
+      }
+    },
+    "adb is missing on this Mac. Install it in Terminal with: brew install android-platform-tools" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "adb fehlt auf diesem Mac. Im Terminal installieren mit: brew install android-platform-tools"
+          }
+        }
+      }
+    },
+    "adb not found" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "adb nicht gefunden"
+          }
+        }
+      }
+    },
+    "Allow USB debugging" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "USB-Debugging erlauben"
+          }
+        }
+      }
+    },
+    "Allow USB debugging on %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "USB-Debugging auf %@ erlauben"
+          }
+        }
+      }
+    },
+    "Android" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android"
+          }
+        }
+      }
+    },
     "Back" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zurück"
+          }
+        }
+      }
+    },
+    "Connect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinden"
+          }
+        }
+      }
+    },
+    "Connect the phone to the Mac and unlock it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telefon mit dem Mac verbinden und entsperren."
+          }
+        }
+      }
+    },
+    "Connected by cable? Right-click the phone → “Use Wi-Fi Instead of Cable”. Without a cable (Android 11 or later): Developer options → Wireless debugging → Pair device with pairing code." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per Kabel verbunden? Rechtsklick auf das Telefon → «WLAN statt Kabel verwenden». Ohne Kabel (ab Android 11): Entwickleroptionen → Kabelloses Debugging → Gerät über einen Kopplungscode koppeln."
+          }
+        }
+      }
+    },
+    "Connected via Wi-Fi – you can unplug the cable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per WLAN verbunden – das Kabel kann ab"
+          }
+        }
+      }
+    },
+    "Connected – the phone appears in the start window." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbunden – das Telefon erscheint im Startfenster."
+          }
+        }
+      }
+    },
+    "Connecting …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinde …"
+          }
+        }
+      }
+    },
+    "Connection to the phone failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zum Telefon fehlgeschlagen"
           }
         }
       }
@@ -54,12 +184,32 @@
         }
       }
     },
+    "Control it with mouse, trackpad and keyboard; ⌘V pastes the Mac clipboard." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Maus, Trackpad und Tastatur bedienen; ⌘V fügt die Zwischenablage des Macs ein."
+          }
+        }
+      }
+    },
     "Control the device with mouse and keyboard (⌥⌘C)" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gerät mit Maus und Tastatur bedienen (⌥⌘C)"
+          }
+        }
+      }
+    },
+    "Disconnected – connect the phone again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getrennt – Telefon wieder verbinden"
           }
         }
       }
@@ -74,12 +224,142 @@
         }
       }
     },
+    "In Settings → Developer options, turn on “USB debugging”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter Einstellungen → Entwickleroptionen «USB-Debugging» einschalten."
+          }
+        }
+      }
+    },
+    "IP address & port" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP-Adresse & Port"
+          }
+        }
+      }
+    },
+    "IP address & port (Wireless debugging)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP-Adresse & Port (Kabelloses Debugging)"
+          }
+        }
+      }
+    },
+    "iPhone & iPad" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone & iPad"
+          }
+        }
+      }
+    },
+    "Mirroring uses adb, the Android debugging tool, and the open source scrcpy server. Nothing is installed permanently on the phone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Spiegelung nutzt adb, das Debugging-Werkzeug von Android, und den quelloffenen scrcpy-Server. Auf dem Telefon wird nichts dauerhaft installiert."
+          }
+        }
+      }
+    },
+    "Not connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht verbunden"
+          }
+        }
+      }
+    },
     "Notifications" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mitteilungen"
+          }
+        }
+      }
+    },
+    "Offline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline"
+          }
+        }
+      }
+    },
+    "Once on the phone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einmalig auf dem Telefon"
+          }
+        }
+      }
+    },
+    "Open Settings → About phone (Samsung: → Software information)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen → Telefoninfo öffnen (Samsung: → Softwareinformationen)."
+          }
+        }
+      }
+    },
+    "Pair" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koppeln"
+          }
+        }
+      }
+    },
+    "Paired – the phone appears in the start window in a moment. If not, connect with the address shown under Wireless debugging." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gekoppelt – das Telefon erscheint gleich im Startfenster. Sonst mit der Adresse verbinden, die unter «Kabelloses Debugging» steht."
+          }
+        }
+      }
+    },
+    "Pairing code" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopplungscode"
+          }
+        }
+      }
+    },
+    "Ready via Wi-Fi" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per WLAN bereit"
           }
         }
       }
@@ -114,6 +394,16 @@
         }
       }
     },
+    "Sound needs Android 11 or later. Protected apps (banking, streaming) stay black." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton ab Android 11. Geschützte Apps (Banking, Streaming) bleiben schwarz."
+          }
+        }
+      }
+    },
     "Starting control on the device …" : {
       "localizations" : {
         "de" : {
@@ -134,6 +424,96 @@
         }
       }
     },
+    "Tap “Allow” at “Allow USB debugging?” (tick “Always allow from this computer”)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei «USB-Debugging zulassen?» auf «Zulassen» tippen («Von diesem Computer immer zulassen» ankreuzen)."
+          }
+        }
+      }
+    },
+    "Tap “Build number” seven times until developer mode is on." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Siebenmal auf «Build-Nummer» tippen, bis der Entwicklermodus an ist."
+          }
+        }
+      }
+    },
+    "The phone appears in the start window – click it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Telefon erscheint im Startfenster – anklicken."
+          }
+        }
+      }
+    },
+    "The phone could not start the video" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Telefon konnte das Video nicht starten"
+          }
+        }
+      }
+    },
+    "The phone did not respond" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Telefon antwortet nicht"
+          }
+        }
+      }
+    },
+    "The phone is not connected to a Wi-Fi network." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Telefon ist mit keinem WLAN verbunden."
+          }
+        }
+      }
+    },
+    "The scrcpy server is missing from the app (scripts/bootstrap-scrcpy.sh)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der scrcpy-Server fehlt in der App (scripts/bootstrap-scrcpy.sh)"
+          }
+        }
+      }
+    },
+    "Unlock the phone and tap “Allow” in the dialog “Allow USB debugging?”. If no dialog appears, unplug the cable and connect it again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telefon entsperren und im Dialog «USB-Debugging zulassen?» auf «Zulassen» tippen. Erscheint kein Dialog, das Kabel abziehen und wieder anschliessen."
+          }
+        }
+      }
+    },
+    "Use Wi-Fi Instead of Cable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WLAN statt Kabel verwenden"
+          }
+        }
+      }
+    },
     "Volume Down" : {
       "localizations" : {
         "de" : {
@@ -150,6 +530,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lauter"
+          }
+        }
+      }
+    },
+    "Wi-Fi" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WLAN"
           }
         }
       }
