@@ -34,7 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { Showcase.export(to: URL(fileURLWithPath: dir)) }
             exit(0)
         }
-        MainActor.assumeIsolated { Showcase.install() }
+        MainActor.assumeIsolated {
+            Showcase.install()
+            AndroidDebug.install()
+        }
         #endif
         Log.info("MirrorAct starting")
         MainActor.assumeIsolated { AppModel.shared.start() }
@@ -43,7 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
-        MainActor.assumeIsolated { AppModel.shared.receiver.stop() }
+        MainActor.assumeIsolated {
+            AppModel.shared.receiver.stop()
+            AppModel.shared.stopAndroid()
+        }
     }
 }
 
@@ -69,6 +75,9 @@ struct MirrorCommands: Commands {
             }
             .keyboardShortcut("r")
             Toggle("Record with Device Frame", isOn: $settings.recordWithFrame)
+            Divider()
+            Button("Control Device") { mirror?.toggleControl() }
+                .keyboardShortcut("c", modifiers: [.command, .option])
             Divider()
             Button("Larger") { mirror?.zoomIn() }
                 .keyboardShortcut("+")

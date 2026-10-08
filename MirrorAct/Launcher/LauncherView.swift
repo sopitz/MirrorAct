@@ -5,9 +5,11 @@ import SwiftUI
 struct LauncherView: View {
     @ObservedObject private var model = AppModel.shared
     @ObservedObject private var usb = AppModel.shared.usb
+    @ObservedObject private var android = AppModel.shared.android
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.openSettings) private var openSettings
     @State private var showGuide = false
+    @State private var guidePlatform = ConnectGuide.Platform.apple
     @State private var wirelessHint: DeviceCard.Model?
 
     /// feste Inhalte für Vorschaubilder (README), sonst echte Geräte
@@ -30,12 +32,20 @@ struct LauncherView: View {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
                     ForEach(preview?.cards ?? cards) { card in
                         DeviceCard(model: card) { open(card) }
+                            .contextMenu {
+                                if let device = card.androidDevice, device.state == .ready, !device.isWireless {
+                                    Button("Use Wi-Fi Instead of Cable") { model.switchAndroidToWiFi(device) }
+                                }
+                            }
                     }
                     WirelessCard(receiverName: settings.receiverName, pin: preview?.pin ?? settings.pin,
                                  usesPin: settings.peerToPeer, state: model.receiverState) {
                         model.restartReceiver()
                     }
-                    AddDeviceCard { showGuide = true }
+                    AddDeviceCard {
+                        guidePlatform = .apple
+                        showGuide = true
+                    }
                 }
                 .padding(.horizontal, 28)
                 .padding(.bottom, 28)
@@ -43,7 +53,7 @@ struct LauncherView: View {
         }
         .frame(width: 760, height: 520)
         .background(background)
-        .sheet(isPresented: $showGuide) { ConnectGuide() }
+        .sheet(isPresented: $showGuide) { ConnectGuide(platform: guidePlatform) }
         .alert(item: $wirelessHint) { card in
             Alert(title: Text("Mirror \(card.name) wirelessly"),
                   message: Text(String(localized: "On the device: Control Center → Screen Mirroring → “\(settings.receiverName)”.")
@@ -84,7 +94,7 @@ struct LauncherView: View {
     }
 
     private var statusLine: String {
-        let connected = usb.devices.count
+        let connected = usb.devices.count + android.devices.count
         let wireless = model.activeWirelessClient != nil
         switch (connected, wireless) {
         case (0, false): return String(localized: "Connect a device by cable or wirelessly")
@@ -114,8 +124,29 @@ struct LauncherView: View {
                                 status: mirroring ? String(localized: "Mirroring") : String(localized: "Ready via cable"),
                                 state: mirroring ? .mirroring : .ready, transport: .cable, cableDevice: device))
         }
+        let androidConnected = Set(android.devices.map(\.stableID))
+        for device in android.devices {
+            let mirroring = model.isMirroring(androidDevice: device)
+            let status: String
+            switch device.state {
+            case .ready:
+                status = mirroring ? String(localized: "Mirroring")
+                    : device.isWireless ? String(localized: "Ready via Wi-Fi") : String(localized: "Ready via cable")
+            case .unauthorized: status = String(localized: "Allow USB debugging")
+            case .offline: status = String(localized: "Offline")
+            }
+            result.append(.init(id: "android:\(device.serial)", name: device.name, modelIdentifier: "android",
+                                status: status, state: device.state != .ready ? .offline : mirroring ? .mirroring : .ready,
+                                transport: device.isWireless ? .wireless : .cable, cableDevice: nil,
+                                androidDevice: device))
+        }
         for known in settings.knownDevices {
             switch known.transport {
+            case .android:
+                guard !androidConnected.contains(known.key) else { continue }
+                result.append(.init(id: known.id, name: known.name, modelIdentifier: known.modelIdentifier,
+                                    status: String(localized: "Not connected"), state: .offline, transport: .android,
+                                    cableDevice: nil))
             case .cable:
                 guard !connected.contains(known.key) else { continue }
                 result.append(.init(id: known.id, name: known.name, modelIdentifier: known.modelIdentifier,
@@ -132,11 +163,14 @@ struct LauncherView: View {
     }
 
     private func open(_ card: DeviceCard.Model) {
-        if let device = card.cableDevice {
+        if let device = card.androidDevice {
+            model.openAndroidDevice(device)
+        } else if let device = card.cableDevice {
             model.openCableDevice(device)
         } else if card.transport == .wireless {
             wirelessHint = card
         } else {
+            guidePlatform = card.transport == .android ? .android : .apple
             showGuide = true
         }
     }
@@ -154,6 +188,15 @@ struct DeviceCard: View {
         let state: State
         let transport: AppSettings.KnownDevice.Transport
         let cableDevice: USBDeviceMonitor.Device?
+        var androidDevice: AndroidDeviceMonitor.Device?
+
+        var symbol: String {
+            switch transport {
+            case .cable: "cable.connector"
+            case .wireless: "wifi"
+            case .android: "smartphone"
+            }
+        }
     }
 
     let model: Model
@@ -182,7 +225,7 @@ struct DeviceCard: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     HStack(spacing: 4) {
-                        Image(systemName: model.transport == .cable ? "cable.connector" : "wifi")
+                        Image(systemName: model.symbol)
                             .font(.system(size: 9, weight: .bold))
                         Text(model.status)
                             .lineLimit(1)
@@ -233,7 +276,8 @@ struct DeviceThumbnail: View {
         if let cached = cache[key] { return cached }
         let profile = modelIdentifier.flatMap(DeviceProfile.forModelIdentifier)
             ?? DeviceProfile.forScreenPixels(CGSize(width: 1170, height: 2532))!
-        let size = profile.family == .iPad ? CGSize(width: 240, height: 330) : CGSize(width: 150, height: 325)
+        let size = profile.family == .iPad ? CGSize(width: 240, height: 330)
+            : CGSize(width: 150, height: profile.family == .android ? 333 : 325)
         guard let screen = wallpaper(size: size, seed: seed),
               let image = FrameRenderer.render(screen: screen, profile: profile, showFrame: true,
                                                style: FrameStyle(bezelColor: .graphite)) else { return nil }
@@ -347,6 +391,74 @@ struct AddDeviceCard: View {
     }
 }
 
+/// WLAN ohne Kabel (Android 11+): koppeln mit Code, dann verbinden
+struct AndroidPairingPanel: View {
+    @State private var pairAddress = ""
+    @State private var code = ""
+    @State private var connectAddress = ""
+    @State private var busy = false
+    @State private var message: String?
+    @State private var failed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Wi-Fi", systemImage: "wifi")
+                .font(.system(size: 14, weight: .semibold))
+            Text("Connected by cable? Right-click the phone → “Use Wi-Fi Instead of Cable”. Without a cable (Android 11 or later): Developer options → Wireless debugging → Pair device with pairing code.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                TextField("IP address & port", text: $pairAddress)
+                    .frame(width: 170)
+                TextField("Pairing code", text: $code)
+                    .frame(width: 110)
+                Button("Pair") { run { try AndroidWireless.pair(address: pairAddress, code: code) } success: {
+                    String(localized: "Paired – the phone appears in the start window in a moment. If not, connect with the address shown under Wireless debugging.")
+                } }
+                .disabled(busy || pairAddress.isEmpty || code.isEmpty)
+            }
+            HStack(spacing: 8) {
+                TextField("IP address & port (Wireless debugging)", text: $connectAddress)
+                    .frame(width: 288)
+                Button("Connect") { run { try AndroidWireless.connect(address: connectAddress) } success: {
+                    String(localized: "Connected – the phone appears in the start window.")
+                } }
+                .disabled(busy || connectAddress.isEmpty)
+            }
+            if busy {
+                ProgressView().controlSize(.small)
+            } else if let message {
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(failed ? Color.red : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .controlSize(.small)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(CardBackground(highlighted: false))
+    }
+
+    private func run(_ work: @escaping @Sendable () throws -> Void, success: @escaping () -> String) {
+        busy = true
+        message = nil
+        Task {
+            do {
+                try await Task.detached { try work() }.value
+                failed = false
+                message = success()
+            } catch {
+                failed = true
+                message = error.localizedDescription
+            }
+            busy = false
+        }
+    }
+}
+
 struct CardBackground: View {
     let highlighted: Bool
 
@@ -362,25 +474,30 @@ struct CardBackground: View {
 struct ConnectGuide: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var android = AppModel.shared.android
+    @State private var platform: Platform
+
+    enum Platform { case apple, android }
+
+    init(platform: Platform = .apple) {
+        _platform = State(initialValue: platform)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Connect a Device")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-            HStack(alignment: .top, spacing: 18) {
-                steps(title: String(localized: "Cable"), symbol: "cable.connector", items: [
-                    String(localized: "Connect the iPhone or iPad to the Mac."),
-                    String(localized: "Unlock the device and confirm “Trust This Computer”."),
-                    String(localized: "The device appears in the start window – click it."),
-                    String(localized: "The first time, allow camera access for MirrorAct."),
-                ], note: String(localized: "Lowest latency. Other apps such as QuickTime must not have the device open at the same time."))
-                steps(title: String(localized: "Wireless"), symbol: "wifi", items: [
-                    String(localized: "Open Control Center on the device."),
-                    String(localized: "Tap “Screen Mirroring”."),
-                    String(localized: "Choose “\(settings.receiverName)”."),
-                    settings.peerToPeer ? String(localized: "The first time, enter the code \(settings.pin).") : String(localized: "Done – no code needed."),
-                ], note: String(localized: "If “\(settings.receiverName)” does not appear: turn on AirPlay Receiver in macOS under General → AirDrop & Handoff. Keep Wi-Fi and Bluetooth on the device turned on."))
+            HStack {
+                Text("Connect a Device")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                Spacer()
+                Picker("", selection: $platform) {
+                    Text("iPhone & iPad").tag(Platform.apple)
+                    Text("Android").tag(Platform.android)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
+            if platform == .apple { appleSteps } else { androidSteps }
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
@@ -388,7 +505,49 @@ struct ConnectGuide: View {
             }
         }
         .padding(24)
-        .frame(width: 640)
+        .frame(width: platform == .apple ? 640 : 720)
+    }
+
+    private var androidSteps: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            androidCableSteps
+            AndroidPairingPanel()
+        }
+    }
+
+    private var androidCableSteps: some View {
+        HStack(alignment: .top, spacing: 18) {
+            steps(title: String(localized: "Once on the phone"), symbol: "hammer", items: [
+                String(localized: "Open Settings → About phone (Samsung: → Software information)."),
+                String(localized: "Tap “Build number” seven times until developer mode is on."),
+                String(localized: "In Settings → Developer options, turn on “USB debugging”."),
+            ], note: android.adbAvailable
+                ? String(localized: "Mirroring uses adb, the Android debugging tool, and the open source scrcpy server. Nothing is installed permanently on the phone.")
+                : String(localized: "adb is missing on this Mac. Install it in Terminal with: brew install android-platform-tools"))
+            steps(title: String(localized: "Cable"), symbol: "cable.connector", items: [
+                String(localized: "Connect the phone to the Mac and unlock it."),
+                String(localized: "Tap “Allow” at “Allow USB debugging?” (tick “Always allow from this computer”)."),
+                String(localized: "The phone appears in the start window – click it."),
+                String(localized: "Control it with mouse, trackpad and keyboard; ⌘V pastes the Mac clipboard."),
+            ], note: String(localized: "Sound needs Android 11 or later. Protected apps (banking, streaming) stay black."))
+        }
+    }
+
+    private var appleSteps: some View {
+        HStack(alignment: .top, spacing: 18) {
+            steps(title: String(localized: "Cable"), symbol: "cable.connector", items: [
+                String(localized: "Connect the iPhone or iPad to the Mac."),
+                String(localized: "Unlock the device and confirm “Trust This Computer”."),
+                String(localized: "The device appears in the start window – click it."),
+                String(localized: "The first time, allow camera access for MirrorAct."),
+            ], note: String(localized: "Lowest latency. Other apps such as QuickTime must not have the device open at the same time."))
+            steps(title: String(localized: "Wireless"), symbol: "wifi", items: [
+                String(localized: "Open Control Center on the device."),
+                String(localized: "Tap “Screen Mirroring”."),
+                String(localized: "Choose “\(settings.receiverName)”."),
+                settings.peerToPeer ? String(localized: "The first time, enter the code \(settings.pin).") : String(localized: "Done – no code needed."),
+            ], note: String(localized: "If “\(settings.receiverName)” does not appear: turn on AirPlay Receiver in macOS under General → AirDrop & Handoff. Keep Wi-Fi and Bluetooth on the device turned on."))
+        }
     }
 
     private func steps(title: String, symbol: String, items: [String], note: String) -> some View {

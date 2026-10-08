@@ -17,6 +17,9 @@ struct MirrorActions {
     var screenshotFile: () -> URL?
     var toggleRecording: () -> Void
     var disconnect: () -> Void
+    /// Bedienung ein/aus und Gerätetasten (nur bei bedienbaren Geräten)
+    var toggleControl: () -> Void = {}
+    var press: (DeviceButton) -> Void = { _ in }
 }
 
 /// Sichtbarkeit der Werkzeuge
@@ -42,6 +45,7 @@ struct MirrorToolRail: View {
             RailButton(symbol: "xmark", title: String(localized: "Close"), small: true, action: actions.close)
                 .padding(.bottom, 4)
                 .railItem(visible)
+            controlButtons
             recordButton
             RailButton(symbol: "camera.fill", title: String(localized: "Photo"),
                        help: String(localized: "Click: screenshot to the Desktop · ⌥-click: copy · Drag: straight into an app"),
@@ -90,6 +94,34 @@ struct MirrorToolRail: View {
         .background(WindowDragArea().allowsHitTesting(visible))
         .animation(.easeOut(duration: 0.18), value: visible)
         .environment(\.colorScheme, .dark)
+    }
+
+    /// Gerätetasten (Zurück, Home, Apps) oder der Schalter zum Einschalten der Bedienung
+    @ViewBuilder private var controlButtons: some View {
+        if let control = session.control, let state = session.controlState {
+            if state == .ready {
+                HStack(spacing: 0) {
+                    ForEach(control.buttons.prefix(3)) { button in
+                        NavButton(glyph: control.glyph(for: button), title: button.title) { actions.press(button) }
+                    }
+                }
+                .padding(.bottom, 4)
+                .railItem(visible)
+            } else if state == .starting {
+                VStack(spacing: 3) {
+                    ProgressView().controlSize(.small).frame(height: 20)
+                    Text("Starting …").font(.system(size: 9.5, weight: .medium))
+                }
+                .frame(width: 54, height: 48)
+                .help(String(localized: "Starting control on the device …"))
+                .railItem(visible)
+            } else {
+                RailButton(symbol: "hand.tap", title: String(localized: "Control"),
+                           help: String(localized: "Control the device with mouse and keyboard (⌥⌘C)"),
+                           action: actions.toggleControl)
+                    .railItem(visible)
+            }
+        }
     }
 
     /// bleibt sichtbar, solange aufgenommen wird
@@ -148,6 +180,31 @@ extension View {
     /// Werkzeug ein-/ausblenden; ausgeblendet nicht klickbar
     func railItem(_ visible: Bool) -> some View {
         opacity(visible ? 1 : 0).allowsHitTesting(visible)
+    }
+}
+
+/// kleine Gerätetaste (drei nebeneinander in der Werkzeugleiste)
+private struct NavButton: View {
+    let glyph: DeviceButton.Glyph
+    let title: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: glyph.symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .rotationEffect(.degrees(glyph.rotation))
+                .frame(width: 18, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(hovering ? 0.14 : 0))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(title)
     }
 }
 
@@ -305,12 +362,12 @@ struct StylePanel: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: session.profile.family == .iPad ? "ipad" : "iphone")
+            Image(systemName: session.profile.family == .iPad ? "ipad" : session.profile.family == .android ? "smartphone" : "iphone")
                 .font(.system(size: 24, weight: .light))
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.deviceName).font(.system(size: 13, weight: .semibold))
                 HStack(spacing: 4) {
-                    Image(systemName: session.kind == .cable ? "cable.connector" : "wifi")
+                    Image(systemName: session.kind == .wireless ? "wifi" : "cable.connector")
                         .font(.system(size: 9, weight: .semibold))
                     Text(session.subtitle)
                 }

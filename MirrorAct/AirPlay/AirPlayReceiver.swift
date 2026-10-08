@@ -38,7 +38,7 @@ final class AirPlayReceiver: @unchecked Sendable {
     var onSourceSize: ((CGSize) -> Void)?
 
     private(set) var isRunning = false
-    let audio = AirPlayAudioPlayer()
+    let audio = AACAudioPlayer(format: .airPlay)
 
     private let decodeQueue = DispatchQueue(label: "mirroract.airplay.decode", qos: .userInteractive)
     private let decoder = AnnexBDecoder()
