@@ -33,6 +33,8 @@ targets:
           - "**/*.md"
       - path: Resources/AppIcon.icns
         buildPhase: resources
+      - path: Shared/DeviceProfiles.json
+        buildPhase: resources
       - path: Vendor/scrcpy/scrcpy-server
         buildPhase: resources
     info:

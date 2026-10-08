@@ -50,7 +50,7 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Audio` | `AACAudioPlayer` (AAC-ELD von AirPlay, AAC-LC von Android, ohne Puffer) |
 | `MirrorAct/Video` | `AnnexBDecoder` (H.264/HEVC → VideoToolbox), `FrameSink` / `VideoDisplayView` (AVSampleBufferDisplayLayer) |
 | `MirrorAct/USB` | Geräte finden und Bild abgreifen (`AVCaptureDevice`, `.muxed`) |
-| `MirrorAct/Frame` | Geräteprofile, Rahmengeometrie, `FrameStyle`, `SceneRenderer` (Core Image; gemeinsam für Screenshots, Aufnahmen und Editor) |
+| `MirrorAct/Frame` | Geräteprofile (`DeviceProfile` liest `Shared/DeviceProfiles.json`), Rahmengeometrie, `FrameStyle`, `SceneRenderer` (Core Image; gemeinsam für Screenshots, Aufnahmen und Editor) |
 | `MirrorAct/Mirror` | Spiegelfenster, Werkzeugleiste, Stil-Panel, Präsentieren, `DeviceControl` (Schnittstelle zum Bedienen eines Geräts) |
 | `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, Host-Zeit, variable Bildrate) |
@@ -58,6 +58,7 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
 | `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche Übersetzung), Info.plist und Siri-Phrasen |
+| `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Ecken, Punkte, ppi) für alle MirrorAct-Apps; als Ressource gebündelt (Kommandozeilen-Builds und Tests können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen), die Windows-App liest dieselbe Datei |
 | `Agent` | MirrorActs Zusatzbefehle für WebDriverAgent (schnelle Berührungen), von `scripts/build-agent.sh` mitkompiliert |
 | `scripts` | Skripte für Build, Agent, Release und Symbol |
 
