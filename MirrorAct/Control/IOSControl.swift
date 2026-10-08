@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
+import Combine
 import Foundation
 
 /// Bedienung eines iPhones/iPads über den Test-Agent (WebDriverAgent): startet ihn per `xcodebuild`
@@ -23,8 +24,12 @@ final class IOSControl: @preconcurrency DeviceControl {
 
     private weak var session: MirrorSession?
     private let worker = ControlWorker()
-    private var runner: Process?
-    private var terminationObserver: NSObjectProtocol?
+    private var liveObserver: AnyCancellable?
+    private var endedObserver: NSObjectProtocol?
+    /// Gerät, dessen Agent diese Bedienung gestartet hat oder nutzt
+    private var agentUDID: String?
+    /// Agent übernommen (AgentRunners.acquire): beim Ausschalten nur freigeben, er läuft noch eine Weile
+    private var holdsAgent = false
 
     /// laufende Berührung
     private var touchPath: [TouchPoint] = []
@@ -39,19 +44,31 @@ final class IOSControl: @preconcurrency DeviceControl {
         worker.onLost = { [weak self] message in
             DispatchQueue.main.async { self?.lost(message) }
         }
-        terminationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.runner?.interrupt() }
+        endedObserver = NotificationCenter.default.addObserver(
+            forName: AgentRunners.endedNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let udid = note.object as? String
+            MainActor.assumeIsolated {
+                guard let self, udid != nil, udid == self.agentUDID else { return }
+                self.holdsAgent = false
+                self.lost(String(localized: "the agent on the device stopped"))
+            }
+        }
+        // beim Verbinden (erstes Bild) gleich starten, wenn so eingestellt
+        liveObserver = session.$state.removeDuplicates().sink { [weak self] state in
+            guard state == .live else { return }
+            DispatchQueue.main.async { self?.startAutomatically() }
         }
     }
 
     deinit {
-        if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
-        runner?.interrupt()
+        if let endedObserver { NotificationCenter.default.removeObserver(endedObserver) }
     }
 
     private var isActive: Bool { state == .ready || state == .starting }
+
+    /// Agent mit scripts/build-agent.sh gebaut?
+    static var isAgentBuilt: Bool { ControlWorker.agentTestRun() != nil }
 
     /// Bild im Querformat (Koordinaten des Agents folgen der Ausrichtung der App)
     private var landscape: Bool {
@@ -65,24 +82,44 @@ final class IOSControl: @preconcurrency DeviceControl {
     // MARK: Start / Stopp
 
     func start() {
+        begin(automatic: false)
+    }
+
+    /// Start beim Verbinden; klappt es nicht (Agent fehlt, Gerät gesperrt …), bleibt der Knopf «Bedienen»
+    private func startAutomatically() {
+        guard AppSettings.shared.autoStartControl, ControlWorker.agentTestRun() != nil else { return }
+        switch state {
+        case .off, .failed: begin(automatic: true)
+        case .starting, .ready: break
+        }
+    }
+
+    private func begin(automatic: Bool) {
         guard !isActive else { return }
         let name = session?.deviceName ?? ""
         state = .starting
         worker.start(deviceName: name, launch: { [weak self] udid, testRun, onOutput in
             // läuft auf dem Main-Thread
-            MainActor.assumeIsolated { self?.launchRunner(udid: udid, testRun: testRun, onOutput: onOutput) }
+            MainActor.assumeIsolated {
+                guard let self else { return nil }
+                self.agentUDID = udid
+                return AgentRunners.shared.launch(udid: udid, testRun: testRun, onOutput: onOutput)
+            }
         }, completion: { [weak self] result in
             DispatchQueue.main.async {
                 guard let self, self.state == .starting else { return }
                 switch result {
-                case .success:
+                case let .success(udid):
+                    self.agentUDID = udid
+                    self.holdsAgent = AgentRunners.shared.acquire(udid: udid)
                     self.state = .ready
                     Log.info("Control ready: \(name)")
                 case let .failure(error):
                     if error is CancellationError { return }
-                    Log.error("Control: \(error.localizedDescription)")
-                    self.stopRunner()
-                    self.state = .failed(error.localizedDescription)
+                    Log.error("Control\(automatic ? " (automatic start)" : ""): \(error.localizedDescription)")
+                    self.releaseAgent()
+                    // automatisch: still auf den Knopf «Bedienen» zurückfallen; der sagt beim Klick, was fehlt
+                    self.state = automatic ? .off : .failed(error.localizedDescription)
                 }
             }
         })
@@ -90,7 +127,7 @@ final class IOSControl: @preconcurrency DeviceControl {
 
     func stop() {
         worker.stop()
-        stopRunner()
+        releaseAgent()
         touchPath = []
         scrollPath = []
         state = .off
@@ -100,50 +137,20 @@ final class IOSControl: @preconcurrency DeviceControl {
         guard state == .ready else { return }
         Log.error("Control lost: \(message)")
         worker.stop()
-        stopRunner()
+        releaseAgent()
         state = .failed(String(localized: "Control was interrupted: \(message)"))
     }
 
-    private func launchRunner(udid: String, testRun: URL, onOutput: @escaping @Sendable (String) -> Void) -> Process? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["xcodebuild", "test-without-building", "-xctestrun", testRun.path,
-                             "-destination", "id=\(udid)", "-destination-timeout", "30"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.isEmpty {
-                handle.readabilityHandler = nil
-            } else {
-                onOutput(String(decoding: data, as: UTF8.self))
-            }
+    /// übernommener Agent läuft noch eine Weile (nächster Start sofort), ein halb gestarteter wird beendet
+    private func releaseAgent() {
+        guard let udid = agentUDID else { return }
+        if holdsAgent {
+            AgentRunners.shared.release(udid: udid)
+        } else {
+            AgentRunners.shared.terminate(udid: udid)
         }
-        let worker = self.worker
-        process.terminationHandler = { [weak self] finished in
-            Log.info("Control agent ended (\(finished.terminationStatus))")
-            worker.runnerEnded()
-            DispatchQueue.main.async {
-                guard let self, self.runner === finished else { return }
-                self.runner = nil
-                if self.state == .ready { self.lost(String(localized: "the agent on the device stopped")) }
-            }
-        }
-        do {
-            try process.run()
-        } catch {
-            Log.error("xcodebuild: \(error.localizedDescription)")
-            return nil
-        }
-        runner = process
-        return process
-    }
-
-    private func stopRunner() {
-        guard let runner else { return }
-        self.runner = nil
-        if runner.isRunning { runner.interrupt() }
+        agentUDID = nil
+        holdsAgent = false
     }
 
     // MARK: Eingaben
@@ -323,7 +330,6 @@ private final class ControlWorker: @unchecked Sendable {
     private var draining = false
     /// erhöht bei jedem Start/Stopp; alte Befehle und Starts verfallen
     private var generation = 0
-    private var runnerRunning = false
 
     // nur auf `queue`
     private var connection: AgentConnection?
@@ -333,13 +339,14 @@ private final class ControlWorker: @unchecked Sendable {
 
     // MARK: Start
 
+    /// completion: UDID des Geräts, dessen Agent die Bedienung nutzt
     func start(deviceName: String, launch: @escaping Launcher,
-               completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
+               completion: @escaping @Sendable (Result<String, Error>) -> Void) {
         let current = bumpGeneration()
         queue.async { [self] in
             do {
-                try connect(deviceName: deviceName, generation: current, launch: launch)
-                completion(.success(()))
+                let udid = try connect(deviceName: deviceName, generation: current, launch: launch)
+                completion(.success(udid))
             } catch {
                 connection?.disconnect()
                 connection = nil
@@ -357,10 +364,6 @@ private final class ControlWorker: @unchecked Sendable {
         }
     }
 
-    func runnerEnded() {
-        lock.withLock { runnerRunning = false }
-    }
-
     private func bumpGeneration() -> Int {
         lock.withLock {
             generation += 1
@@ -373,7 +376,7 @@ private final class ControlWorker: @unchecked Sendable {
         lock.withLock { generation == value }
     }
 
-    private func connect(deviceName: String, generation current: Int, launch: Launcher) throws {
+    private func connect(deviceName: String, generation current: Int, launch: Launcher) throws -> String {
         guard let testRun = Self.agentTestRun() else {
             throw StartError(message: String(localized: "The control agent is not built yet. In the MirrorAct folder, run: scripts/build-agent.sh"))
         }
@@ -387,55 +390,101 @@ private final class ControlWorker: @unchecked Sendable {
         }
         guard isCurrent(current) else { throw CancellationError() }
 
-        // läuft der Agent schon (z. B. nach einem Absturz von MirrorAct)? Dann direkt verbinden.
-        if let mux = USBMux.device(udid: udid) {
-            let candidate = AgentConnection(route: .usbmux(mux))
-            if candidate.isAlive() {
-                Log.info("Control: agent already running")
-                try openSession(candidate)
-                return
-            }
+        // läuft der Agent noch (nach dem Schliessen eines Fensters oder einem Absturz)? Dann sofort verbinden.
+        let knownHost = DispatchQueue.main.sync { MainActor.assumeIsolated { AgentRunners.shared.host(udid: udid) } }
+        if let running = routes(udid: udid, host: knownHost).lazy.map({ AgentConnection(route: $0) })
+            .first(where: { $0.isAlive() }) {
+            Log.info("Control: agent already running (\(running.route))")
+            try openSession(running)
+            return udid
         }
 
+        // gesperrt startet xcodebuild den Agent nicht (und beendet sich danach nicht von selbst)
+        guard !DeviceInfoLookup.isLocked(udid: udid) else {
+            throw StartError(message: String(localized: "Unlock the device and try again."))
+        }
+        guard isCurrent(current) else { throw CancellationError() }
+
+        let started = Date()
+        var serverURL: URL?
+        do {
+            // dieser Build liegt schon auf dem Gerät: ohne erneute Installation starten (spart einige Sekunden)
+            let build = Self.agentBuildID()
+            if let build, Self.installedBuild(udid: udid) == build,
+               let installed = Self.installedTestRun(from: testRun, build: build) {
+                do {
+                    serverURL = try launchAgent(udid: udid, testRun: installed, deviceName: deviceName,
+                                                generation: current, launch: launch)
+                } catch let error as StartError {
+                    Log.info("Control: installed agent did not start, installing it again (\(error.message))")
+                    Self.setInstalledBuild(nil, udid: udid)
+                }
+            }
+            if serverURL == nil {
+                serverURL = try launchAgent(udid: udid, testRun: testRun, deviceName: deviceName,
+                                            generation: current, launch: launch)
+                Self.setInstalledBuild(build, udid: udid)
+            }
+        } catch is DeviceLocked {
+            // erst nach der Prüfung oben gesperrt worden
+            throw StartError(message: String(localized: "Unlock the device and try again."))
+        }
+        let host = serverURL?.host
+        Log.info("Control: agent at \(serverURL?.absoluteString ?? "?") after \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
+        DispatchQueue.main.async { MainActor.assumeIsolated { AgentRunners.shared.setHost(host, udid: udid) } }
+
+        for attempt in 0..<20 {
+            guard isCurrent(current) else { throw CancellationError() }
+            if let connection = routes(udid: udid, host: host).lazy.map({ AgentConnection(route: $0) })
+                .first(where: { $0.isAlive() }) {
+                try openSession(connection)
+                return udid
+            }
+            if attempt < 19 { Thread.sleep(forTimeInterval: 0.25) }
+        }
+        throw StartError(message: String(localized: "The agent started, but the Mac can’t reach it."))
+    }
+
+    /// usbmuxd (Kabel, sonst WLAN-Kopplung), sonst direkt an die Adresse, die der Agent meldet
+    private func routes(udid: String, host: String?) -> [AgentConnection.Route] {
+        var routes: [AgentConnection.Route] = []
+        if let mux = USBMux.device(udid: udid) { routes.append(.usbmux(mux)) }
+        if let host { routes.append(.network(host: host)) }
+        return routes
+    }
+
+    struct DeviceLocked: Error {}
+
+    /// startet den Agent per xcodebuild und wartet auf seine Adresse
+    private func launchAgent(udid: String, testRun: URL, deviceName: String, generation current: Int,
+                             launch: Launcher) throws -> URL {
         let output = RunnerOutput()
         let started = Date()
-        lock.withLock { runnerRunning = true }
         // auf dem Main-Thread, wo auch stop() läuft: nach einem Stopp nichts mehr starten
         let launched: Process?? = DispatchQueue.main.sync {
             isCurrent(current) ? .some(launch(udid, testRun, { output.append($0) })) : .none
         }
         guard let launched else { throw CancellationError() }
-        guard launched != nil else {
+        guard let process = launched else {
             throw StartError(message: String(localized: "Xcode (xcodebuild) could not be started."))
         }
         Log.info("Control: starting agent on \(deviceName) (\(udid))")
 
-        var serverURL: URL?
-        while serverURL == nil {
+        while true {
             guard isCurrent(current) else { throw CancellationError() }
-            serverURL = output.serverURL
-            if serverURL != nil { break }
-            let running = lock.withLock { runnerRunning }
-            if !running || Date().timeIntervalSince(started) > 120 {
+            if let url = output.serverURL { return url }
+            if output.deviceLocked {
+                Log.info("Control: device is locked")
+                if process.isRunning { process.interrupt() }
+                throw DeviceLocked()
+            }
+            if !process.isRunning || Date().timeIntervalSince(started) > 120 {
+                if process.isRunning { process.interrupt() }
+                Thread.sleep(forTimeInterval: 0.3)   // letzte Ausgabe abwarten
                 throw StartError(message: output.failureReason())
             }
             Thread.sleep(forTimeInterval: 0.2)
         }
-        Log.info("Control: agent at \(serverURL!.absoluteString) after \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
-
-        // usbmuxd (Kabel, sonst WLAN-Kopplung), sonst direkt an die Adresse, die der Agent meldet
-        var routes: [AgentConnection.Route] = []
-        if let mux = USBMux.device(udid: udid) { routes.append(.usbmux(mux)) }
-        if let host = serverURL?.host { routes.append(.network(host: host)) }
-        for attempt in 0..<20 {
-            guard isCurrent(current) else { throw CancellationError() }
-            if let connection = routes.lazy.map({ AgentConnection(route: $0) }).first(where: { $0.isAlive() }) {
-                try openSession(connection)
-                return
-            }
-            if attempt < 19 { Thread.sleep(forTimeInterval: 0.25) }
-        }
-        throw StartError(message: String(localized: "The agent started, but the Mac can’t reach it."))
     }
 
     private func openSession(_ connection: AgentConnection) throws {
@@ -464,11 +513,58 @@ private final class ControlWorker: @unchecked Sendable {
         sessionID = id
     }
 
+    private static var agentDirectory: URL {
+        AppSettings.shared.supportDirectory.appendingPathComponent("Agent", isDirectory: true)
+    }
+
     /// gebauter Agent in ~/Library/Application Support/MirrorAct/Agent
     static func agentTestRun() -> URL? {
-        let dir = AppSettings.shared.supportDirectory.appendingPathComponent("Agent", isDirectory: true)
-        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        let files = (try? FileManager.default.contentsOfDirectory(at: agentDirectory, includingPropertiesForKeys: nil)) ?? []
         return files.first { $0.pathExtension == "xctestrun" }
+    }
+
+    /// Kennung des gebauten Agents (scripts/build-agent.sh schreibt bei jedem Bau eine neue)
+    static func agentBuildID() -> String? {
+        let url = agentDirectory.appendingPathComponent("build-id")
+        let id = (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return id?.isEmpty == false ? id : nil
+    }
+
+    /// welcher Build zuletzt auf dieses Gerät installiert wurde
+    static func installedBuild(udid: String) -> String? {
+        UserDefaults.standard.string(forKey: "agentBuild.\(udid)")
+    }
+
+    static func setInstalledBuild(_ build: String?, udid: String) {
+        UserDefaults.standard.set(build, forKey: "agentBuild.\(udid)")
+    }
+
+    /// Variante der xctestrun-Datei, die den auf dem Gerät installierten Agent startet
+    /// (UseDestinationArtifacts, siehe `man xcodebuild.xctestrun`)
+    static func installedTestRun(from testRun: URL, build: String) -> URL? {
+        let dir = AppSettings.shared.supportDirectory.appendingPathComponent("AgentLaunch", isDirectory: true)
+        let url = dir.appendingPathComponent("installed-\(build).xctestrun")
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        guard let data = try? Data(contentsOf: testRun),
+              var plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        for (key, value) in plist where key != "__xctestrun_metadata__" {
+            guard var target = value as? [String: Any],
+                  let host = target["TestHostBundleIdentifier"] as? String,
+                  let bundle = (target["TestBundlePath"] as? String)?.components(separatedBy: "/").last
+            else { continue }
+            for path in ["TestHostPath", "TestBundlePath", "DependentProductPaths"] { target[path] = nil }
+            target["UseDestinationArtifacts"] = true
+            target["TestBundleDestinationRelativePath"] = "__TESTHOST__/PlugIns/\(bundle)"
+            target["UITargetAppBundleIdentifier"] = host
+            plist[key] = target
+        }
+        // ältere Varianten gehören zu früheren Builds
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard let out = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0),
+              (try? out.write(to: url)) != nil else { return nil }
+        return url
     }
 
     // MARK: Befehle
@@ -577,6 +673,12 @@ private final class RunnerOutput: @unchecked Sendable {
             handle.write(Data(chunk.utf8))
             try? handle.close()
         }
+    }
+
+    /// xcodebuild: «Unlock … to Continue» – danach beendet es sich nicht von selbst
+    var deviceLocked: Bool {
+        let all = lock.withLock { text }
+        return all.contains("because the device is locked") || all.contains("com.apple.dt.deviceprep Code=-3")
     }
 
     var serverURL: URL? {

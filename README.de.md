@@ -104,8 +104,13 @@ Er wird mit dem eigenen Team signiert und liegt dann in
 anschliessen und seine Kennung aus Xcode → Devices and Simulators mitgeben:
 `scripts/build-agent.sh --device <UDID>`.
 
-Im Spiegelfenster in der Werkzeugleiste auf **Bedienen** klicken (oder Gerät → Gerät bedienen,
-⌥⌘C). Der Agent startet auf dem Gerät in einigen Sekunden. Danach:
+Die Bedienung startet von selbst, sobald das Gerät verbunden ist; der Agent braucht auf dem Gerät
+einige Sekunden. Klappt das nicht, etwa weil das Gerät gesperrt ist, bleibt in der Werkzeugleiste
+der Knopf **Bedienen**; ein Klick darauf (oder Gerät → Gerät bedienen, ⌥⌘C) prüft erneut und sagt,
+was fehlt. Wer die Bedienung nur bei Bedarf will, schaltet unter MirrorAct → Einstellungen →
+Allgemein «Bedienung beim Verbinden starten» aus. Nach dem Ausschalten oder Schliessen des Fensters
+läuft der Agent noch fünf Minuten auf dem Gerät weiter, damit die Bedienung sofort wieder da ist;
+beim Beenden von MirrorAct wird er gestoppt. Danach:
 
 - Klick: Tippen, Halten: langes Drücken, Ziehen: Wischen
 - Trackpad oder Mausrad: Scrollen (den Schwung ergänzt iOS selbst)

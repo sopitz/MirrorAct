@@ -63,4 +63,6 @@ fi
 rm -rf $DEST
 mkdir -p $DEST
 cp -R $DERIVED/Build/Products/ $DEST/
+# neue Kennung je Bau: MirrorAct installiert den Agent nur neu, wenn sie sich geändert hat
+uuidgen > $DEST/build-id
 echo "Agent gebaut ($BUNDLE_ID): $DEST"

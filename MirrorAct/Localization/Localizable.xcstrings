@@ -24,12 +24,42 @@
         }
       }
     },
+    "iPhone and iPad control" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bedienung von iPhone und iPad"
+          }
+        }
+      }
+    },
     "no details" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "keine Details"
+          }
+        }
+      }
+    },
+    "Otherwise click “Control” in the mirror window. Needs Xcode and Developer Mode on the device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonst im Spiegelfenster auf «Bedienen» klicken. Braucht Xcode und den Entwicklermodus auf dem Gerät."
+          }
+        }
+      }
+    },
+    "Start control when a device connects" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bedienung beim Verbinden starten"
           }
         }
       }
@@ -50,6 +80,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Agent hat keine Sitzung geöffnet."
+          }
+        }
+      }
+    },
+    "The agent is not built yet: run scripts/build-agent.sh in the MirrorAct folder. Also needs Xcode and Developer Mode on the device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Agent ist noch nicht gebaut: im MirrorAct-Ordner scripts/build-agent.sh ausführen. Braucht ausserdem Xcode und den Entwicklermodus auf dem Gerät."
           }
         }
       }

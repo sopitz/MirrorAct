@@ -99,8 +99,13 @@ It is signed with your team and placed in `~/Library/Application Support/MirrorA
 device is not yet registered with your team, connect it and pass its identifier from Xcode →
 Devices and Simulators: `scripts/build-agent.sh --device <UDID>`.
 
-In the mirror window, click **Control** in the tool rail (or Device → Control Device, ⌥⌘C).
-Starting the agent on the device takes a few seconds. Then:
+Control starts by itself as soon as the device connects; starting the agent on the device takes a
+few seconds. If it cannot start, for example because the device is locked, the **Control** button
+stays in the tool rail; clicking it (or Device → Control Device, ⌥⌘C) checks again and says what is
+missing. To start control only when you want, turn off "Start control when a device connects" under
+MirrorAct → Settings → General. After you turn control off or close the window, the agent keeps
+running on the device for five minutes, so control is back at once; quitting MirrorAct stops it.
+Then:
 
 - click: tap, hold: long press, drag: swipe
 - trackpad or mouse wheel: scroll (iOS adds the momentum itself)
@@ -121,7 +126,7 @@ not follow the mouse live. A device with a passcode cannot be unlocked this way.
 | `MirrorAct/USB` | device discovery and capture (`AVCaptureDevice`, `.muxed`) |
 | `MirrorAct/Frame` | device profiles, frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
-| `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
+| `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |

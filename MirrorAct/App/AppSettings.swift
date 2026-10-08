@@ -20,6 +20,8 @@ final class AppSettings: ObservableObject {
     @Published var recordWithFrame: Bool { didSet { defaults.set(recordWithFrame, forKey: "recordWithFrame") } }
     /// Werkzeugleiste dauerhaft statt nur beim Überfahren
     @Published var alwaysShowTools: Bool { didSet { defaults.set(alwaysShowTools, forKey: "alwaysShowTools") } }
+    /// Bedienung von iPhone/iPad beim Verbinden gleich starten (sonst erst auf «Bedienen»)
+    @Published var autoStartControl: Bool { didSet { defaults.set(autoStartControl, forKey: "autoStartControl") } }
     /// Rahmenfarbe, Hintergrund usw. für Screenshots, Aufnahmen und Präsentation
     @Published var style: FrameStyle {
         didSet {
@@ -43,6 +45,7 @@ final class AppSettings: ObservableObject {
             "playAudio": true,
             "recordWithFrame": false,
             "alwaysShowTools": false,
+            "autoStartControl": true,
         ])
         receiverName = defaults.string(forKey: "receiverName") ?? "MirrorAct"
         streamHeight = defaults.integer(forKey: "streamHeight")
@@ -54,6 +57,7 @@ final class AppSettings: ObservableObject {
         playAudio = defaults.bool(forKey: "playAudio")
         recordWithFrame = defaults.bool(forKey: "recordWithFrame")
         alwaysShowTools = defaults.bool(forKey: "alwaysShowTools")
+        autoStartControl = defaults.bool(forKey: "autoStartControl")
         if let data = defaults.data(forKey: "style"), let stored = try? JSONDecoder().decode(FrameStyle.self, from: data) {
             style = stored
         } else {

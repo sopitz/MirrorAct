@@ -280,23 +280,13 @@ enum DeviceInfoLookup {
         devices().first { $0.name == name }?.productType
     }
 
-    static func devices() -> [Device] {
-        let output = FileManager.default.temporaryDirectory.appendingPathComponent("mirroract-devices-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: output) }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["devicectl", "list", "devices", "--quiet", "--json-output", output.path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return [] }
-        let deadline = Date().addingTimeInterval(15)
-        while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
-        if process.isRunning { process.terminate(); return [] }
+    /// Gerät gesperrt? (`devicectl device info lockState`, dauert einige Sekunden; unbekannt = nein)
+    static func isLocked(udid: String) -> Bool {
+        run(["device", "info", "lockState", "--device", udid])?["passcodeRequired"] as? Bool == true
+    }
 
-        guard let data = try? Data(contentsOf: output),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let result = json["result"] as? [String: Any],
-              let devices = result["devices"] as? [[String: Any]] else { return [] }
+    static func devices() -> [Device] {
+        guard let devices = run(["list", "devices"])?["devices"] as? [[String: Any]] else { return [] }
         return devices.compactMap { device in
             let properties = device["deviceProperties"] as? [String: Any]
             let hardware = device["hardwareProperties"] as? [String: Any]
@@ -305,5 +295,24 @@ enum DeviceInfoLookup {
                           udid: hardware?["udid"] as? String,
                           developerModeEnabled: properties?["developerModeStatus"] as? String == "enabled")
         }
+    }
+
+    /// `xcrun devicectl <arguments>` → "result" der JSON-Ausgabe
+    private static func run(_ arguments: [String]) -> [String: Any]? {
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("mirroract-devices-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        process.arguments = ["devicectl"] + arguments + ["--quiet", "--json-output", output.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let deadline = Date().addingTimeInterval(15)
+        while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
+        if process.isRunning { process.terminate(); return nil }
+
+        guard let data = try? Data(contentsOf: output),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["result"] as? [String: Any]
     }
 }
