@@ -50,7 +50,7 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Audio` | `AACAudioPlayer` (AAC-ELD from AirPlay, AAC-LC from Android, without buffering) |
 | `MirrorAct/Video` | `AnnexBDecoder` (H.264/HEVC → VideoToolbox), `FrameSink` / `VideoDisplayView` (AVSampleBufferDisplayLayer) |
 | `MirrorAct/USB` | device discovery and capture (`AVCaptureDevice`, `.muxed`) |
-| `MirrorAct/Frame` | device profiles, frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
+| `MirrorAct/Frame` | device profiles (`DeviceProfile` reads `Shared/DeviceProfiles.json`), frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
 | `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
@@ -58,6 +58,7 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Intents` | App Intents for Shortcuts |
 | `MirrorAct/Launcher` | start window, settings |
 | `MirrorAct/Localization` | String Catalogs (English source, German translation), Info.plist and Siri phrases |
+| `Shared` | `DeviceProfiles.json` – the device shapes (notch, Dynamic Island, corners, points, ppi) for all MirrorAct apps; bundled as a resource (command-line builds and tests can point `MIRRORACT_DEVICE_PROFILES` at it), the Windows app reads the same file |
 | `Agent` | MirrorAct's additional commands for WebDriverAgent (fast touches), compiled in by `scripts/build-agent.sh` |
 | `scripts` | build, agent, release and icon scripts |
 
