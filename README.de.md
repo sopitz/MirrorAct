@@ -7,7 +7,7 @@ Open Source, alles bleibt auf deinem Mac.
 
 *English: [README.md](README.md)*
 
-<p align="center"><img src="docs/duo.png" width="720" alt="Zwei Geräte im Rahmen auf einem Verlauf"></p>
+<p align="center"><img src="docs/mirror.jpg" width="800" alt="MirrorAct spiegelt ein iPhone, mit Werkzeugleiste und Stil-Panel"></p>
 
 ## Warum
 
@@ -15,6 +15,18 @@ Apples *iPhone Mirroring* gibt es in der EU nicht; Apple begründet das mit dem 
 Act. Daher der Name. MirrorAct zeigt den Bildschirm von iPhone oder iPad im Gerätrahmen auf dem
 Mac – für Demos, Präsentationen, Screenshots und Bildschirmaufnahmen. Bedienen lässt sich das
 Gerät damit nicht.
+
+## Screenshots
+
+| Startfenster | Editor |
+|---|---|
+| <img src="docs/start-window.jpg" alt="Startfenster mit Gerätekarten, Code für kabellos und Anleitung"> | <img src="docs/editor.jpg" alt="Editor rahmt einen Screenshot auf einem Verlauf in 16:9"> |
+
+**Ergebnis:** ein gerahmter Screenshot auf einem Verlauf, direkt aus dem Spiegelfenster
+
+<img src="docs/framed.jpg" width="800" alt="Gerahmter iPhone-Screenshot auf blauem Verlauf">
+
+Die Bilder zeigen die englische Oberfläche.
 
 ## Funktionen
 

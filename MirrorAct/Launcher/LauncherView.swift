@@ -10,6 +10,14 @@ struct LauncherView: View {
     @State private var showGuide = false
     @State private var wirelessHint: DeviceCard.Model?
 
+    /// feste Inhalte für Vorschaubilder (README), sonst echte Geräte
+    struct Preview {
+        var cards: [DeviceCard.Model]
+        var status: String
+        var pin: String
+    }
+    var preview: Preview?
+
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 170), spacing: 16, alignment: .top)]
 
     var body: some View {
@@ -20,10 +28,10 @@ struct LauncherView: View {
                 .padding(.bottom, 18)
             ScrollView {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                    ForEach(cards) { card in
+                    ForEach(preview?.cards ?? cards) { card in
                         DeviceCard(model: card) { open(card) }
                     }
-                    WirelessCard(receiverName: settings.receiverName, pin: settings.pin,
+                    WirelessCard(receiverName: settings.receiverName, pin: preview?.pin ?? settings.pin,
                                  usesPin: settings.peerToPeer, state: model.receiverState) {
                         model.restartReceiver()
                     }
@@ -54,7 +62,7 @@ struct LauncherView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("MirrorAct")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                Text(statusLine)
+                Text(preview?.status ?? statusLine)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -236,7 +244,9 @@ struct DeviceThumbnail: View {
     /// ruhiger Verlauf als Platzhalter-Bildschirm, Farbe aus dem Gerätenamen
     private static func wallpaper(size: CGSize, seed: String) -> CGImage? {
         // stabil über Neustarts (hashValue ist pro Prozess zufällig)
-        let hue = Double(seed.unicodeScalars.reduce(7) { ($0 &* 31 &+ Int($1.value)) % 360 }) / 360
+        var hash: UInt32 = 2166136261
+        for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16777619 }
+        let hue = Double(hash % 360) / 360
         let a = NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1)
         let b = NSColor(hue: (hue + 0.12).truncatingRemainder(dividingBy: 1), saturation: 0.75, brightness: 0.45, alpha: 1)
         guard let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,

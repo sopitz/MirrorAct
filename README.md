@@ -7,7 +7,7 @@ Open source, everything stays on your Mac.
 
 *Deutsch: [README.de.md](README.de.md)*
 
-<p align="center"><img src="docs/duo.png" width="720" alt="Two devices in frames on a gradient background"></p>
+<p align="center"><img src="docs/mirror.jpg" width="800" alt="MirrorAct mirroring an iPhone, with the tool rail and the style panel"></p>
 
 ## Why
 
@@ -15,6 +15,16 @@ Apple's *iPhone Mirroring* is not available in the EU; Apple cites the Digital M
 MirrorAct is named after that gap. It shows the screen of your iPhone or iPad on your Mac in a
 device frame – for demos, presentations, screenshots and screen recordings. It does not control
 the device.
+
+## Screenshots
+
+| Start window | Editor |
+|---|---|
+| <img src="docs/start-window.jpg" alt="Start window with device cards, wireless code and connect guide"> | <img src="docs/editor.jpg" alt="Editor framing a screenshot on a gradient in 16:9"> |
+
+**Result:** a framed screenshot on a gradient, exported from the mirror window
+
+<img src="docs/framed.jpg" width="800" alt="Framed iPhone screenshot on a blue gradient">
 
 ## Features
 
@@ -89,6 +99,10 @@ Without a device you can check the rendering:
 
 This writes frames, styles, duo poses and UI parts as PNG files, records two short test videos
 (with rotation and with AAC-ELD audio as sent over AirPlay) and frames one of them like the editor.
+
+The screenshots above are drawn by the app itself from its real views (debug builds,
+`MirrorAct --showcase <folder>`, or while mirroring via the distributed notification
+`io.github.sopitz.MirrorAct.showcase`); the device screen is the live mirrored frame.
 
 ## Privacy
 

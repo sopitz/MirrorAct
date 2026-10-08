@@ -278,10 +278,12 @@ struct StylePanel: View {
                 HStack {
                     Toggle("Shadow", isOn: $settings.style.shadow)
                     Spacer()
+                    Text("Aspect ratio")
                     Picker("Aspect ratio", selection: $settings.style.aspect) {
                         ForEach(CanvasAspect.allCases) { Text($0.title).tag($0) }
                     }
-                    .frame(width: 150)
+                    .labelsHidden()
+                    .fixedSize()
                 }
             }
             Divider()

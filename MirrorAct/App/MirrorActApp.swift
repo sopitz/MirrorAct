@@ -28,6 +28,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             RenderTest.recordTest(into: URL(fileURLWithPath: dir)) { exit(0) }
             return
         }
+        #if DEBUG
+        if let index = CommandLine.arguments.firstIndex(of: "--showcase") {
+            let dir = CommandLine.arguments.count > index + 1 ? CommandLine.arguments[index + 1] : NSTemporaryDirectory()
+            MainActor.assumeIsolated { Showcase.export(to: URL(fileURLWithPath: dir)) }
+            exit(0)
+        }
+        MainActor.assumeIsolated { Showcase.install() }
+        #endif
         Log.info("MirrorAct starting")
         MainActor.assumeIsolated { AppModel.shared.start() }
     }
