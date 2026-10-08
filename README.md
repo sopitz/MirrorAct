@@ -43,7 +43,25 @@ keyboard.
 
 The user interface is available in English and German; choose the language under Settings → General (System language, Deutsch, English).
 
-## Requirements
+## Install
+
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask sopitz/tap/mirroract
+```
+
+Or download `MirrorAct-<version>.zip` from [Releases](https://github.com/sopitz/MirrorAct/releases),
+unzip it and move MirrorAct to Applications. The app is signed with a Developer ID and notarized by
+Apple. It needs macOS 15 or later on a Mac with Apple silicon. Update with
+`brew upgrade --cask mirroract`.
+
+For Android, MirrorAct uses adb from Homebrew (`brew install android-platform-tools`) or from the
+Android SDK (`~/Library/Android/sdk`).
+
+## Build from source
+
+You need:
 
 - macOS 15 or later (tested on Apple silicon)
 - Xcode 16 or later
@@ -56,10 +74,7 @@ brew install xcodegen cmake pkgconf libplist openssl@3 gstreamer
 GStreamer is only needed because UxPlay's CMake looks for it while configuring; MirrorAct does not
 use it. OpenSSL and libplist are linked statically, so the finished app does not depend on Homebrew.
 
-For Android, MirrorAct uses adb from Homebrew (`brew install android-platform-tools`) or from the
-Android SDK (`~/Library/Android/sdk`).
-
-## Build
+Then:
 
 ```bash
 scripts/build.sh
@@ -74,6 +89,19 @@ installation.
 By default the app is signed ad hoc. macOS then asks for camera access again after every build.
 To keep the permission, sign with your own certificate: copy `Config/Local.xcconfig.example` to
 `Config/Local.xcconfig` and enter your signing identity and team.
+
+### Release
+
+`scripts/release.sh` builds the app for distribution: signed with a Developer ID, notarized by Apple
+and packed as `build/release/MirrorAct-<version>.zip`. It needs a "Developer ID Application"
+certificate in the keychain and, once, a notarytool profile:
+
+```bash
+xcrun notarytool store-credentials mirroract-notary --apple-id <Apple ID> --team-id <team>
+```
+
+With `--publish` it also creates the GitHub release `v<version>` for the tagged commit and updates
+the cask in [sopitz/homebrew-tap](https://github.com/sopitz/homebrew-tap).
 
 ## Usage
 
@@ -97,7 +125,8 @@ You need:
 - an Apple developer team in `Config/Local.xcconfig` (a free Apple ID works too, but its signature expires after 7 days)
 - on the device: **Developer Mode** (Settings → Privacy & Security → Developer Mode; the device restarts) and, afterwards, **Enable UI Automation** under Settings → Developer
 
-Build the agent once (again after a change of team or Xcode version):
+Build the agent once from a clone of this repository (again after a change of team or Xcode
+version). This works with MirrorAct from Homebrew too; it needs only Xcode, not the build packages:
 
 ```bash
 scripts/build-agent.sh

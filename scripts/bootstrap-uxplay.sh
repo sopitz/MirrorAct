@@ -21,7 +21,8 @@ if [[ $(git -C $SRC rev-parse HEAD 2>/dev/null) != $UXPLAY_COMMIT ]]; then
   git -C $SRC checkout -q --detach $UXPLAY_COMMIT
 fi
 
-cmake -S $SRC -B $BUILD -DCMAKE_BUILD_TYPE=Release -DNO_MARCH_NATIVE=ON > $BUILD.log 2>&1 \
+cmake -S $SRC -B $BUILD -DCMAKE_BUILD_TYPE=Release -DNO_MARCH_NATIVE=ON \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 > $BUILD.log 2>&1 \
   || { cat $BUILD.log; exit 1; }
 cmake --build $BUILD --target airplay -j 8 >> $BUILD.log 2>&1 \
   || { tail -40 $BUILD.log; exit 1; }
