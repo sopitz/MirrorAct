@@ -1,0 +1,14 @@
+// Gemeinsame Einstellungen. Eigene Werte (Signatur, Bundle-ID) gehören in Local.xcconfig,
+// siehe Local.xcconfig.example. Local.xcconfig wird nicht eingecheckt.
+
+// Homebrew (scripts/build.sh setzt den Wert aus `brew --prefix`)
+HOMEBREW_PREFIX = /opt/homebrew
+
+PRODUCT_BUNDLE_IDENTIFIER = io.github.sopitz.MirrorAct
+
+// Standard: ad-hoc signieren, ohne Entwicklerkonto
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

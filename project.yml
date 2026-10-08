@@ -1,0 +1,79 @@
+name: MirrorAct
+options:
+  bundleIdPrefix: io.github.sopitz
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
+targets:
+  MirrorAct:
+    type: application
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: MirrorAct
+        excludes:
+          - "**/*.md"
+      - path: Resources/AppIcon.icns
+        buildPhase: resources
+    info:
+      path: MirrorAct/Info.plist
+      properties:
+        CFBundleName: MirrorAct
+        CFBundleDisplayName: MirrorAct
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleIconFile: AppIcon
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: "GPL-3.0-or-later"
+        NSCameraUsageDescription: MirrorAct zeigt den Bildschirm eines per Kabel verbundenen iPhones oder iPads an.
+        NSMicrophoneUsageDescription: MirrorAct gibt den Ton eines per Kabel verbundenen iPhones oder iPads wieder.
+        NSLocalNetworkUsageDescription: MirrorAct ist als AirPlay-Empfänger für die Bildschirmsynchronisierung erreichbar.
+        NSBonjourServices:
+          - _airplay._tcp
+          - _raop._tcp
+    settings:
+      base:
+        PRODUCT_NAME: MirrorAct
+        SWIFT_OBJC_BRIDGING_HEADER: MirrorAct/AirPlay/MirrorAct-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/Vendor/UxPlay/lib
+          - $(HOMEBREW_PREFIX)/opt/openssl@3/include
+          - $(HOMEBREW_PREFIX)/opt/libplist/include
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - EXTERNAL_DNS_SD=1
+          - UXPLAY_HAVE_APPLE_P2P=1
+          - NOHOLD=1
+          - PLIST_210=1
+          - PLIST_230=1
+          - SYS_ENDIAN_H=1
+        OTHER_LDFLAGS:
+          - $(SRCROOT)/Vendor/uxplay-build/lib/libairplay.a
+          - $(SRCROOT)/Vendor/uxplay-build/lib/playfair/libplayfair.a
+          - $(SRCROOT)/Vendor/uxplay-build/lib/llhttp/libllhttp.a
+          - $(SRCROOT)/Vendor/uxplay-build/lib/dns_sd/libdnssd.a
+          - $(HOMEBREW_PREFIX)/opt/openssl@3/lib/libcrypto.a
+          - $(HOMEBREW_PREFIX)/opt/libplist/lib/libplist-2.0.a
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        GENERATE_INFOPLIST_FILE: NO
+        CLANG_WARN_DOCUMENTATION_COMMENTS: NO
+        GCC_WARN_UNUSED_FUNCTION: NO

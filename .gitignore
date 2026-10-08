@@ -1,0 +1,18 @@
+# Abhängigkeiten und Build (werden von scripts/ erzeugt)
+Vendor/
+MirrorAct.xcodeproj/
+build/
+DerivedData/
+
+# erzeugt von scripts/make-icon.sh
+Resources/AppIcon-1024.png
+
+# lokale Signatur
+Config/Local.xcconfig
+
+# xcodegen erzeugt Info.plist aus project.yml
+MirrorAct/Info.plist
+
+.DS_Store
+*.xcuserstate
+xcuserdata/

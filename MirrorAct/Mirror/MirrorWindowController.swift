@@ -1,0 +1,488 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import AppKit
+import Combine
+import SwiftUI
+
+/// Randloses, transparentes Fenster in Form des Geräts
+final class MirrorWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
+/// Spiegelfenster: nur das Gerät; rechts daneben eine Werkzeugleiste, die beim Überfahren
+/// mit der Maus erscheint. Alle Funktionen zusätzlich per Rechtsklick und Tastenkürzel.
+@MainActor
+final class MirrorWindowController: NSWindowController, NSWindowDelegate {
+    static let railGap: CGFloat = 10
+
+    let session: MirrorSession
+    private let chrome = MirrorChrome()
+    private let container = ContainerView()
+    private let frameView = DeviceFrameView(frame: .zero)
+    private var railView: NSHostingView<MirrorToolRail>!
+    private var hudView: PassthroughHostingView<MirrorHUD>!
+    private var settings: AppSettings { .shared }
+    private var cancellables: Set<AnyCancellable> = []
+    private var zoom: CGFloat = 1
+    private var placed = false
+    private var resizeStartZoom: CGFloat = 1
+    private var presentation: PresentationWindow?
+    private var hideTask: Task<Void, Never>?
+    private(set) var actions: MirrorActions!
+
+    init(session: MirrorSession) {
+        self.session = session
+        let window = MirrorWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 900),
+                                  styleMask: [.borderless, .closable, .miniaturizable, .resizable],
+                                  backing: .buffered, defer: false)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.isMovableByWindowBackground = false
+        window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
+        window.title = session.deviceName
+        super.init(window: window)
+        window.delegate = self
+
+        actions = MirrorActions(
+            close: { [weak self] in self?.close() },
+            present: { [weak self] in self?.togglePresentation() },
+            zoomIn: { [weak self] in self?.zoomIn() },
+            zoomOut: { [weak self] in self?.zoomOut() },
+            actualSize: { [weak self] in self?.actualSize() },
+            lifeSize: { [weak self] in self?.lifeSize() },
+            pixelPerfect: { [weak self] in self?.pixelPerfect() },
+            fitToScreen: { [weak self] in self?.fitToScreen() },
+            saveScreenshot: { [weak self] in self?.session.saveScreenshot(withFrame: AppSettings.shared.showFrame) },
+            copyScreenshot: { [weak self] in self?.session.copyScreenshot(withFrame: AppSettings.shared.showFrame) },
+            screenshotFile: { [weak self] in self?.session.screenshotFileForDragging(withFrame: AppSettings.shared.showFrame) },
+            toggleRecording: { [weak self] in self?.session.toggleRecording() },
+            disconnect: { AppModel.shared.disconnectWireless() })
+
+        railView = NSHostingView(rootView: MirrorToolRail(session: session, chrome: chrome, actions: actions))
+        hudView = PassthroughHostingView(rootView: MirrorHUD(session: session))
+        container.addSubview(frameView)
+        container.addSubview(hudView)
+        container.addSubview(railView)
+        container.onLayout = { [weak self] in self?.layoutSubviews() }
+        container.onHover = { [weak self] inside in self?.setHovering(inside) }
+        window.contentView = container
+
+        frameView.onResizeDrag = { [weak self] phase, delta in self?.handleResizeDrag(phase, delta) }
+        frameView.onMagnify = { [weak self] amount in self?.setZoom((self?.zoom ?? 1) * (1 + amount)) }
+        frameView.onDragOut = { [weak self] event in self?.dragScreenshot(with: event) }
+        frameView.menuProvider = { [weak self] in self?.contextMenu() }
+        frameView.bezelColor = settings.style.bezelColor
+        session.sink.attach(frameView.videoView.displayLayer)
+
+        session.$frameSize.removeDuplicates().dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.applyLayout() }
+        }.store(in: &cancellables)
+        session.$profile.removeDuplicates().dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.applyLayout() }
+        }.store(in: &cancellables)
+        session.$state.sink { [weak self] state in
+            DispatchQueue.main.async { self?.updatePlaceholder(state) }
+        }.store(in: &cancellables)
+        session.$deviceName.sink { [weak window] name in window?.title = name }.store(in: &cancellables)
+        session.$lastExport.dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.layoutSubviews() }
+        }.store(in: &cancellables)
+        settings.$showFrame.dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.applyLayout() }
+        }.store(in: &cancellables)
+        settings.$style.map(\.bezelColor).removeDuplicates().sink { [weak self] color in
+            self?.frameView.bezelColor = color
+        }.store(in: &cancellables)
+        settings.$style.dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.refreshPresentationBackground() }
+        }.store(in: &cancellables)
+        settings.$alwaysOnTop.sink { [weak window] onTop in
+            window?.level = onTop ? .floating : .normal
+        }.store(in: &cancellables)
+        chrome.$styleOpen.dropFirst().sink { [weak self] open in
+            if !open { self?.scheduleHide() }
+        }.store(in: &cancellables)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func present() {
+        if !placed {
+            zoom = fittingZoom(maxZoom: 1)
+            applyLayout()
+            window?.center()
+            placed = true
+        }
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if presentation != nil { exitPresentation(reshow: false) }
+        chrome.styleOpen = false
+        session.stopRecording()
+        session.sink.attach(nil)
+        session.onClose?()
+        AppModel.shared.windowClosed(self)
+    }
+
+    func showStylePanel() {
+        chrome.hovering = true
+        chrome.styleOpen = true
+    }
+
+    // MARK: Werkzeuge ein-/ausblenden
+
+    private func setHovering(_ inside: Bool) {
+        hideTask?.cancel()
+        if inside {
+            chrome.hovering = true
+        } else {
+            scheduleHide()
+        }
+    }
+
+    /// verzögert, damit die Leiste beim Wechsel vom Gerät zur Leiste nicht flackert
+    private func scheduleHide() {
+        hideTask?.cancel()
+        hideTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard !Task.isCancelled, let self else { return }
+            if self.chrome.styleOpen || self.container.mouseInside { return }
+            self.chrome.hovering = false
+        }
+    }
+
+    // MARK: Kontextmenü
+
+    private func contextMenu() -> NSMenu {
+        let menu = NSMenu()
+        let a = actions!
+        menu.addItem(ActionMenuItem(session.isRecording ? "Aufnahme beenden" : "Video aufnehmen", key: "r", a.toggleRecording))
+        menu.addItem(ActionMenuItem("Screenshot auf den Schreibtisch", key: "s", a.saveScreenshot))
+        menu.addItem(ActionMenuItem("Screenshot kopieren", a.copyScreenshot))
+        menu.addItem(.separator())
+        menu.addItem(ActionMenuItem("Ton", state: !session.muted) { [weak self] in
+            guard let self else { return }
+            self.session.muted.toggle()
+            self.settings.playAudio = !self.session.muted
+        })
+        menu.addItem(ActionMenuItem("Immer im Vordergrund", key: "t", state: settings.alwaysOnTop) { [weak self] in
+            self?.settings.alwaysOnTop.toggle()
+        })
+        menu.addItem(ActionMenuItem("Präsentieren", a.present))
+        menu.addItem(.separator())
+
+        let size = NSMenu()
+        size.addItem(ActionMenuItem("Lebensgross", key: "1", a.lifeSize))
+        size.addItem(ActionMenuItem("Pixelgenau", key: "2", a.pixelPerfect))
+        size.addItem(ActionMenuItem("Punktgenau", key: "0", a.actualSize))
+        size.addItem(ActionMenuItem("Bildschirm füllen", key: "9", a.fitToScreen))
+        size.addItem(.separator())
+        size.addItem(ActionMenuItem("Grösser", key: "+", a.zoomIn))
+        size.addItem(ActionMenuItem("Kleiner", key: "-", a.zoomOut))
+        menu.addItem(ActionMenuItem.submenu("Grösse", size))
+
+        menu.addItem(ActionMenuItem("Gerätrahmen", state: settings.showFrame) { [weak self] in
+            self?.settings.showFrame.toggle()
+        })
+        let colors = NSMenu()
+        for color in BezelColor.allCases {
+            let item = ActionMenuItem(color.title, state: settings.style.bezelColor == color) { [weak self] in
+                self?.settings.style.bezelColor = color
+            }
+            item.image = StyleControls.swatch(color.swatch)
+            colors.addItem(item)
+        }
+        menu.addItem(ActionMenuItem.submenu("Rahmenfarbe", colors))
+        menu.addItem(ActionMenuItem("Stil …") { [weak self] in self?.showStylePanel() })
+        if let editable = session.lastEditable {
+            menu.addItem(ActionMenuItem("Letzte Datei bearbeiten …") { AppModel.shared.openEditor(urls: [editable]) })
+        }
+        menu.addItem(.separator())
+        if session.kind == .wireless {
+            menu.addItem(ActionMenuItem("Gerät trennen", a.disconnect))
+        }
+        menu.addItem(ActionMenuItem("Fenster schliessen", key: "w", a.close))
+        return menu
+    }
+
+    // MARK: Grösse
+
+    private func layout(for zoom: CGFloat) -> FrameLayout {
+        let screen = session.screenPointSize
+        return FrameLayout(profile: session.profile,
+                           screenSize: CGSize(width: (screen.width * zoom).rounded(),
+                                              height: (screen.height * zoom).rounded()),
+                           showFrame: settings.showFrame)
+    }
+
+    private var railSize: CGSize {
+        let fitting = railView.fittingSize
+        return CGSize(width: MirrorToolRail.width, height: max(fitting.height, 100))
+    }
+
+    private func contentSize(for layout: FrameLayout) -> CGSize {
+        CGSize(width: (layout.totalSize.width + Self.railGap + MirrorToolRail.width).rounded(.up),
+               height: max(layout.totalSize.height, railSize.height).rounded(.up))
+    }
+
+    private func fittingZoom(maxZoom: CGFloat) -> CGFloat {
+        let visible = (window?.screen ?? NSScreen.main)?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
+        let unit = layout(for: 1).totalSize
+        let availableHeight = visible.height * 0.92
+        let availableWidth = visible.width * 0.92 - Self.railGap - MirrorToolRail.width
+        let fit = min(availableHeight / max(1, unit.height), availableWidth / max(1, unit.width))
+        return max(0.25, min(maxZoom, fit))
+    }
+
+    func setZoom(_ value: CGFloat) {
+        zoom = max(0.25, min(3, value))
+        applyLayout()
+    }
+
+    func zoomIn() { setZoom(zoom * 1.15) }
+    func zoomOut() { setZoom(zoom / 1.15) }
+    func actualSize() { setZoom(1) }
+    func fitToScreen() { setZoom(fittingZoom(maxZoom: 3)) }
+
+    /// 1 Pixel des Geräts = 1 Pixel des Monitors
+    func pixelPerfect() {
+        let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let points = session.screenPointSize
+        let pixelWidth = session.frameSize == .zero
+            ? (session.profile.nativePixelWidth ?? min(points.width, points.height) * 3)
+            : min(session.frameSize.width, session.frameSize.height)
+        setZoom(pixelWidth / backing / max(1, min(points.width, points.height)))
+    }
+
+    /// so gross wie das echte Gerät (nach Pixeldichte des Monitors)
+    func lifeSize() {
+        guard let screen = window?.screen ?? NSScreen.main,
+              let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        else { return }
+        let millimeters = CGDisplayScreenSize(CGDirectDisplayID(number.uint32Value))
+        guard millimeters.width > 0, let deviceMM = session.profile.physicalWidthMM else {
+            NSSound.beep()
+            session.showToast("Lebensgross: Grösse des Monitors oder Geräts unbekannt")
+            return
+        }
+        let pointsPerMM = screen.frame.width / millimeters.width
+        let points = session.screenPointSize
+        setZoom(deviceMM * pointsPerMM / max(1, min(points.width, points.height)))
+    }
+
+    private func handleResizeDrag(_ phase: NSEvent.Phase, _ delta: CGSize) {
+        if phase == .began {
+            resizeStartZoom = zoom
+            return
+        }
+        let unit = layout(for: 1).totalSize
+        let byHeight = (unit.height * resizeStartZoom + delta.height) / max(1, unit.height)
+        let byWidth = (unit.width * resizeStartZoom + delta.width) / max(1, unit.width)
+        setZoom(max(byHeight, byWidth))
+    }
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        // native Grössenänderung: Seitenverhältnis des Geräts halten
+        let unit = layout(for: 1).totalSize
+        let proposed = (frameSize.width - Self.railGap - MirrorToolRail.width) / max(1, unit.width)
+        zoom = max(0.25, min(3, proposed))
+        return contentSize(for: layout(for: zoom))
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        container.needsLayout = true
+    }
+
+    private func applyLayout() {
+        if presentation != nil {
+            layoutPresentation()
+            return
+        }
+        guard let window else { return }
+        let model = layout(for: zoom)
+        frameView.layoutModel = model
+        let size = contentSize(for: model)
+        // obere linke Ecke bleibt stehen
+        let frame = NSRect(x: window.frame.minX, y: window.frame.maxY - size.height,
+                           width: size.width, height: size.height)
+        window.setFrame(frame, display: true, animate: false)
+        container.needsLayout = true
+        container.layoutSubtreeIfNeeded()
+        window.invalidateShadow()
+    }
+
+    private func layoutSubviews() {
+        guard presentation == nil else { return }
+        let bounds = container.bounds
+        let device = frameView.layoutModel?.totalSize ?? .zero
+        frameView.frame = CGRect(x: 0, y: ((bounds.height - device.height) / 2).rounded(),
+                                 width: device.width, height: device.height)
+        let rail = railSize
+        railView.frame = CGRect(x: device.width + Self.railGap, y: ((bounds.height - rail.height) / 2).rounded(),
+                                width: rail.width, height: rail.height)
+        if let screen = frameView.layoutModel?.screenRect {
+            let rect = screen.offsetBy(dx: frameView.frame.minX, dy: frameView.frame.minY)
+            hudView.frame = CGRect(x: rect.minX, y: rect.maxY - 70, width: rect.width, height: 70)
+        }
+        container.refreshTrackingArea()
+        DispatchQueue.main.async { [weak self] in self?.window?.invalidateShadow() }
+    }
+
+    // MARK: Präsentation
+
+    func togglePresentation() {
+        presentation == nil ? enterPresentation() : exitPresentation(reshow: true)
+    }
+
+    private func enterPresentation() {
+        guard let screen = window?.screen ?? NSScreen.main else { return }
+        chrome.styleOpen = false
+        let presentation = PresentationWindow(screen: screen)
+        presentation.onExit = { [weak self] in self?.exitPresentation(reshow: true) }
+        self.presentation = presentation
+        frameView.removeFromSuperview()
+        presentation.content.addSubview(frameView)
+        presentation.content.frame = CGRect(origin: .zero, size: screen.frame.size)
+        presentation.content.setBackground(style: settings.style, scale: screen.backingScaleFactor)
+        window?.orderOut(nil)
+        presentation.makeKeyAndOrderFront(nil)
+        NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+        NSCursor.setHiddenUntilMouseMoves(true)
+        layoutPresentation()
+    }
+
+    private func exitPresentation(reshow: Bool) {
+        guard let presentation else { return }
+        self.presentation = nil
+        frameView.layer?.shadowOpacity = 0
+        frameView.removeFromSuperview()
+        container.addSubview(frameView, positioned: .below, relativeTo: hudView)
+        presentation.orderOut(nil)
+        NSApp.presentationOptions = []
+        applyLayout()
+        if reshow { window?.makeKeyAndOrderFront(nil) }
+    }
+
+    private func layoutPresentation() {
+        guard let presentation else { return }
+        let bounds = presentation.content.bounds
+        let unit = layout(for: 1).totalSize
+        let fit = min(bounds.height * 0.9 / max(1, unit.height), bounds.width * 0.9 / max(1, unit.width))
+        let model = layout(for: fit)
+        frameView.layoutModel = model
+        frameView.frame = CGRect(x: ((bounds.width - model.totalSize.width) / 2).rounded(),
+                                 y: ((bounds.height - model.totalSize.height) / 2).rounded(),
+                                 width: model.totalSize.width, height: model.totalSize.height)
+        applyPresentationShadow()
+    }
+
+    private func applyPresentationShadow() {
+        guard let layer = frameView.layer else { return }
+        let on = settings.style.shadow
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowOpacity = on ? 0.45 : 0
+        layer.shadowRadius = on ? 30 : 0
+        layer.shadowOffset = CGSize(width: 0, height: -12)
+        // fester Umriss: sonst berechnet Core Animation den Schatten bei jedem Videobild neu
+        layer.shadowPath = on ? frameView.layoutModel?.silhouettePath : nil
+    }
+
+    private func refreshPresentationBackground() {
+        guard let presentation else { return }
+        presentation.content.setBackground(style: settings.style,
+                                           scale: presentation.screen?.backingScaleFactor ?? 2)
+        applyPresentationShadow()
+    }
+
+    // MARK: Drag & Drop
+
+    private func dragScreenshot(with event: NSEvent) {
+        guard let url = session.screenshotFileForDragging(withFrame: settings.showFrame),
+              let image = NSImage(contentsOf: url) else {
+            NSSound.beep()
+            return
+        }
+        let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+        let size = frameView.bounds.size
+        let fitted = NSSize(width: size.width * 0.5,
+                            height: size.width * 0.5 * image.size.height / max(1, image.size.width))
+        let origin = frameView.convert(event.locationInWindow, from: nil)
+        item.setDraggingFrame(NSRect(x: origin.x - fitted.width / 2, y: origin.y - fitted.height / 2,
+                                     width: fitted.width, height: fitted.height), contents: image)
+        frameView.beginDraggingSession(with: [item], event: event, source: frameView)
+    }
+
+    private func updatePlaceholder(_ state: MirrorSession.State) {
+        switch state {
+        case .live:
+            frameView.placeholder.isHidden = true
+        case .connecting:
+            frameView.placeholder.isHidden = false
+            frameView.placeholder.stringValue = session.kind == .cable
+                ? "Verbinde …\nGerät entsperren, falls nötig"
+                : "Warte auf Bild …"
+        case let .disconnected(reason):
+            frameView.placeholder.isHidden = false
+            frameView.placeholder.stringValue = reason ?? "Getrennt"
+        }
+    }
+}
+
+/// Inhalt des Fensters (geflippt, transparent); meldet, ob die Maus darüber ist
+private final class ContainerView: NSView {
+    var onLayout: (() -> Void)?
+    var onHover: ((Bool) -> Void)?
+    private var trackingArea: NSTrackingArea?
+    private(set) var mouseInside = false
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        onLayout?()
+    }
+
+    func refreshTrackingArea() {
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        mouseInside = true
+        onHover?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        mouseInside = false
+        onHover?(false)
+    }
+}
+
+/// Menüeintrag mit Closure
+final class ActionMenuItem: NSMenuItem {
+    private let handler: () -> Void
+
+    init(_ title: String, key: String = "", state on: Bool? = nil, _ handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: key)
+        target = self
+        if let on { state = on ? .on : .off }
+    }
+
+    required init(coder: NSCoder) { fatalError() }
+
+    @objc private func run() { handler() }
+
+    static func submenu(_ title: String, _ menu: NSMenu) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.submenu = menu
+        return item
+    }
+}

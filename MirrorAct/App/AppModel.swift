@@ -1,0 +1,299 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import AppKit
+import AVFoundation
+import Combine
+import UniformTypeIdentifiers
+
+/// Zentrale Steuerung: Geräte, AirPlay-Empfänger, Spiegelfenster
+@MainActor
+final class AppModel: ObservableObject {
+    static let shared = AppModel()
+
+    enum ReceiverState: Equatable {
+        case stopped
+        case ready
+        case failed(Int32)
+    }
+
+    let settings = AppSettings.shared
+    let usb = USBDeviceMonitor()
+    let receiver = AirPlayReceiver()
+
+    @Published private(set) var receiverState: ReceiverState = .stopped
+    @Published private(set) var activeWirelessClient: AirPlayReceiver.Client?
+    @Published var pinRequested = false
+
+    private var controllers: [String: MirrorWindowController] = [:] {
+        didSet { openSessionIDs = Set(controllers.keys) }
+    }
+    @Published private(set) var openSessionIDs: Set<String> = []
+    private var captures: [String: USBCaptureSession] = [:]
+    private weak var wirelessSession: MirrorSession?
+    private var cancellables: Set<AnyCancellable> = []
+
+    var keyMirror: MirrorWindowController? {
+        controllers.values.first { $0.window?.isKeyWindow == true } ?? controllers.values.first
+    }
+
+    func isMirroring(cableDevice id: String) -> Bool { openSessionIDs.contains("usb:\(id)") }
+
+    func start() {
+        usb.start()
+        usb.$devices.sink { [weak self] devices in
+            guard let self else { return }
+            for device in devices {
+                self.settings.remember(.init(key: device.id, transport: .cable, name: device.name,
+                                             modelIdentifier: self.settings.modelIdentifier(forDeviceNamed: device.name),
+                                             lastSeen: Date()))
+            }
+        }.store(in: &cancellables)
+
+        receiver.audio.recordTap = { [weak receiver] sample in receiver?.sink?.recordAudio(sample) }
+        receiver.onClient = { [weak self] client in self?.wirelessClientConnected(client) }
+        receiver.onConnectionLost = { [weak self] in self?.wirelessDisconnected() }
+        receiver.onConnectionCount = { [weak self] count in
+            if count == 0, self?.wirelessSession?.state == .live { self?.wirelessDisconnected() }
+        }
+        receiver.onPin = { [weak self] _ in
+            self?.pinRequested = true
+            self?.wirelessSession?.state = .disconnected("Code auf dem iPhone eingeben: \(AppSettings.shared.pin)")
+        }
+        receiver.onSourceSize = { [weak self] size in
+            if size.width > 0, size.height > 0 { self?.wirelessSession?.sourcePixelSize = size }
+        }
+        restartReceiver()
+    }
+
+    // MARK: Kabellos (AirPlay)
+
+    func restartReceiver() {
+        let config = AirPlayReceiver.Config(
+            name: settings.receiverName.isEmpty ? "MirrorAct" : settings.receiverName,
+            deviceID: settings.receiverDeviceID,
+            keyfile: settings.supportDirectory.appendingPathComponent("airplay.pem").path,
+            streamHeight: settings.streamHeight,
+            maxFPS: settings.maxFPS,
+            hevc: settings.hevc,
+            peerToPeer: settings.peerToPeer,
+            pin: settings.pinNumber)
+        let result = receiver.start(config)
+        receiverState = result == 0 ? .ready : .failed(result)
+    }
+
+    func disconnectWireless() {
+        receiver.disconnect()
+    }
+
+    private func wirelessClientConnected(_ client: AirPlayReceiver.Client) {
+        settings.remember(.init(key: client.deviceID, transport: .wireless, name: client.name,
+                                modelIdentifier: client.model, lastSeen: Date()))
+        activeWirelessClient = client
+        pinRequested = false
+
+        if let session = wirelessSession, let controller = controllers[session.id] {
+            session.deviceName = client.name
+            session.modelIdentifier = client.model
+            session.state = .connecting
+            session.sink.clear()
+            receiver.sink = session.sink
+            controller.present()
+            return
+        }
+
+        let session = MirrorSession(id: "airplay", kind: .wireless, deviceName: client.name,
+                                    modelIdentifier: client.model, muted: !settings.playAudio)
+        session.audioSampleRate = AirPlayAudioPlayer.sampleRate
+        session.onMuteChange = { [weak self] muted in self?.receiver.audio.muted = muted }
+        session.onClose = { [weak self] in
+            guard let self else { return }
+            self.receiver.sink = nil
+            self.receiver.disconnect()
+            self.activeWirelessClient = nil
+        }
+        receiver.audio.muted = session.muted
+        receiver.sink = session.sink
+        wirelessSession = session
+        let controller = MirrorWindowController(session: session)
+        controllers[session.id] = controller
+        controller.present()
+    }
+
+    private func wirelessDisconnected() {
+        activeWirelessClient = nil
+        guard let session = wirelessSession else { return }
+        session.stopRecording()
+        if case .disconnected = session.state { return }
+        session.state = .disconnected("Getrennt – auf dem iPhone erneut «\(settings.receiverName)» wählen")
+        session.sink.clear()
+    }
+
+    // MARK: Kabel (USB)
+
+    func openCableDevice(_ device: USBDeviceMonitor.Device) {
+        let key = "usb:\(device.id)"
+        if let controller = controllers[key] {
+            controller.present()
+            return
+        }
+        Task {
+            guard await USBCaptureSession.requestAccess() else {
+                showCameraAccessAlert()
+                return
+            }
+            startCapture(device, key: key)
+        }
+    }
+
+    private func startCapture(_ device: USBDeviceMonitor.Device, key: String) {
+        guard let captureDevice = usb.captureDevice(for: device.id) else {
+            NSSound.beep()
+            return
+        }
+        let session = MirrorSession(id: key, kind: .cable, deviceName: device.name,
+                                    modelIdentifier: settings.modelIdentifier(forDeviceNamed: device.name),
+                                    muted: !settings.playAudio)
+        let capture = USBCaptureSession()
+        capture.muted = session.muted
+        let sink = session.sink
+        session.audioSampleRate = USBCaptureSession.audioSampleRate
+        capture.onFrame = { buffer, time in sink.push(buffer, time: time) }
+        capture.onAudio = { sample in sink.recordAudio(sample) }
+        capture.onStop = { [weak session] reason in
+            session?.stopRecording()
+            session?.state = .disconnected(reason ?? "Kabel getrennt")
+        }
+        session.onMuteChange = { [weak capture] muted in capture?.muted = muted }
+        session.onClose = { [weak self] in
+            capture.stop()
+            self?.captures[key] = nil
+        }
+        do {
+            try capture.start(device: captureDevice)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "\(device.name) lässt sich nicht öffnen"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+            return
+        }
+        captures[key] = capture
+        let controller = MirrorWindowController(session: session)
+        controllers[key] = controller
+        controller.present()
+
+        if session.modelIdentifier == nil {
+            Task.detached {
+                guard let identifier = DeviceInfoLookup.productType(forDeviceNamed: device.name) else { return }
+                await MainActor.run {
+                    session.modelIdentifier = identifier
+                    AppSettings.shared.remember(.init(key: device.id, transport: .cable, name: device.name,
+                                                      modelIdentifier: identifier, lastSeen: Date()))
+                }
+            }
+        }
+    }
+
+    private func showCameraAccessAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Kamerazugriff nötig"
+        alert.informativeText = "macOS stellt den Bildschirm eines per Kabel verbundenen iPhones wie eine Kamera bereit. Bitte MirrorAct unter Datenschutz & Sicherheit → Kamera erlauben."
+        alert.addButton(withTitle: "Einstellungen öffnen")
+        alert.addButton(withTitle: "Abbrechen")
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// "iPhone oder iPad spiegeln …"
+    func mirrorFirstAvailable() {
+        if let device = usb.devices.first(where: { !isMirroring(cableDevice: $0.id) }) ?? usb.devices.first {
+            openCableDevice(device)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Kein Gerät per Kabel verbunden"
+        alert.informativeText = """
+        Per Kabel: iPhone anschliessen und entsperren, dann hier erneut wählen.
+
+        Kabellos: Auf dem iPhone Kontrollzentrum → Bildschirmsynchronisierung → «\(settings.receiverName)» wählen. Code: \(settings.pin)
+        """
+        alert.runModal()
+    }
+
+    // MARK: Fenster
+
+    func windowClosed(_ controller: MirrorWindowController) {
+        controllers.removeValue(forKey: controller.session.id)
+    }
+
+    // MARK: Bearbeiten / einrahmen
+
+    private var editors: [UUID: EditorWindowController] = [:]
+
+    /// «Bearbeiten …»: ein Bild, zwei Bilder (Duo) oder ein Video im Editor; mehr Bilder werden direkt gerahmt
+    func openEditorPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .movie]
+        panel.allowsMultipleSelection = true
+        panel.message = "Screenshots (eins, oder zwei für Duo) oder eine Bildschirmaufnahme wählen"
+        panel.prompt = "Bearbeiten"
+        guard panel.runModal() == .OK else { return }
+        openEditor(urls: panel.urls)
+    }
+
+    func openEditor(urls: [URL]) {
+        let images = urls.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) == true }
+        if images.count > 2 {
+            let outputs = FrameRenderer.frameScreenshotFiles(images, showFrame: settings.showFrame)
+            outputs.isEmpty ? NSSound.beep() : NSWorkspace.shared.activateFileViewerSelecting(outputs)
+            return
+        }
+        let videos = urls.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .movie) == true }
+        let groups: [[URL]] = videos.isEmpty ? [images] : videos.map { [$0] }
+        for group in groups where !group.isEmpty {
+            guard let document = EditorDocument(urls: group) else {
+                NSSound.beep()
+                continue
+            }
+            let controller = EditorWindowController(document: document)
+            controller.onClose = { [weak self] in self?.editors[document.id] = nil }
+            editors[document.id] = controller
+            controller.showWindow(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    /// alter Menüpunkt: alles ohne Editor einrahmen
+    func frameScreenshots() { openEditorPanel() }
+}
+
+/// Modellkennung eines per Kabel verbundenen Geräts über `xcrun devicectl` (falls Xcode da ist)
+enum DeviceInfoLookup {
+    static func productType(forDeviceNamed name: String) -> String? {
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("mirroract-devices-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        process.arguments = ["devicectl", "list", "devices", "--quiet", "--json-output", output.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let deadline = Date().addingTimeInterval(15)
+        while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
+        if process.isRunning { process.terminate(); return nil }
+
+        guard let data = try? Data(contentsOf: output),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let result = json["result"] as? [String: Any],
+              let devices = result["devices"] as? [[String: Any]] else { return nil }
+        for device in devices {
+            let properties = device["deviceProperties"] as? [String: Any]
+            let hardware = device["hardwareProperties"] as? [String: Any]
+            if properties?["name"] as? String == name, let type = hardware?["productType"] as? String {
+                return type
+            }
+        }
+        return nil
+    }
+}
