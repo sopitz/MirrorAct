@@ -84,7 +84,7 @@ Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct
 | `MirrorAct/Video` | `AnnexBDecoder` (H.264/HEVC → VideoToolbox), `FrameSink` / `VideoDisplayView` (AVSampleBufferDisplayLayer) |
 | `MirrorAct/USB` | device discovery and capture (`AVCaptureDevice`, `.muxed`) |
 | `MirrorAct/Frame` | device profiles, frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
-| `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation |
+| `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |

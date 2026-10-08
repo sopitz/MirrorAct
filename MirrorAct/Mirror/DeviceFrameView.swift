@@ -15,6 +15,18 @@ final class DeviceFrameView: NSView, NSDraggingSource {
     /// Rechtsklick
     var menuProvider: (() -> NSMenu?)?
 
+    /// Bedienung des Geräts (nil = nur anzeigen): Klicken/Ziehen, Scrollen und Mittelklick im
+    /// Bildschirm, Tasten und Einfügen. Punkte in Koordinaten dieser Ansicht.
+    var onTouch: ((TouchPhase, CGPoint) -> Void)?
+    var onScroll: ((NSEvent, CGPoint) -> Void)?
+    var onMiddleClick: (() -> Void)?
+    var onKey: ((NSEvent) -> Bool)?
+    var onPaste: (() -> Void)?
+
+    private func isOnScreen(_ point: CGPoint) -> Bool {
+        layoutModel?.screenPath.contains(point) == true
+    }
+
     var bezelColor: BezelColor = .graphite {
         didSet { if bezelColor != oldValue { needsDisplay = true } }
     }
@@ -45,6 +57,13 @@ final class DeviceFrameView: NSView, NSDraggingSource {
 
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
+    override var acceptsFirstResponder: Bool { onKey != nil }
+
+    /// ein Klick auf das inaktive Fenster bedient das Gerät gleich mit
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        guard let event, onTouch != nil else { return false }
+        return isOnScreen(convert(event.locationInWindow, from: nil))
+    }
 
     override func layout() {
         super.layout()
@@ -85,6 +104,20 @@ final class DeviceFrameView: NSView, NSDraggingSource {
             onDragOut(event)
             return
         }
+        if let onTouch, !resizeRect.contains(point), !event.modifierFlags.contains(.command), isOnScreen(point) {
+            // Berührung: bis zum Loslassen verfolgen (⌘-Ziehen verschiebt das Fenster)
+            window?.makeFirstResponder(self)
+            onTouch(.began, point)
+            while let next = window?.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+                let location = convert(next.locationInWindow, from: nil)
+                if next.type == .leftMouseUp {
+                    onTouch(.ended, location)
+                    break
+                }
+                onTouch(.moved, location)
+            }
+            return
+        }
         guard resizeRect.contains(point), let onResizeDrag else {
             window?.performDrag(with: event)
             return
@@ -108,6 +141,41 @@ final class DeviceFrameView: NSView, NSDraggingSource {
 
     override func magnify(with event: NSEvent) {
         onMagnify?(event.magnification)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let onScroll, isOnScreen(point) else {
+            super.scrollWheel(with: event)
+            return
+        }
+        onScroll(event, point)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2, let onMiddleClick, isOnScreen(convert(event.locationInWindow, from: nil)) else {
+            super.otherMouseDown(with: event)
+            return
+        }
+        onMiddleClick()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if onKey?(event) != true { super.keyDown(with: event) }
+    }
+
+    override func keyUp(with event: NSEvent) {
+        if onKey?(event) != true { super.keyUp(with: event) }
+    }
+
+    /// ⌘V: Zwischenablage des Macs auf dem Gerät einfügen (nur, wenn es bedienbar ist)
+    @objc func paste(_ sender: Any?) {
+        onPaste?()
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        if selector == #selector(paste(_:)) { return onPaste != nil }
+        return super.responds(to: selector)
     }
 
     func draggingSession(_ session: NSDraggingSession,

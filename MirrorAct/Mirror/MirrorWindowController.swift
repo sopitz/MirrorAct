@@ -58,7 +58,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             copyScreenshot: { [weak self] in self?.session.copyScreenshot(withFrame: AppSettings.shared.showFrame) },
             screenshotFile: { [weak self] in self?.session.screenshotFileForDragging(withFrame: AppSettings.shared.showFrame) },
             toggleRecording: { [weak self] in self?.session.toggleRecording() },
-            disconnect: { AppModel.shared.disconnectWireless() })
+            disconnect: { AppModel.shared.disconnectWireless() },
+            toggleControl: { [weak self] in self?.toggleControl() },
+            press: { [weak self] button in self?.session.control?.press(button) })
 
         railView = NSHostingView(rootView: MirrorToolRail(session: session, chrome: chrome, actions: actions))
         hudView = PassthroughHostingView(rootView: MirrorHUD(session: session))
@@ -86,6 +88,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             DispatchQueue.main.async { self?.updatePlaceholder(state) }
         }.store(in: &cancellables)
         session.$deviceName.sink { [weak window] name in window?.title = name }.store(in: &cancellables)
+        session.$controlState.removeDuplicates().sink { [weak self] state in
+            DispatchQueue.main.async { self?.controlStateChanged(state) }
+        }.store(in: &cancellables)
         session.$lastExport.dropFirst().sink { [weak self] _ in
             DispatchQueue.main.async { self?.layoutSubviews() }
         }.store(in: &cancellables)
@@ -116,12 +121,14 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             placed = true
         }
         window?.makeKeyAndOrderFront(nil)
+        if frameView.acceptsFirstResponder { window?.makeFirstResponder(frameView) }
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func windowWillClose(_ notification: Notification) {
         if presentation != nil { exitPresentation(reshow: false) }
         chrome.styleOpen = false
+        session.control?.stop()
         session.stopRecording()
         session.sink.attach(nil)
         session.onClose?()
@@ -164,6 +171,23 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         menu.addItem(ActionMenuItem(String(localized: "Save Screenshot to Desktop"), key: "s", a.saveScreenshot))
         menu.addItem(ActionMenuItem(String(localized: "Copy Screenshot"), a.copyScreenshot))
         menu.addItem(.separator())
+        if let control = session.control {
+            if session.isControlReady {
+                for button in control.buttons {
+                    let item = ActionMenuItem(button.title) { a.press(button) }
+                    item.image = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)
+                    menu.addItem(item)
+                }
+            }
+            if control.startsOnDemand {
+                let item = ActionMenuItem(String(localized: "Control Device"), state: session.controlState == .ready
+                                          || session.controlState == .starting, a.toggleControl)
+                item.keyEquivalent = "c"
+                item.keyEquivalentModifierMask = [.command, .option]
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
+        }
         menu.addItem(ActionMenuItem(String(localized: "Sound"), state: !session.muted) { [weak self] in
             guard let self else { return }
             self.session.muted.toggle()
@@ -350,6 +374,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         presentation.content.setBackground(style: settings.style, scale: screen.backingScaleFactor)
         window?.orderOut(nil)
         presentation.makeKeyAndOrderFront(nil)
+        if frameView.acceptsFirstResponder { presentation.makeFirstResponder(frameView) }
         NSApp.presentationOptions = [.hideDock, .hideMenuBar]
         NSCursor.setHiddenUntilMouseMoves(true)
         layoutPresentation()
@@ -364,7 +389,10 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         presentation.orderOut(nil)
         NSApp.presentationOptions = []
         applyLayout()
-        if reshow { window?.makeKeyAndOrderFront(nil) }
+        if reshow {
+            window?.makeKeyAndOrderFront(nil)
+            if frameView.acceptsFirstResponder { window?.makeFirstResponder(frameView) }
+        }
     }
 
     private func layoutPresentation() {
@@ -396,6 +424,69 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         presentation.content.setBackground(style: settings.style,
                                            scale: presentation.screen?.backingScaleFactor ?? 2)
         applyPresentationShadow()
+    }
+
+    // MARK: Bedienen
+
+    /// Bedienung ein-/ausschalten (iPhone: Agent auf dem Gerät starten)
+    func toggleControl() {
+        guard let control = session.control else {
+            NSSound.beep()
+            return
+        }
+        switch session.controlState {
+        case .ready, .starting: control.stop()
+        default: control.start()
+        }
+    }
+
+    private func controlStateChanged(_ state: ControlState?) {
+        let ready = state == .ready
+        frameView.onTouch = ready ? { [weak self] phase, point in
+            guard let self, let target = self.devicePoint(point) else { return }
+            self.session.control?.touch(phase, at: target)
+        } : nil
+        frameView.onScroll = ready ? { [weak self] event, point in
+            guard let self, let target = self.devicePoint(point) else { return }
+            self.session.control?.scroll(at: target, dx: event.scrollingDeltaX, dy: event.scrollingDeltaY,
+                                         precise: event.hasPreciseScrollingDeltas)
+        } : nil
+        frameView.onMiddleClick = ready ? { [weak self] in self?.session.control?.press(.home) } : nil
+        frameView.onKey = ready ? { [weak self] event in
+            guard let self else { return false }
+            if self.presentation != nil, event.keyCode == 53 {   // Esc beendet die Präsentation
+                if event.type == .keyDown { self.exitPresentation(reshow: true) }
+                return true
+            }
+            return self.session.control?.key(event) ?? false
+        } : nil
+        frameView.onPaste = ready ? { [weak self] in
+            guard let text = NSPasteboard.general.string(forType: .string) else {
+                NSSound.beep()
+                return
+            }
+            self?.session.control?.paste(text)
+        } : nil
+        if ready, let window = presentation ?? window, window.isKeyWindow {
+            window.makeFirstResponder(frameView)
+        }
+        if case let .failed(message) = state {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "\(session.deviceName) can’t be controlled")
+            alert.informativeText = message
+            alert.runModal()
+        }
+    }
+
+    /// Punkt im Gerätebild → Bildschirmkoordinaten 0…1 (das Video füllt den Bildschirm, «aspect fill»)
+    private func devicePoint(_ point: CGPoint) -> CGPoint? {
+        guard let screen = frameView.layoutModel?.screenRect, screen.width > 0, screen.height > 0 else { return nil }
+        let video = session.frameSize == .zero ? screen.size : session.frameSize
+        let scale = max(screen.width / video.width, screen.height / video.height)
+        let shown = CGSize(width: video.width * scale, height: video.height * scale)
+        let x = (point.x - screen.midX + shown.width / 2) / shown.width
+        let y = (point.y - screen.midY + shown.height / 2) / shown.height
+        return CGPoint(x: min(max(x, 0), 1), y: min(max(y, 0), 1))
     }
 
     // MARK: Drag & Drop

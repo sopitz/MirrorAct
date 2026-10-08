@@ -70,6 +70,9 @@ struct MirrorCommands: Commands {
             .keyboardShortcut("r")
             Toggle("Record with Device Frame", isOn: $settings.recordWithFrame)
             Divider()
+            Button("Control Device") { mirror?.toggleControl() }
+                .keyboardShortcut("c", modifiers: [.command, .option])
+            Divider()
             Button("Larger") { mirror?.zoomIn() }
                 .keyboardShortcut("+")
             Button("Smaller") { mirror?.zoomOut() }

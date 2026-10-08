@@ -3,7 +3,7 @@ import AppKit
 import Combine
 import CoreGraphics
 
-/// Ein gespiegeltes Gerät: Quelle (Kabel oder AirPlay), Zustand, Bildgrösse, Profil.
+/// Ein gespiegeltes Gerät: Quelle (Kabel oder AirPlay), Zustand, Bildgrösse, Profil, Bedienung.
 @MainActor
 final class MirrorSession: ObservableObject, Identifiable {
     enum Kind { case cable, wireless }
@@ -34,6 +34,18 @@ final class MirrorSession: ObservableObject, Identifiable {
     /// Abtastrate des Tons dieser Quelle (für Aufnahmen); nil = ohne Ton
     var audioSampleRate: Double?
     var isRecording: Bool { recordingStartedAt != nil }
+
+    /// Bedienung über das Fenster (nil = nur anzeigen)
+    var control: DeviceControl? {
+        didSet {
+            oldValue?.onStateChange = nil
+            control?.onStateChange = { [weak self] state in self?.controlState = state }
+            controlState = control?.state
+        }
+    }
+    /// Zustand der Bedienung; nil = Gerät lässt sich nicht bedienen
+    @Published private(set) var controlState: ControlState?
+    var isControlReady: Bool { controlState == .ready }
 
     var onMuteChange: ((Bool) -> Void)?
     /// Fenster wurde geschlossen: Quelle beenden
