@@ -71,8 +71,9 @@ if(APPLE)
 else()
   set(NO_MARCH_NATIVE ON)
   if(WIN32)
-    # UxPlay prüft teils WIN32, teils _WIN32; statische Bibliotheken, damit nur System-DLLs bleiben
-    add_compile_definitions(WIN32)
+    # UxPlay prüft teils WIN32, teils _WIN32; statische Bibliotheken, damit nur System-DLLs bleiben.
+    # LIBPLIST_STATIC: sonst erwartet plist.h die Funktionen als DLL-Import (__imp_plist_*)
+    add_compile_definitions(WIN32 LIBPLIST_STATIC)
     set(OPENSSL_USE_STATIC_LIBS ON)
     set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
     # die System-Importbibliotheken müssen hinter libcrypto.a und libairplay.a stehen (ein Durchlauf
@@ -91,7 +92,8 @@ else()
     target_link_libraries(mirroract-airplay PRIVATE ws2_32 iphlpapi bcrypt crypt32 advapi32)
     target_link_options(mirroract-airplay PRIVATE -static)
   else()
-    target_link_libraries(mirroract-airplay PRIVATE pthread)
+    # playfair rechnet mit sin() (libm)
+    target_link_libraries(mirroract-airplay PRIVATE pthread m)
   endif()
 endif()
 
