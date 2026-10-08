@@ -335,7 +335,7 @@ final class AppModel: ObservableObject {
         }
         session.state = .connecting
         session.sink.clear()
-        session.control = AndroidControl(client: client)
+        session.control = AndroidControl(client: client, info: device.info)
         androidClients[key] = client
         client.start()
     }

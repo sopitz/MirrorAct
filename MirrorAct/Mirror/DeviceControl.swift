@@ -5,8 +5,10 @@ import AppKit
 /// Bildschirmkoordinaten um: (0, 0) oben links, (1, 1) unten rechts, ausgerichtet wie das Videobild.
 /// Eingaben kommen nur an, solange `state == .ready`.
 protocol DeviceControl: AnyObject {
-    /// Tasten für Kontextmenü (alle) und Werkzeugleiste (die ersten drei)
+    /// Tasten für Kontextmenü (alle) und Werkzeugleiste (die ersten drei, in der Reihenfolge des Geräts)
     var buttons: [DeviceButton] { get }
+    /// Symbol einer Taste, wie sie auf dem Gerät aussieht (Standard: `button.symbol`)
+    func glyph(for button: DeviceButton) -> DeviceButton.Glyph
 
     /// Android: immer bereit; iPhone: erst nach start() (Agent auf dem Gerät)
     var state: ControlState { get }
@@ -29,6 +31,7 @@ protocol DeviceControl: AnyObject {
 }
 
 extension DeviceControl {
+    func glyph(for button: DeviceButton) -> DeviceButton.Glyph { DeviceButton.Glyph(symbol: button.symbol) }
     var state: ControlState { .ready }
     var startsOnDemand: Bool { true }
     var onStateChange: ((ControlState) -> Void)? {
@@ -53,6 +56,12 @@ enum DeviceButton: CaseIterable, Identifiable {
     case back, home, recents, notifications, volumeUp, volumeDown, power, rotate
 
     var id: Self { self }
+
+    /// SF Symbol, wahlweise gedreht (Samsungs «|||» sind drei waagrechte Linien, um 90° gedreht)
+    struct Glyph: Equatable {
+        var symbol: String
+        var rotation: Double = 0
+    }
 
     var title: String {
         switch self {

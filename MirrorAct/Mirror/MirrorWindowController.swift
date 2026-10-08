@@ -175,7 +175,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             if session.isControlReady {
                 for button in control.buttons {
                     let item = ActionMenuItem(button.title) { a.press(button) }
-                    item.image = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)
+                    let glyph = control.glyph(for: button)
+                    item.image = NSImage(systemSymbolName: glyph.rotation == 0 ? glyph.symbol : button.symbol,
+                                         accessibilityDescription: nil)
                     menu.addItem(item)
                 }
             }

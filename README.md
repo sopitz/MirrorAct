@@ -91,7 +91,7 @@ As soon as an Android phone is mirrored, the mirror window controls it:
 - click: tap, drag: swipe (the finger follows the mouse live), ⌘-drag moves the window
 - trackpad or mouse wheel: scroll, middle click: Home
 - typing goes to the phone, including umlauts and other characters; Esc is Back, ⌘V pastes the Mac clipboard, text copied on the phone lands in the Mac clipboard
-- Back, Home and Recent Apps are in the tool rail; notifications, volume, screen on/off and rotation in the context menu
+- Back, Home and Recent Apps are in the tool rail, in the order and look of the phone's navigation bar (Samsung: Recent Apps, Home, Back); notifications, volume, screen on/off and rotation in the context menu
 
 Nothing is installed permanently: while mirroring, the scrcpy server runs from a temporary file on
 the phone and ends when the window is closed. Sound needs Android 11 or later and plays on the Mac

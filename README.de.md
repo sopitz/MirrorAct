@@ -94,7 +94,7 @@ Sobald ein Android-Telefon gespiegelt wird, bedient das Spiegelfenster es:
 - Klick: tippen, Ziehen: wischen (der Finger folgt der Maus live), ⌘-Ziehen verschiebt das Fenster
 - Trackpad oder Mausrad: scrollen, Mittelklick: Home
 - Tippen geht ans Telefon, auch Umlaute und andere Zeichen; Esc ist Zurück, ⌘V fügt die Zwischenablage des Macs ein, auf dem Telefon kopierter Text landet in der Zwischenablage des Macs
-- Zurück, Home und Letzte Apps in der Werkzeugleiste; Mitteilungen, Lautstärke, Bildschirm ein/aus und Drehen im Kontextmenü
+- Zurück, Home und Letzte Apps in der Werkzeugleiste, in Reihenfolge und Aussehen der Navigationsleiste des Telefons (Samsung: Letzte Apps, Home, Zurück); Mitteilungen, Lautstärke, Bildschirm ein/aus und Drehen im Kontextmenü
 
 Dauerhaft installiert wird nichts: Während der Spiegelung läuft der scrcpy-Server aus einer
 temporären Datei auf dem Telefon und endet, wenn das Fenster geschlossen wird. Ton gibt es ab

@@ -20,9 +20,10 @@ enum Showcase {
         }
     }
 
-    static func export(to dir: URL) {
+    /// session: Sitzung, deren Bild verwendet wird (Standard: das vorderste Spiegelfenster)
+    static func export(to dir: URL, session chosen: MirrorSession? = nil) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let live = AppModel.shared.keyMirror?.session
+        let live = chosen ?? AppModel.shared.keyMirror?.session
         let screen = live?.sink.latest.flatMap(FrameRenderer.cgImage(from:))
             ?? RenderTest.testScreen(size: CGSize(width: 1170, height: 2532))!
         let model = live?.modelIdentifier ?? "iPhone14,2"

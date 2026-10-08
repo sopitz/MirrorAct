@@ -5,13 +5,31 @@ import AppKit
 /// scrcpy-Servers (Format: app/src/control_msg.c im scrcpy-Projekt, alles Big Endian).
 final class AndroidControl: DeviceControl {
     private let client: ScrcpyClient
+    private let samsung: Bool
     private var clipboardSequence: UInt64 = 0
+    let buttons: [DeviceButton]
 
-    init(client: ScrcpyClient) {
+    init(client: ScrcpyClient, info: AndroidDeviceInfo?) {
         self.client = client
+        samsung = info?.manufacturer?.lowercased() == "samsung"
+        // wie die Navigationsleiste des Telefons: Samsung standardmässig Apps | Home | Zurück (umstellbar)
+        let navigation: [DeviceButton] = samsung && info?.samsungKeyOrder != 1
+            ? [.recents, .home, .back] : [.back, .home, .recents]
+        buttons = navigation + [.notifications, .volumeUp, .volumeDown, .power, .rotate]
     }
 
-    let buttons: [DeviceButton] = [.back, .home, .recents, .notifications, .volumeUp, .volumeDown, .power, .rotate]
+    /// Symbole wie auf dem Telefon: Samsung «|||  ▢  <», sonst Android-Standard «◁  ○  □»
+    func glyph(for button: DeviceButton) -> DeviceButton.Glyph {
+        switch (samsung, button) {
+        case (true, .recents): DeviceButton.Glyph(symbol: "line.3.horizontal", rotation: 90)
+        case (true, .home): DeviceButton.Glyph(symbol: "app")
+        case (true, .back): DeviceButton.Glyph(symbol: "chevron.backward")
+        case (false, .back): DeviceButton.Glyph(symbol: "arrowtriangle.backward")
+        case (false, .home): DeviceButton.Glyph(symbol: "circle")
+        case (false, .recents): DeviceButton.Glyph(symbol: "square")
+        default: DeviceButton.Glyph(symbol: button.symbol)
+        }
+    }
     /// immer bedienbar, solange die Verbindung steht
     let startsOnDemand = false
 

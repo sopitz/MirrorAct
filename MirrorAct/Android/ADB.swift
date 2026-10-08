@@ -73,6 +73,8 @@ struct AndroidDeviceInfo: Equatable {
     /// Kamera-Aussparung und Radius der Bildschirmecken (Pixel, Hochformat)
     var cutoutRect: CGRect?
     var cornerRadius: CGFloat?
+    /// Samsung: Reihenfolge der Navigationstasten (0 = Apps | Home | Zurück, 1 = Zurück | Home | Apps)
+    var samsungKeyOrder: Int?
 
     var displayModel: String {
         if let marketingName, !marketingName.isEmpty { return marketingName }
@@ -109,6 +111,7 @@ struct AndroidDeviceInfo: Equatable {
             "echo dpi=$(dumpsys display 2>/dev/null | grep -m 1 -o '[0-9.]* x [0-9.]* dpi')",
             "echo cutout=$(dumpsys display 2>/dev/null | grep -m 1 -o 'boundingRect={Bounds=[^}]*}')",
             "echo spec=$( (dumpsys display; dumpsys window) 2>/dev/null | grep -m 1 -o 'cutoutSpec={M[^}]*}')",
+            "echo navorder=$(settings get global navigationbar_key_order)",
             "echo radius=$(dumpsys window 2>/dev/null | grep -m 1 -o 'RoundedCorner{position=TopLeft, radius=[0-9]*')",
         ].joined(separator: "; ")
         let output = try ADB.run(["shell", script], serial: serial, timeout: 10)
@@ -129,6 +132,7 @@ struct AndroidDeviceInfo: Equatable {
         info.marketingName = value("marketname") ?? value("marketing")
         info.userName = value("name")
         info.sdk = value("sdk").flatMap { Int($0) }
+        info.samsungKeyOrder = value("navorder").flatMap { Int($0) }
         // "Physical size: 1080x2400" bzw. "Override size: …"
         if let size = value("size")?.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) {
             let parts = size.split(separator: "x").compactMap { Double($0) }

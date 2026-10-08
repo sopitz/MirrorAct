@@ -13,7 +13,7 @@ import SwiftUI
 ///   cmd=frame path=<datei.png>               letztes Bild (ungerahmt) sichern
 ///   cmd=window path=<datei.png>              Screenshot mit Rahmen
 ///   cmd=guide|launcher|rail path=<datei.png>  Ansicht zeichnen
-///   cmd=showcase path=<ordner>               README-Bilder (Showcase) nur aus dieser Instanz
+///   cmd=showcase device=… path=<ordner>      README-Bilder (Showcase) aus genau diesem Fenster
 ///   device=<Seriennummer> wählt das Fenster (sonst das vorderste), pid=<Prozess> die Instanz
 @MainActor
 enum AndroidDebug {
@@ -33,8 +33,8 @@ enum AndroidDebug {
         func number(_ key: String) -> CGFloat { CGFloat(Double(info[key] ?? "") ?? 0) }
         // device=<Seriennummer>: dieses Fenster, sonst das vorderste
         let mirrors = NSApp.windows.compactMap { $0.windowController as? MirrorWindowController }
-        let session = info["device"].flatMap { id in mirrors.first { $0.session.id.hasSuffix(id) }?.session }
-            ?? model.keyMirror?.session
+        let chosen = info["device"].flatMap { id in mirrors.first { $0.session.id.hasSuffix(id) }?.session }
+        let session = chosen ?? model.keyMirror?.session
         switch info["cmd"] {
         case "open":
             guard let device = model.android.devices.first(where: { $0.serial == info["serial"] }) else {
@@ -75,8 +75,11 @@ enum AndroidDebug {
                 _ = FrameRenderer.writePNG(image, to: URL(fileURLWithPath: path))
             }
         case "showcase":
-            // wie die Showcase-Notification, aber nur in dieser Instanz
-            if let path = info["path"] { Showcase.export(to: URL(fileURLWithPath: path)) }
+            // wie die Showcase-Notification, aber nur in dieser Instanz und nur mit ausdrücklich gewähltem
+            // Gerät (sonst nähme es das vorderste Fenster – womöglich mit privaten Inhalten)
+            if let path = info["path"], let chosen {
+                Showcase.export(to: URL(fileURLWithPath: path), session: chosen)
+            }
         case "guide":
             render(ConnectGuide(platform: .android).background(Color(white: 0.14)), info["path"])
         case "launcher":
