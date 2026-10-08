@@ -77,7 +77,7 @@ To keep the permission, sign with your own certificate: copy `Config/Local.xccon
 
 - **Cable:** connect and unlock the device, confirm "Trust This Computer", then click it in the start window. On first use, macOS asks for camera access – that is how macOS provides the device screen.
 - **Wireless:** on the device, open Control Center → Screen Mirroring → "MirrorAct". The first time, enter the code shown in the start window. If "MirrorAct" does not appear, turn on AirPlay Receiver in macOS (General → AirDrop & Handoff).
-- **Android:** turn on USB debugging once (Settings → About phone → tap "Build number" seven times, then Settings → Developer options → USB debugging), connect the phone, tap "Allow" on the phone and click it in the start window. For Wi-Fi, right-click the phone in the start window → "Use Wi-Fi Instead of Cable", or pair it without a cable under Connect a Device → Android (Android 11 or later).
+- **Android:** turn on USB debugging once (Settings → About phone → tap "Build number" seven times, then Settings → Developer options → USB debugging), connect the phone, tap "Allow" on the phone and click it in the start window. For Wi-Fi, right-click the phone in the start window → "Use Wi-Fi Instead of Cable" and then unplug the cable – an open window continues over Wi-Fi – or pair it without a cable under Connect a Device → Android (Android 11 or later).
 - **Keyboard:** ⌘R record, ⌘S screenshot, ⇧⌘C copy screenshot, ⌘K style panel, ⌃⌘F present, ⌘T keep on top, ⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor.
 
 Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct.log`.
@@ -85,6 +85,8 @@ Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct
 ## Controlling an Android phone
 
 As soon as an Android phone is mirrored, the mirror window controls it:
+
+<p align="center"><img src="docs/android.jpg" width="800" alt="MirrorAct mirroring an Android phone, with Back, Home and Recent Apps in the tool rail"></p>
 
 - click: tap, drag: swipe (the finger follows the mouse live), ⌘-drag moves the window
 - trackpad or mouse wheel: scroll, middle click: Home

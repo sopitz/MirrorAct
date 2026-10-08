@@ -13,6 +13,7 @@ import SwiftUI
 ///   cmd=frame path=<datei.png>               letztes Bild (ungerahmt) sichern
 ///   cmd=window path=<datei.png>              Screenshot mit Rahmen
 ///   cmd=guide|launcher|rail path=<datei.png>  Ansicht zeichnen
+///   cmd=showcase path=<ordner>               README-Bilder (Showcase) nur aus dieser Instanz
 ///   device=<Seriennummer> wählt das Fenster (sonst das vorderste), pid=<Prozess> die Instanz
 @MainActor
 enum AndroidDebug {
@@ -73,6 +74,9 @@ enum AndroidDebug {
             if let path = info["path"], let image = session?.screenshotImage(withFrame: true) {
                 _ = FrameRenderer.writePNG(image, to: URL(fileURLWithPath: path))
             }
+        case "showcase":
+            // wie die Showcase-Notification, aber nur in dieser Instanz
+            if let path = info["path"] { Showcase.export(to: URL(fileURLWithPath: path)) }
         case "guide":
             render(ConnectGuide(platform: .android).background(Color(white: 0.14)), info["path"])
         case "launcher":

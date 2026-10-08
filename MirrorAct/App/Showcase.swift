@@ -28,9 +28,19 @@ enum Showcase {
         let model = live?.modelIdentifier ?? "iPhone14,2"
         let profile = live?.profile ?? DeviceProfile.forModelIdentifier(model)!
 
-        let session = MirrorSession(id: "showcase", kind: live?.kind ?? .cable, deviceName: "iPhone",
+        let session = MirrorSession(id: "showcase", kind: live?.kind ?? .cable,
+                                    deviceName: live?.kind == .android ? "Phone" : "iPhone",
                                     modelIdentifier: model, muted: false)
         session.state = .live
+        // Gerätetasten der Werkzeugleiste zeigen; danach gehört die Bedienung wieder der echten Sitzung
+        let liveControl = live?.control
+        session.control = liveControl
+        defer {
+            if let liveControl {
+                session.control = nil
+                live?.control = liveControl
+            }
+        }
 
         write(mirror(screen: screen, profile: profile, session: session), dir, "mirror.png")
         write(startWindow(), dir, "start-window.png")
