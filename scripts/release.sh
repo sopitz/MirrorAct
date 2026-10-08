@@ -46,10 +46,14 @@ mkdir -p $OUT
 # UxPlay immer neu konfigurieren, damit das Mindest-macOS stimmt
 scripts/bootstrap-uxplay.sh
 MIRRORACT_DERIVED=$OUT/DerivedData scripts/build.sh --no-install \
-  "CODE_SIGN_IDENTITY=$IDENTITY" DEVELOPMENT_TEAM=$TEAM OTHER_CODE_SIGN_FLAGS=--timestamp
+  "CODE_SIGN_IDENTITY=$IDENTITY" DEVELOPMENT_TEAM=$TEAM OTHER_CODE_SIGN_FLAGS=--timestamp \
+  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
 APP=$OUT/DerivedData/Build/Products/Release/MirrorAct.app
 codesign --verify --deep --strict $APP
-codesign -dv $APP 2>&1 | grep -q "flags=.*runtime" || { echo "Hardened Runtime fehlt"; exit 1; }
+[[ $(codesign -dv $APP 2>&1) == *flags=*runtime* ]] || { echo "Hardened Runtime fehlt"; exit 1; }
+# Apple notarisiert nichts mit Debug-Entitlement
+[[ $(codesign -d --entitlements - $APP 2>/dev/null) != *get-task-allow* ]] \
+  || { echo "get-task-allow gesetzt"; exit 1; }
 
 ZIP=$OUT/MirrorAct-$VERSION.zip
 ditto -c -k --keepParent $APP $ZIP
