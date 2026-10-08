@@ -171,6 +171,19 @@ The screenshots above are drawn by the app itself from its real views (debug bui
 `MirrorAct --showcase <folder>`, or while mirroring via the distributed notification
 `io.github.sopitz.MirrorAct.showcase`); the device screen is the live mirrored frame.
 
+## Branches
+
+MirrorAct uses git flow: `main` holds the latest release, `develop` the work for the next one.
+Pull requests go to `develop`.
+
+| Branch | Purpose |
+|---|---|
+| `main` | Released versions, each tagged `v<version>` |
+| `develop` | Next release, target for pull requests |
+| `feature/<topic>`, `chore/<topic>` | Branch off `develop`, merge back into `develop` |
+| `release/<version>` | Branches off `develop`, merges into `main` and `develop` |
+| `hotfix/<version>` | Branches off `main`, merges into `main` and `develop` |
+
 ## Privacy
 
 MirrorAct works locally. It does not send any data anywhere and has no telemetry. Network access

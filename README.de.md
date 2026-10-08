@@ -155,6 +155,19 @@ prüfen:
 ~/Applications/MirrorAct.app/Contents/MacOS/MirrorAct --render-test /tmp/mirroract-render
 ```
 
+## Branches
+
+MirrorAct arbeitet mit Git Flow: `main` enthält die letzte Veröffentlichung, `develop` die Arbeit
+für die nächste. Pull Requests gehen nach `develop`.
+
+| Branch | Zweck |
+|---|---|
+| `main` | Veröffentlichte Versionen, jede mit Tag `v<version>` |
+| `develop` | Nächste Veröffentlichung, Ziel für Pull Requests |
+| `feature/<thema>`, `chore/<thema>` | Zweigen von `develop` ab, kommen zurück nach `develop` |
+| `release/<version>` | Zweigt von `develop` ab, geht nach `main` und `develop` |
+| `hotfix/<version>` | Zweigt von `main` ab, geht nach `main` und `develop` |
+
 ## Datenschutz
 
 MirrorAct arbeitet lokal, sendet keine Daten und hat keine Telemetrie. Netzwerkzugriff gibt es nur
