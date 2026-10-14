@@ -21,7 +21,11 @@ struct MirrorActApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// läuft als Gastgeber der Tests (scripts/test.sh): kein Empfänger, kein USB, kein adb
+    static var isTesting: Bool { NSClassFromString("XCTestCase") != nil }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if Self.isTesting { return }
         if let index = CommandLine.arguments.firstIndex(of: "--render-test") {
             let dir = CommandLine.arguments.count > index + 1 ? CommandLine.arguments[index + 1] : NSTemporaryDirectory()
             RenderTest.run(into: URL(fileURLWithPath: dir))

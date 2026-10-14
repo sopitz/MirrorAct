@@ -3,18 +3,53 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    static let width: CGFloat = 500
+    /// Titel- und Symbolleiste des Fensters (gemessen 88 pt)
+    static let windowChrome: CGFloat = 90
+    private static let screenMargin: CGFloat = 20
+
+    /// Höhe, ab der eine Seite scrollt, damit das Fenster auf den Bildschirm passt
+    /// (MacBook Air 13": 1470 × 956)
+    static func maxPageHeight(visibleHeight: CGFloat) -> CGFloat {
+        max(300, visibleHeight - windowChrome - screenMargin)
+    }
+
     @AppStorage("settingsTab") private var tab = "general"
 
     var body: some View {
+        let maxHeight = Self.maxPageHeight(visibleHeight: NSScreen.main?.visibleFrame.height ?? 800)
         TabView(selection: $tab) {
             GeneralSettingsView()
+                .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag("general")
             DesignSettingsView()
+                .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("Style", systemImage: "paintpalette") }
                 .tag("design")
         }
-        .frame(width: 500)
+        .frame(width: Self.width)
+    }
+}
+
+extension View {
+    /// so hoch wie der Inhalt, höchstens maxHeight; darüber scrollt das Formular
+    func settingsPage(maxHeight: CGFloat) -> some View {
+        SettingsPageLayout(maxHeight: maxHeight) { self }
+    }
+}
+
+private struct SettingsPageLayout: Layout {
+    let maxHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let page = subviews.first else { return .zero }
+        let ideal = page.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: ideal.width, height: min(ideal.height, maxHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }
 
@@ -124,7 +159,6 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -148,7 +182,6 @@ struct DesignSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

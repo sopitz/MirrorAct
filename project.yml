@@ -11,8 +11,8 @@ settings:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     MACOSX_DEPLOYMENT_TARGET: "15.0"
-    MARKETING_VERSION: "0.2.1"
-    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "0.2.2"
+    CURRENT_PROJECT_VERSION: "4"
     SWIFT_EMIT_LOC_STRINGS: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 
@@ -27,6 +27,9 @@ targets:
     configFiles:
       Debug: Config/Base.xcconfig
       Release: Config/Base.xcconfig
+    scheme:
+      testTargets:
+        - MirrorActTests
     sources:
       - path: MirrorAct
         excludes:
@@ -91,3 +94,21 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CLANG_WARN_DOCUMENTATION_COMMENTS: NO
         GCC_WARN_UNUSED_FUNCTION: NO
+
+  # Tests laufen in der App (scripts/test.sh)
+  MirrorActTests:
+    type: bundle.unit-test
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: MirrorActTests
+    dependencies:
+      - target: MirrorAct
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.sopitz.MirrorActTests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/MirrorAct.app/Contents/MacOS/MirrorAct
+        BUNDLE_LOADER: $(TEST_HOST)
+        GENERATE_INFOPLIST_FILE: YES
