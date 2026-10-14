@@ -58,9 +58,9 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Intents` | App Intents for Shortcuts |
 | `MirrorAct/Launcher` | start window, settings |
 | `MirrorAct/Localization` | String Catalogs (English source, German translation), Info.plist and Siri phrases |
-| `Shared` | `DeviceProfiles.json` – the device shapes (notch, Dynamic Island, corners, points, ppi) for all MirrorAct apps; bundled as a resource (command-line builds and tests can point `MIRRORACT_DEVICE_PROFILES` at it), the Windows app reads the same file |
+| `Shared` | `DeviceProfiles.json` – the device shapes (notch, Dynamic Island, corners, points, ppi) for all MirrorAct apps; bundled into the app as a resource; Swift tools compiled outside the app (e.g. with swiftc) can point `MIRRORACT_DEVICE_PROFILES` at it; the Windows app reads the same file. `scripts/build.sh` checks it as strict JSON (no trailing commas), and the app stops at launch on unknown keys or inconsistent entries. A name in it that needs a translation gets a manual entry in `MirrorAct/Localization/Localizable.xcstrings`, because the compiler cannot extract it |
 | `Agent` | MirrorAct's additional commands for WebDriverAgent (fast touches), compiled in by `scripts/build-agent.sh` |
-| `scripts` | build, agent, release and icon scripts |
+| `scripts` | build, agent, release, icon and device profile check scripts |
 
 ## Test without a device
 
@@ -72,6 +72,10 @@ Without a device you can check the rendering:
 
 This writes frames, styles, duo poses and UI parts as PNG files, records two short test videos
 (with rotation and with AAC-ELD audio as sent over AirPlay) and frames one of them like the editor.
+
+After changing `Shared/DeviceProfiles.json`, `scripts/test-device-profiles.sh` checks that the
+table is valid and that broken entries (misspelled keys, wrong pixel sizes, unknown cutouts) are
+rejected with a clear message.
 
 ## Screenshots
 

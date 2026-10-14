@@ -58,9 +58,9 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
 | `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche Übersetzung), Info.plist und Siri-Phrasen |
-| `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Ecken, Punkte, ppi) für alle MirrorAct-Apps; als Ressource gebündelt (Kommandozeilen-Builds und Tests können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen), die Windows-App liest dieselbe Datei |
+| `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Ecken, Punkte, ppi) für alle MirrorAct-Apps; als Ressource in die App gebündelt; ausserhalb der App kompilierte Swift-Werkzeuge (z. B. mit swiftc) können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen; die Windows-App liest dieselbe Datei. `scripts/build.sh` prüft sie als striktes JSON (keine Kommas am Ende), und die App bricht beim Start bei unbekannten Schlüsseln oder widersprüchlichen Einträgen ab. Ein Name darin, der eine Übersetzung braucht, bekommt einen manuellen Eintrag in `MirrorAct/Localization/Localizable.xcstrings`, weil der Compiler ihn nicht extrahieren kann |
 | `Agent` | MirrorActs Zusatzbefehle für WebDriverAgent (schnelle Berührungen), von `scripts/build-agent.sh` mitkompiliert |
-| `scripts` | Skripte für Build, Agent, Release und Symbol |
+| `scripts` | Skripte für Build, Agent, Release, Symbol und die Prüfung der Geräteprofile |
 
 ## Ohne Gerät testen
 
@@ -73,6 +73,10 @@ Ohne Gerät lässt sich die Darstellung prüfen:
 Das schreibt Rahmen, Stile, Duo-Posen und Teile der Oberfläche als PNG, nimmt zwei kurze
 Testvideos auf (mit Drehung und mit AAC-ELD-Ton wie über AirPlay) und rahmt eines davon wie der
 Editor.
+
+Nach Änderungen an `Shared/DeviceProfiles.json` prüft `scripts/test-device-profiles.sh`, ob die
+Tabelle gültig ist und ob fehlerhafte Einträge (vertippte Schlüssel, falsche Pixelgrössen,
+unbekannte Aussparungen) mit einer klaren Meldung abgelehnt werden.
 
 ## Screenshots
 

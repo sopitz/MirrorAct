@@ -1,5 +1,5 @@
 {
-  "comment": "Device shapes shared by all MirrorAct apps (macOS: MirrorAct/Frame/DeviceProfile.swift, Windows: MirrorAct.Core/Devices). Ratios are relative to the screen width in portrait. 'points' is the screen in iOS points (portrait), 'pixels' the physical pixel width (default: points.width × 3 for phones with a notch or island, × 2 for home-button phones and iPads), 'ppi' the pixel density. Names are English and localized by the apps.",
+  "comment": "Device shapes shared by all MirrorAct apps (macOS: MirrorAct/Frame/DeviceProfile.swift, Windows: Windows/src/MirrorAct.Core/Frame/DeviceProfiles.cs). Ratios are relative to the screen width in portrait. Cutout types: 'notch' (width, height), 'island' (width, height, top), 'hole' (centerX, centerY, diameter). 'points' is the screen in iOS points (portrait), 'pixels' the physical pixel width of an iPhone (default: points.width × 3 with a notch or island, × 2 with a home button; iPads always use points.width × 2 and take no 'pixels'), 'ppi' the pixel density. Unknown keys are errors. Names are English and localized by the apps; a name that needs a translation gets a manual entry in Localizable.xcstrings.",
   "version": 1,
   "cutouts": {
     "notch13": { "type": "notch", "width": 0.415, "height": 0.085 },

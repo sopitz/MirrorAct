@@ -23,12 +23,15 @@ for arg in "$@"; do
   esac
 done
 
-for tool in xcodegen xcodebuild cmake brew; do
+for tool in xcodegen xcodebuild cmake brew python3; do
   command -v $tool > /dev/null || { echo "Fehlt: $tool (siehe CONTRIBUTING.md)"; exit 1; }
 done
 BREW_PREFIX=$(brew --prefix)
 DERIVED=${MIRRORACT_DERIVED:-$HOME/Library/Caches/MirrorAct/DerivedData}
 APP_DEST=$HOME/Applications/MirrorAct.app
+
+# die Mac-App liest auch fehlerhaftes JSON, die Windows-App nicht
+$ROOT/scripts/check-device-profiles.sh
 
 [[ -f $ROOT/Vendor/uxplay-build/lib/libairplay.a ]] || $ROOT/scripts/bootstrap-uxplay.sh
 $ROOT/scripts/bootstrap-scrcpy.sh
