@@ -58,7 +58,7 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Intents` | App Intents for Shortcuts |
 | `MirrorAct/Launcher` | start window, settings |
 | `MirrorAct/Localization` | String Catalogs (English source, German translation), Info.plist and Siri phrases |
-| `Shared` | `DeviceProfiles.json` – the device shapes (notch, Dynamic Island, corners, points, ppi) for all MirrorAct apps; bundled into the app as a resource; Swift tools compiled outside the app (e.g. with swiftc) can point `MIRRORACT_DEVICE_PROFILES` at it; the Windows app reads the same file. `scripts/build.sh` checks it as strict JSON (no trailing commas), and the app stops at launch on unknown keys or inconsistent entries. A name in it that needs a translation gets a manual entry in `MirrorAct/Localization/Localizable.xcstrings`, because the compiler cannot extract it |
+| `Shared` | `DeviceProfiles.json` – the device shapes (notch, Dynamic Island, corners, points, ppi) for all MirrorAct apps; bundled into the app as a resource; Swift tools compiled outside the app (e.g. with swiftc) can point `MIRRORACT_DEVICE_PROFILES` at it; other MirrorAct apps read the same file. `scripts/build.sh` checks it as strict JSON (no trailing commas), and the app stops at launch on unknown keys or inconsistent entries. A name in it that needs a translation gets a manual entry in `MirrorAct/Localization/Localizable.xcstrings`, because the compiler cannot extract it |
 | `Agent` | MirrorAct's additional commands for WebDriverAgent (fast touches), compiled in by `scripts/build-agent.sh` |
 | `MirrorActTests` | tests, run inside a debug build of the app (`scripts/test.sh`) |
 | `scripts` | build, test, agent, release, icon and device profile check scripts |

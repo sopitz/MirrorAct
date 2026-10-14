@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Checks Shared/DeviceProfiles.json as strict JSON (RFC 8259).
-# Foundation also reads trailing commas, NaN and duplicate keys; the Windows app
-# (System.Text.Json) does not. So the file has to pass a stricter check here than in the Mac app.
+# Foundation also reads trailing commas, NaN and duplicate keys; strict RFC 8259 parsers
+# do not. So the file has to pass a stricter check here than in the Mac app.
 #   scripts/check-device-profiles.sh [FILE]
 set -euo pipefail
 

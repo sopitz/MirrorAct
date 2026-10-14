@@ -50,7 +50,7 @@ variant("cutout-unknown-type", "cutout blob1 has the unknown type blob", lambda 
 variant("hole-missing-value", "cutout hole1 has type hole with missing values: diameter",
         lambda t: t["cutouts"].update(hole1={"type": "hole", "centerX": 0.5, "centerY": 0.04}))
 
-# valid: a camera hole, as the Windows app also knows it
+# valid: a camera hole, as the Android profiles use it
 def hole(t):
     t["cutouts"]["hole1"] = {"type": "hole", "centerX": 0.5, "centerY": 0.04, "diameter": 0.03}
     t["models"]["iPhone14,2"]["cutout"] = "hole1"

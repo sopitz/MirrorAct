@@ -30,7 +30,7 @@ BREW_PREFIX=$(brew --prefix)
 DERIVED=${MIRRORACT_DERIVED:-$HOME/Library/Caches/MirrorAct/DerivedData}
 APP_DEST=$HOME/Applications/MirrorAct.app
 
-# the Mac app also reads malformed JSON, the Windows app does not
+# Foundation also reads malformed JSON; stricter parsers do not
 $ROOT/scripts/check-device-profiles.sh
 
 [[ -f $ROOT/Vendor/uxplay-build/lib/libairplay.a ]] || $ROOT/scripts/bootstrap-uxplay.sh
