@@ -2,16 +2,16 @@
 import CoreGraphics
 import Foundation
 
-/// Inhalt von `Shared/DeviceProfiles.json`: die Gerätetabellen, die alle MirrorAct-Apps teilen.
-/// Nur Daten; die Profile daraus baut `DeviceProfile`.
+/// Contents of `Shared/DeviceProfiles.json`: the device tables shared by all MirrorAct apps.
+/// Data only; `DeviceProfile` builds the profiles from it.
 struct DeviceProfileTable: Decodable {
-    /// Aussparung oben im Bildschirm, benannt (z. B. "notch13", "island", ein Kameraloch "hole")
+    /// Cutout at the top of the screen, by name (e.g. "notch13", "island", a camera hole "hole")
     struct CutoutSpec: Decodable {
         var type: String
         var width: CGFloat?
         var height: CGFloat?
         var top: CGFloat?
-        /// nur "hole": Mittelpunkt von links/oben und Durchmesser
+        /// "hole" only: center from left/top and diameter
         var centerX: CGFloat?
         var centerY: CGFloat?
         var diameter: CGFloat?
@@ -43,7 +43,7 @@ struct DeviceProfileTable: Decodable {
             }
         }
 
-        /// Beschreibung des ersten Fehlers, nil wenn die Angaben zum Typ passen
+        /// Description of the first error, nil if the values match the type
         var problem: String? {
             let required: [(String, CGFloat?)]
             switch type {
@@ -60,18 +60,18 @@ struct DeviceProfileTable: Decodable {
         }
     }
 
-    /// Ein iPhone oder iPad in `models` oder `byPixels`
+    /// An iPhone or iPad in `models` or `byPixels`
     struct Entry: Decodable {
         var family: DeviceProfile.Family = .iPhone
         var name: String?
         var homeButton = false
         var cutout: String?
         var corner: CGFloat = 0
-        /// Bildschirm in Punkten (Hochformat); fehlt er, ergibt er sich aus Pixeln / `scale`
+        /// Screen in points (portrait); if missing, it follows from pixels / `scale`
         var points: [CGFloat]?
         var scale: CGFloat?
-        /// physische Pixelbreite, falls nicht Punkte × 3 (Notch/Island) bzw. × 2 (Home-Button);
-        /// nur für iPhones, iPads rechnen immer Punkte × 2
+        /// physical pixel width, if not points × 3 (notch/island) or × 2 (Home button);
+        /// iPhones only, iPads always use points × 2
         var pixels: CGFloat?
         var ppi: CGFloat?
 
@@ -80,7 +80,7 @@ struct DeviceProfileTable: Decodable {
         }
 
         init(from decoder: Decoder) throws {
-            // ein vertippter Schlüssel fiele sonst still auf den Standardwert zurück
+            // a mistyped key would otherwise silently fall back to the default value
             try rejectUnknownKeys(in: decoder, allowed: CodingKeys.allCases.map(\.stringValue))
             let c = try decoder.container(keyedBy: CodingKeys.self)
             if let family = try c.decodeIfPresent(String.self, forKey: .family) {
@@ -102,7 +102,7 @@ struct DeviceProfileTable: Decodable {
         }
     }
 
-    /// Unbekannte Kennungen und Standardwerte
+    /// Unknown identifiers and default values
     struct Fallbacks: Decodable {
         var islandFromMajor: Int
         var islandCorner: CGFloat
@@ -112,7 +112,7 @@ struct DeviceProfileTable: Decodable {
         var defaultPadPpi: CGFloat
     }
 
-    /// Letzter Ausweg über das Seitenverhältnis (lange Seite / kurze Seite)
+    /// Last resort via the aspect ratio (long side / short side)
     struct ByAspect: Decodable {
         var padHomeBelow: CGFloat
         var padBelow: CGFloat
@@ -120,7 +120,7 @@ struct DeviceProfileTable: Decodable {
         var islandCorner: CGFloat
     }
 
-    /// Vorgaben für Android-Geräte
+    /// Defaults for Android devices
     struct Android: Decodable {
         struct Hole: Decodable {
             var centerX: CGFloat
@@ -131,7 +131,7 @@ struct DeviceProfileTable: Decodable {
         var corner: CGFloat
     }
 
-    /// Modellauswahl im Editor
+    /// Model selection in the editor
     struct Selectable: Decodable {
         struct Pad: Decodable {
             var id: String
@@ -143,7 +143,7 @@ struct DeviceProfileTable: Decodable {
         var pads: [Pad]
     }
 
-    /// Wörterbuch mit Einträgen, in dem ein "comment"-Schlüssel erlaubt ist
+    /// Dictionary of entries in which a "comment" key is allowed
     struct Entries<Value: Decodable>: Decodable {
         var entries: [String: Value] = [:]
 
@@ -168,7 +168,7 @@ struct DeviceProfileTable: Decodable {
     var android: Android
     var selectable: Selectable
 
-    /// Beschreibung des ersten inhaltlichen Fehlers, nil wenn die Tabelle stimmig ist
+    /// Description of the first content error, nil if the table is consistent
     var problem: String? {
         if version != Self.supportedVersion {
             return "version \(version) is not supported (expected \(Self.supportedVersion))"
@@ -198,7 +198,7 @@ struct DeviceProfileTable: Decodable {
         return nil
     }
 
-    /// "1170x2532" → (1170, 2532), so wie `DeviceProfile.forScreenPixels` den Schlüssel bildet
+    /// "1170x2532" → (1170, 2532), the way `DeviceProfile.forScreenPixels` builds the key
     static func pixelKey(_ key: String) -> (width: Int, height: Int)? {
         let parts = key.split(separator: "x", omittingEmptySubsequences: false)
         guard parts.count == 2, let w = Int(parts[0]), let h = Int(parts[1]),
@@ -208,7 +208,7 @@ struct DeviceProfileTable: Decodable {
 }
 
 extension DeviceProfileTable.Entry {
-    /// Fehler eines einzelnen Eintrags, nil wenn er stimmig ist
+    /// Error of a single entry, nil if it is consistent
     func problem(in table: DeviceProfileTable) -> String? {
         if let cutout, table.cutouts[cutout] == nil {
             return "refers to the unknown cutout \(cutout)"
@@ -237,7 +237,7 @@ extension DeviceProfileTable.Entry {
     }
 }
 
-/// Beliebiger Schlüssel eines JSON-Objekts
+/// Any key of a JSON object
 private struct AnyKey: CodingKey {
     var stringValue: String
     var intValue: Int? { nil }
@@ -245,7 +245,7 @@ private struct AnyKey: CodingKey {
     init?(intValue: Int) { nil }
 }
 
-/// Wirft bei Schlüsseln ausserhalb von `allowed`, damit Tippfehler in der Tabelle auffallen
+/// Throws for keys outside `allowed`, so typos in the table get noticed
 private func rejectUnknownKeys(in decoder: Decoder, allowed: [String]) throws {
     let c = try decoder.container(keyedBy: AnyKey.self)
     for key in c.allKeys where !allowed.contains(key.stringValue) {

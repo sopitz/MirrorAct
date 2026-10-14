@@ -1,9 +1,9 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Prüft das Laden von Shared/DeviceProfiles.json: Die echte Tabelle muss durchgehen, absichtlich
-# verdorbene Kopien müssen mit der passenden Meldung scheitern (Syntax über
-# check-device-profiles.sh, Inhalt über DeviceProfile.swift, mit swiftc ausserhalb der App gebaut).
+# Tests loading Shared/DeviceProfiles.json: the real table must pass, deliberately
+# broken copies must fail with the matching message (syntax via
+# check-device-profiles.sh, content via DeviceProfile.swift, built with swiftc outside the app).
 #   scripts/test-device-profiles.sh
 set -euo pipefail
 
@@ -11,7 +11,7 @@ ROOT=${0:A:h:h}
 WORK=$(mktemp -d)
 trap 'rm -rf $WORK' EXIT
 
-# Probe ohne DeviceProfiles.json neben dem Programm, damit MIRRORACT_DEVICE_PROFILES gilt
+# Probe without DeviceProfiles.json next to the binary, so MIRRORACT_DEVICE_PROFILES applies
 mkdir -p $WORK/bin $WORK/cases
 cat > $WORK/main.swift <<'SWIFT'
 import Foundation
@@ -22,7 +22,7 @@ SWIFT
 swiftc -o $WORK/bin/probe $WORK/main.swift \
   $ROOT/MirrorAct/Frame/DeviceProfile.swift $ROOT/MirrorAct/Frame/DeviceProfileTable.swift
 
-# Kopien der Tabelle, jeweils mit einem Fehler; Name → erwartete Meldung
+# Copies of the table, each with one error; name → expected message
 /usr/bin/env python3 -I - $ROOT/Shared/DeviceProfiles.json $WORK/cases <<'PY'
 import json, sys
 source, out = sys.argv[1], sys.argv[2]
@@ -50,13 +50,13 @@ variant("cutout-unknown-type", "cutout blob1 has the unknown type blob", lambda 
 variant("hole-missing-value", "cutout hole1 has type hole with missing values: diameter",
         lambda t: t["cutouts"].update(hole1={"type": "hole", "centerX": 0.5, "centerY": 0.04}))
 
-# gültig: ein Kameraloch, wie es die Windows-App auch kennt
+# valid: a camera hole, as the Windows app also knows it
 def hole(t):
     t["cutouts"]["hole1"] = {"type": "hole", "centerX": 0.5, "centerY": 0.04, "diameter": 0.03}
     t["models"]["iPhone14,2"]["cutout"] = "hole1"
 variant("hole-valid", "", hole)
 
-# Komma am Ende: Foundation liest das, System.Text.Json nicht
+# Trailing comma: Foundation reads it, System.Text.Json does not
 trailing = text.replace('"corner": 0.085\n', '"corner": 0.085,\n', 1)
 assert trailing != text
 open(f"{out}/trailing-comma.json", "w", encoding="utf-8").write(trailing)
@@ -65,7 +65,7 @@ PY
 failures=0
 fail() { echo "FAIL: $1"; failures=$((failures + 1)) }
 
-# echte Tabelle
+# real table
 $ROOT/scripts/check-device-profiles.sh || fail "check-device-profiles.sh rejects Shared/DeviceProfiles.json"
 out=$(MIRRORACT_DEVICE_PROFILES=$ROOT/Shared/DeviceProfiles.json $WORK/bin/probe 2>&1) \
   && [[ $out == "iPhone 13 Pro notch(width: 0.415, height: 0.085) corner=0.121" ]] \
@@ -76,7 +76,7 @@ if $ROOT/scripts/check-device-profiles.sh $WORK/cases/trailing-comma.json 2> /de
   fail "trailing-comma: check-device-profiles.sh accepts a trailing comma"
 fi
 
-# Inhalt
+# Content
 for json in $WORK/cases/*.json; do
   name=${json:t:r}
   [[ $name == trailing-comma || $name == hole-valid ]] && continue

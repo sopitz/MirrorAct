@@ -4,7 +4,7 @@ import Foundation
 
 /// Aussehen eines Geräts: Bildschirmecken, Notch/Dynamic Island/Kameraloch, Home-Button.
 /// Alle Verhältnisse beziehen sich auf die Bildschirmbreite im Hochformat.
-/// Die Tabellen dazu stehen in `Shared/DeviceProfiles.json`, gemeinsam mit den anderen MirrorAct-Apps.
+/// The tables for this live in `Shared/DeviceProfiles.json`, shared with the other MirrorAct apps.
 struct DeviceProfile: Equatable {
     enum Family: Equatable { case iPhone, iPad, android }
 
@@ -42,10 +42,10 @@ struct DeviceProfile: Equatable {
         }
     }
 
-    // MARK: Gemeinsame Tabelle
+    // MARK: Shared table
 
-    /// Inhalt von `Shared/DeviceProfiles.json`, einmal dekodiert. Ohne die Tabelle kann die App
-    /// nicht arbeiten, darum bricht ein Fehler beim Laden hart ab.
+    /// Contents of `Shared/DeviceProfiles.json`, decoded once. The app cannot work without the
+    /// table, so an error while loading aborts hard.
     private static let table: DeviceProfileTable = {
         let url: URL
         if let bundled = Bundle.main.url(forResource: "DeviceProfiles", withExtension: "json") {
@@ -68,7 +68,7 @@ struct DeviceProfile: Equatable {
     }()
 
     private static func cutout(_ name: String) -> Cutout {
-        // Vorhandensein wurde beim Laden geprüft
+        // Presence was checked while loading
         table.cutouts[name]!.cutout
     }
 
@@ -96,9 +96,9 @@ struct DeviceProfile: Equatable {
                       ppi: ppi ?? table.fallbacks.defaultPadPpi)
     }
 
-    /// Tabelleneintrag → Profil; `pixels` ist die Bildschirmgrösse für Einträge mit `scale` statt `points`
+    /// Table entry → profile; `pixels` is the screen size for entries with `scale` instead of `points`
     private static func profile(_ entry: DeviceProfileTable.Entry, pixels: (width: Int, height: Int)? = nil) -> DeviceProfile {
-        // Namen stehen englisch in der Tabelle; der String Catalog übersetzt die, die er kennt
+        // Names are in English in the table; the String Catalog translates the ones it knows
         let name = entry.name.map { String(localized: String.LocalizationValue($0)) }
         var points = entry.points.map { CGSize(width: $0[0], height: $0[1]) }
         if points == nil, let scale = entry.scale, let pixels {
@@ -152,7 +152,7 @@ struct DeviceProfile: Equatable {
         if identifier.hasPrefix("iPad") {
             return pad(nil, homeButton: false, corner: fallbacks.iPadCorner, points: nil)
         }
-        // neuere, hier nicht aufgeführte iPhones haben eine Dynamic Island
+        // newer iPhones not listed here have a Dynamic Island
         if identifier.hasPrefix("iPhone"),
            let major = Int(identifier.dropFirst(6).split(separator: ",").first ?? ""), major >= fallbacks.islandFromMajor {
             return phone(nil, cutout("island"), corner: fallbacks.islandCorner, points: nil)
