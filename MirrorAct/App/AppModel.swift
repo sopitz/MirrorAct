@@ -32,8 +32,12 @@ final class AppModel: ObservableObject {
     private weak var wirelessSession: MirrorSession?
     private var cancellables: Set<AnyCancellable> = []
 
-    var keyMirror: MirrorWindowController? {
-        controllers.values.first { $0.window?.isKeyWindow == true } ?? controllers.values.first
+    var keyMirror: MirrorWindowController? { Self.keyMirror(among: Array(controllers.values)) }
+
+    /// das präsentierte Spiegelfenster, sonst das aktive, sonst irgendeins
+    static func keyMirror(among controllers: [MirrorWindowController]) -> MirrorWindowController? {
+        controllers.first { $0.isPresenting } ?? controllers.first { $0.window?.isKeyWindow == true }
+            ?? controllers.first
     }
 
     func isMirroring(cableDevice id: String) -> Bool { openSessionIDs.contains("usb:\(id)") }

@@ -26,7 +26,8 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     private var zoom: CGFloat = 1
     private var placed = false
     private var resizeStartZoom: CGFloat = 1
-    private var presentation: PresentationWindow?
+    private(set) var presentation: PresentationWindow?
+    var isPresenting: Bool { presentation != nil }
     private var hideTask: Task<Void, Never>?
     private(set) var actions: MirrorActions!
 
@@ -164,7 +165,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Kontextmenü
 
-    private func contextMenu() -> NSMenu {
+    func contextMenu() -> NSMenu {
         let menu = NSMenu()
         let a = actions!
         menu.addItem(ActionMenuItem(session.isRecording ? String(localized: "Stop Recording") : String(localized: "Start Recording"), key: "r", a.toggleRecording))
@@ -198,7 +199,8 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         menu.addItem(ActionMenuItem(String(localized: "Keep on Top"), key: "t", state: settings.alwaysOnTop) { [weak self] in
             self?.settings.alwaysOnTop.toggle()
         })
-        menu.addItem(ActionMenuItem(String(localized: "Present"), a.present))
+        menu.addItem(ActionMenuItem(presentation == nil ? String(localized: "Present")
+                                                        : String(localized: "Exit Presentation"), a.present))
         menu.addItem(.separator())
 
         let size = NSMenu()
@@ -371,13 +373,14 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         presentation.onExit = { [weak self] in self?.exitPresentation(reshow: true) }
         self.presentation = presentation
         frameView.removeFromSuperview()
-        presentation.content.addSubview(frameView)
+        presentation.embed(frameView)
         presentation.content.frame = CGRect(origin: .zero, size: screen.frame.size)
         presentation.content.setBackground(style: settings.style, scale: screen.backingScaleFactor)
         window?.orderOut(nil)
         presentation.makeKeyAndOrderFront(nil)
         if frameView.acceptsFirstResponder { presentation.makeFirstResponder(frameView) }
-        NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+        // Menüleiste erscheint, wenn die Maus an den oberen Rand fährt
+        NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]
         NSCursor.setHiddenUntilMouseMoves(true)
         layoutPresentation()
     }

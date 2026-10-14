@@ -59,7 +59,8 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Launcher` | start window, settings |
 | `MirrorAct/Localization` | String Catalogs (English source, German translation), Info.plist and Siri phrases |
 | `Agent` | MirrorAct's additional commands for WebDriverAgent (fast touches), compiled in by `scripts/build-agent.sh` |
-| `scripts` | build, agent, release and icon scripts |
+| `MirrorActTests` | tests, run inside a debug build of the app (`scripts/test.sh`) |
+| `scripts` | build, test, agent, release and icon scripts |
 
 ## Test without a device
 
@@ -71,6 +72,16 @@ Without a device you can check the rendering:
 
 This writes frames, styles, duo poses and UI parts as PNG files, records two short test videos
 (with rotation and with AAC-ELD audio as sent over AirPlay) and frames one of them like the editor.
+
+## Tests
+
+```bash
+scripts/test.sh
+```
+
+Runs `MirrorActTests` in a debug build of the app; `scripts/test.sh PresentationTests` runs a single
+class. The app starts without the AirPlay receiver, USB and adb. The tests briefly open real windows,
+including the full-screen presentation.
 
 ## Screenshots
 
