@@ -3,7 +3,7 @@ import AppKit
 import AVKit
 import SwiftUI
 
-/// Editor für Screenshots (auch Duo) und Bildschirmaufnahmen
+/// Editor for screenshots (including duo) and screen recordings
 struct EditorView: View {
     @ObservedObject var document: EditorDocument
     @State private var trimRequest = 0
@@ -19,7 +19,7 @@ struct EditorView: View {
         .frame(minHeight: 620)
     }
 
-    // MARK: Vorschau
+    // MARK: Preview
 
     @ViewBuilder
     private var previewArea: some View {
@@ -87,7 +87,7 @@ struct EditorView: View {
         return provider
     }
 
-    // MARK: Seitenleiste
+    // MARK: Sidebar
 
     private var sidebar: some View {
         Form {
@@ -135,7 +135,7 @@ struct EditorView: View {
     }
 }
 
-/// AVPlayerView mit eingebauter Kürzen-Funktion
+/// AVPlayerView with built-in trimming
 struct PlayerView: NSViewRepresentable {
     let player: AVPlayer
     let trimRequest: Int
@@ -159,7 +159,7 @@ struct PlayerView: NSViewRepresentable {
     }
 }
 
-/// Teilen-Menü von macOS (exportiert vorher in eine temporäre Datei)
+/// macOS share menu (exports to a temporary file first)
 struct ShareButton: NSViewRepresentable {
     let document: EditorDocument
 
@@ -190,7 +190,7 @@ struct ShareButton: NSViewRepresentable {
     }
 }
 
-/// Fenster für einen Editor
+/// Window for an editor
 @MainActor
 final class EditorWindowController: NSWindowController, NSWindowDelegate {
     let editorDocument: EditorDocument

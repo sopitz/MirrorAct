@@ -3,18 +3,18 @@
 import AppKit
 import SwiftUI
 
-/// Test der Android-Spiegelung ohne Klicken (nur Debug-Builds), über die
-/// DistributedNotification "io.github.sopitz.MirrorAct.android-test" mit userInfo:
-///   cmd=open serial=<adb-Seriennummer>       Fenster öffnen
-///   cmd=wifi serial=…  ·  cmd=devices          auf WLAN umstellen · Geräteliste ins Log
+/// Tests Android mirroring without clicking (debug builds only), via the
+/// DistributedNotification "io.github.sopitz.MirrorAct.android-test" with userInfo:
+///   cmd=open serial=<adb-serial>             open window
+///   cmd=wifi serial=…  ·  cmd=devices          switch to Wi-Fi · device list to log
 ///   cmd=touch phase=began|moved|ended x=0…1 y=0…1
 ///   cmd=scroll x y dy [precise=1]
 ///   cmd=text text=…  ·  cmd=press button=back|home|recents|…
-///   cmd=frame path=<datei.png>               letztes Bild (ungerahmt) sichern
-///   cmd=window path=<datei.png>              Screenshot mit Rahmen
-///   cmd=guide|launcher|rail path=<datei.png>  Ansicht zeichnen
-///   cmd=showcase device=… path=<ordner>      README-Bilder (Showcase) aus genau diesem Fenster
-///   device=<Seriennummer> wählt das Fenster (sonst das vorderste), pid=<Prozess> die Instanz
+///   cmd=frame path=<file.png>                save latest image (without frame)
+///   cmd=window path=<file.png>               screenshot with frame
+///   cmd=guide|launcher|rail path=<file.png>  render view
+///   cmd=showcase device=… path=<folder>      README images (showcase) from exactly this window
+///   device=<serial> selects the window (otherwise the frontmost), pid=<process> the instance
 @MainActor
 enum AndroidDebug {
     static let notification = Notification.Name("io.github.sopitz.MirrorAct.android-test")
@@ -27,11 +27,11 @@ enum AndroidDebug {
     }
 
     private static func handle(_ info: [String: String]) {
-        // pid=<Prozess>: nur diese Instanz (es können mehrere MirrorAct laufen)
+        // pid=<process>: only this instance (several MirrorAct instances can run)
         if let pid = info["pid"], pid != String(ProcessInfo.processInfo.processIdentifier) { return }
         let model = AppModel.shared
         func number(_ key: String) -> CGFloat { CGFloat(Double(info[key] ?? "") ?? 0) }
-        // device=<Seriennummer>: dieses Fenster, sonst das vorderste
+        // device=<serial>: this window, otherwise the frontmost
         let mirrors = NSApp.windows.compactMap { $0.windowController as? MirrorWindowController }
         let chosen = info["device"].flatMap { id in mirrors.first { $0.session.id.hasSuffix(id) }?.session }
         let session = chosen ?? model.keyMirror?.session
@@ -75,8 +75,8 @@ enum AndroidDebug {
                 _ = FrameRenderer.writePNG(image, to: URL(fileURLWithPath: path))
             }
         case "showcase":
-            // wie die Showcase-Notification, aber nur in dieser Instanz und nur mit ausdrücklich gewähltem
-            // Gerät (sonst nähme es das vorderste Fenster – womöglich mit privaten Inhalten)
+            // like the showcase notification, but only in this instance and only with an explicitly chosen
+            // device (otherwise it would take the frontmost window – possibly with private content)
             if let path = info["path"], let chosen {
                 Showcase.export(to: URL(fileURLWithPath: path), session: chosen)
             }

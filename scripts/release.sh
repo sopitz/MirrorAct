@@ -1,11 +1,11 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Builds MirrorAct for distribution: signed with a Developer ID, notarized by Apple, as a ZIP for
+# Builds MirrorAct for distribution: signed with Developer ID, notarized by Apple, as a ZIP for
 # the GitHub release and the Homebrew cask (sopitz/homebrew-tap).
-#   scripts/release.sh             build, notarize, ZIP into build/release/
-#   scripts/release.sh --publish   additionally create GitHub release v<version> and update the cask
-# Needed once: the «Developer ID Application» certificate in the keychain and a
+#   scripts/release.sh             build, notarize, ZIP to build/release/
+#   scripts/release.sh --publish   also create GitHub release v<version> and update the cask
+# Needed once: the "Developer ID Application" certificate in the keychain and a
 # notarytool profile (name in NOTARY_PROFILE, default mirroract-notary):
 #   xcrun notarytool store-credentials mirroract-notary --apple-id <Apple-ID> --team-id <Team>
 # With --publish the working copy must be clean and HEAD must carry the tag v<version>.
@@ -51,7 +51,7 @@ MIRRORACT_DERIVED=$OUT/DerivedData scripts/build.sh --no-install \
 APP=$OUT/DerivedData/Build/Products/Release/MirrorAct.app
 codesign --verify --deep --strict $APP
 [[ $(codesign -dv $APP 2>&1) == *flags=*runtime* ]] || { echo "Hardened Runtime fehlt"; exit 1; }
-# Apple notarizes nothing with the debug entitlement
+# Apple does not notarize anything with the debug entitlement
 [[ $(codesign -d --entitlements - $APP 2>/dev/null) != *get-task-allow* ]] \
   || { echo "get-task-allow gesetzt"; exit 1; }
 
@@ -66,7 +66,7 @@ if [[ $(jq -r .status <<< $RESULT) != Accepted ]]; then
 fi
 xcrun stapler staple -q $APP
 spctl --assess --type execute $APP
-# pack again so the ticket is inside the ZIP
+# zip again so the ticket is inside the ZIP
 rm $ZIP
 ditto -c -k --keepParent $APP $ZIP
 SHA=$(shasum -a 256 $ZIP | cut -d' ' -f1)
@@ -77,7 +77,7 @@ echo "SHA-256: $SHA"
 git push -q origin v$VERSION
 gh release create v$VERSION $ZIP --title "MirrorAct $VERSION" --generate-notes --verify-tag
 
-# set the cask in the tap to the new version
+# point the cask in the tap to the new version
 CASK_SHA=$(gh api repos/$TAP_REPO/contents/$CASK -q .sha)
 gh api repos/$TAP_REPO/contents/$CASK -q .content | base64 -D \
   | sed -e "s/^  version \".*\"/  version \"$VERSION\"/" -e "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" \

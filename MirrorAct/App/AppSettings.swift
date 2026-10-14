@@ -2,7 +2,7 @@
 import AppKit
 import Foundation
 
-/// Persistente Einstellungen (UserDefaults).
+/// Persistent settings (UserDefaults).
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
@@ -18,19 +18,19 @@ final class AppSettings: ObservableObject {
     @Published var alwaysOnTop: Bool { didSet { defaults.set(alwaysOnTop, forKey: "alwaysOnTop") } }
     @Published var playAudio: Bool { didSet { defaults.set(playAudio, forKey: "playAudio") } }
     @Published var recordWithFrame: Bool { didSet { defaults.set(recordWithFrame, forKey: "recordWithFrame") } }
-    /// Werkzeugleiste dauerhaft statt nur beim Überfahren
+    /// Tool rail always visible instead of only on hover
     @Published var alwaysShowTools: Bool { didSet { defaults.set(alwaysShowTools, forKey: "alwaysShowTools") } }
-    /// Bedienung von iPhone/iPad beim Verbinden gleich starten (sonst erst auf «Bedienen»)
+    /// Start iPhone/iPad control right away on connect (otherwise only via “Control”)
     @Published var autoStartControl: Bool { didSet { defaults.set(autoStartControl, forKey: "autoStartControl") } }
-    /// Rahmenfarbe, Hintergrund usw. für Screenshots, Aufnahmen und Präsentation
+    /// Frame color, background etc. for screenshots, recordings and presentation
     @Published var style: FrameStyle {
         didSet {
             if let data = try? JSONEncoder().encode(style) { defaults.set(data, forKey: "style") }
         }
     }
 
-    /// Feste, lokal verwaltete Geräte-ID des AirPlay-Empfängers (nicht die MAC des Macs,
-    /// damit MirrorAct neben UxPlay oder dem macOS-Empfänger eindeutig bleibt).
+    /// Fixed, locally administered device ID of the AirPlay receiver (not the Mac's MAC address,
+    /// so MirrorAct stays unique alongside UxPlay or the macOS receiver).
     let receiverDeviceID: String
 
     init() {
@@ -76,7 +76,7 @@ final class AppSettings: ObservableObject {
         if let stored = store.string(forKey: "receiverDeviceID") {
             receiverDeviceID = stored
         } else {
-            // lokal verwaltete Unicast-Adresse (Bit 1 gesetzt, Bit 0 gelöscht)
+            // locally administered unicast address (bit 1 set, bit 0 cleared)
             var bytes = (0..<6).map { _ in UInt8.random(in: 0...255) }
             bytes[0] = (bytes[0] | 0x02) & 0xFE
             let fresh = bytes.map { String(format: "%02X", $0) }.joined(separator: ":")
@@ -87,9 +87,9 @@ final class AppSettings: ObservableObject {
 
     var pinNumber: Int32 { Int32(pin) ?? 0 }
 
-    // MARK: Sprache
+    // MARK: Language
 
-    /// "system", "en" oder "de"; wirkt nach einem Neustart (AppleLanguages der App)
+    /// "system", "en" or "de"; takes effect after a restart (the app's AppleLanguages)
     static let languages: [(id: String, name: String)] = [("en", "English"), ("de", "Deutsch")]
 
     var appLanguage: String {
@@ -108,7 +108,7 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// startet die App neu (nach dem Beenden, damit der AirPlay-Name frei ist)
+    /// relaunches the app (after quitting, so the AirPlay name is free)
     static func relaunch() {
         let path = Bundle.main.bundleURL.path
         let task = Process()
@@ -118,7 +118,7 @@ final class AppSettings: ObservableObject {
         NSApp.terminate(nil)
     }
 
-    /// Ordner für den AirPlay-Schlüssel usw.
+    /// Folder for the AirPlay key etc.
     var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("MirrorAct", isDirectory: true)
@@ -126,12 +126,12 @@ final class AppSettings: ObservableObject {
         return dir
     }
 
-    // MARK: Bekannte Geräte (für die Geräteliste)
+    // MARK: Known devices (for the device list)
 
     struct KnownDevice: Codable, Hashable, Identifiable {
         var id: String { "\(transport.rawValue):\(key)" }
         enum Transport: String, Codable { case cable, wireless, android }
-        var key: String            // AirPlay-Geräte-ID, AVCaptureDevice.uniqueID bzw. Android-Seriennummer
+        var key: String            // AirPlay device ID, AVCaptureDevice.uniqueID or Android serial number
         var transport: Transport
         var name: String
         var modelIdentifier: String?
@@ -160,7 +160,7 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Modellkennung zu einem Gerätenamen, gelernt über AirPlay (USB liefert keine).
+    /// Model identifier for a device name, learned via AirPlay (USB provides none).
     func modelIdentifier(forDeviceNamed name: String) -> String? {
         knownDevices.first { $0.name == name && $0.modelIdentifier != nil }?.modelIdentifier
     }

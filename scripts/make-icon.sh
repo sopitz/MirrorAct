@@ -1,6 +1,6 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Baut Resources/AppIcon.icns aus scripts/make-icon.swift
+# Builds Resources/AppIcon.icns from scripts/make-icon.swift
 set -euo pipefail
 ROOT=${0:A:h:h}
 TMP=$(mktemp -d)

@@ -3,22 +3,57 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    static let width: CGFloat = 500
+    /// Title bar and toolbar of the window (measured 88 pt)
+    static let windowChrome: CGFloat = 90
+    private static let screenMargin: CGFloat = 20
+
+    /// Height above which a page scrolls, so the window fits on the screen
+    /// (MacBook Air 13": 1470 × 956)
+    static func maxPageHeight(visibleHeight: CGFloat) -> CGFloat {
+        max(300, visibleHeight - windowChrome - screenMargin)
+    }
+
     @AppStorage("settingsTab") private var tab = "general"
 
     var body: some View {
+        let maxHeight = Self.maxPageHeight(visibleHeight: NSScreen.main?.visibleFrame.height ?? 800)
         TabView(selection: $tab) {
             GeneralSettingsView()
+                .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag("general")
             DesignSettingsView()
+                .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("Style", systemImage: "paintpalette") }
                 .tag("design")
         }
-        .frame(width: 500)
+        .frame(width: Self.width)
     }
 }
 
-// MARK: Allgemein
+extension View {
+    /// as tall as the content, at most maxHeight; beyond that the form scrolls
+    func settingsPage(maxHeight: CGFloat) -> some View {
+        SettingsPageLayout(maxHeight: maxHeight) { self }
+    }
+}
+
+private struct SettingsPageLayout: Layout {
+    let maxHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let page = subviews.first else { return .zero }
+        let ideal = page.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: ideal.width, height: min(ideal.height, maxHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+}
+
+// MARK: General
 
 struct GeneralSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
@@ -124,11 +159,10 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-// MARK: Gestaltung
+// MARK: Style
 
 struct DesignSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
@@ -148,11 +182,10 @@ struct DesignSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-/// Vorschau mit dem aktuellen Bild des Spiegelfensters (sonst Testbild), auf Schachbrett für Transparenz
+/// Preview with the mirror window's current image (otherwise a test image), on a checkerboard for transparency
 struct DesignPreview: View {
     let style: FrameStyle
     let showFrame: Bool
@@ -180,7 +213,7 @@ struct DesignPreview: View {
             profile = MainActor.assumeIsolated { session.profile }
         }
         guard let full = screen ?? RenderTest.testScreen(size: CGSize(width: 1170, height: 2532)) else { return nil }
-        // verkleinert rendern, damit die Vorschau flüssig bleibt
+        // render downscaled so the preview stays smooth
         let scale = min(1, 520 / CGFloat(max(full.width, full.height)))
         let small = Self.scaled(full, by: scale) ?? full
         return FrameRenderer.render(screen: small, profile: profile, showFrame: showFrame, style: style)

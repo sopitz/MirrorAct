@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// AirPlay-Empfänger auf Basis der UxPlay-Bibliothek. Entspricht dem Ablauf in
-// UxPlays uxplay.cpp (start_dnssd → start_raop_server → register_dnssd), aber ohne
+// AirPlay receiver built on the UxPlay library. Follows the sequence in
+// UxPlay's uxplay.cpp (start_dnssd → start_raop_server → register_dnssd), but without
 // GStreamer: video and audio go raw to Swift or to the helper (AirPlayHelper).
 // Runs on macOS (Bonjour via dns_sd, EXTERNAL_DNS_SD), Linux and Windows/MinGW
 // (UxPlay's own mDNS responder lib/mdnsd).
@@ -29,7 +29,7 @@
 #include "netutils.h"
 #include "raop.h"
 
-#define MISSED_FEEDBACK_LIMIT 15 /* Sekunden ohne Heartbeat bis zur Trennung */
+#define MISSED_FEEDBACK_LIMIT 15 /* seconds without heartbeat before disconnecting */
 
 static raop_t *raop;
 static dnssd_t *dnssd;
@@ -93,7 +93,7 @@ static void wake_close(void) {
 #endif
 }
 
-/* ---- raop-Callbacks ---- */
+/* ---- raop callbacks ---- */
 
 static void on_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *data) {
     if (cb.video && data->data && data->data_len > 0) {
@@ -178,7 +178,7 @@ static const char *on_passwd(void *cls, int *len) {
 static void on_export_dacp(void *cls, const char *active_remote, const char *dacp_id) {}
 static int on_video_set_codec(void *cls, video_codec_t codec) { return 0; }
 
-/* HLS ist abgeschaltet; die Callbacks müssen trotzdem existieren */
+/* HLS is disabled; the callbacks must exist anyway */
 static void on_video_play(void *cls, const char *location, const float start_position) {}
 static void on_video_scrub(void *cls, const float position) {}
 static void on_video_rate(void *cls, const float rate) {}
@@ -190,7 +190,7 @@ static void on_raop_log(void *cls, int level, const char *msg) {
     if (cb.log) cb.log(cb.ctx, level, msg);
 }
 
-/* ---- Hintergrund-Thread: Bonjour-Sockets bedienen, Heartbeat, Neustarts ---- */
+/* ---- background thread: serve Bonjour sockets, heartbeat, restarts ---- */
 
 static void restart_httpd(void) {
     unsigned short port = raop_get_port(raop);
@@ -275,7 +275,7 @@ static void *service_loop(void *arg) {
     return NULL;
 }
 
-/* ---- öffentliche Funktionen ---- */
+/* ---- public functions ---- */
 
 static void teardown(void) {
     if (raop) {
@@ -334,10 +334,10 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
 #if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
     dnssd_set_peer_to_peer(dnssd, config->peer_to_peer ? 1 : 0);
 #endif
-    dnssd_set_airplay_features(dnssd, 0, 0);  /* kein HLS-Video */
+    dnssd_set_airplay_features(dnssd, 0, 0);  /* no HLS video */
     dnssd_set_airplay_features(dnssd, 4, 0);
     dnssd_set_airplay_features(dnssd, 42, config->h265 ? 1 : 0);  /* Screen Multi Codec (HEVC) */
-    dnssd_set_airplay_features(dnssd, 27, pin_pw);  /* Legacy Pairing, nötig für pin und AWDL */
+    dnssd_set_airplay_features(dnssd, 27, pin_pw);  /* legacy pairing, needed for pin and AWDL */
 
     raop_callbacks_t rc;
     memset(&rc, 0, sizeof(rc));
@@ -382,7 +382,7 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     }
     raop_set_log_callback(raop, on_raop_log, NULL);
     raop_set_log_level(raop, config->log_level);
-    /* nohold = 1: ein neues Gerät übernimmt die Verbindung */
+    /* nohold = 1: a new device takes over the connection */
     if (raop_init2(raop, 1, config->device_id, config->keyfile)) {
         free(raop);
         raop = NULL;
@@ -394,7 +394,7 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     raop_set_plist(raop, "height", config->height);
     raop_set_plist(raop, "refreshRate", config->refresh_rate);
     raop_set_plist(raop, "maxFPS", config->max_fps);
-    if (pin_pw) raop_set_plist(raop, "pin", config->pin + 10000);  /* > 9999 = fester Code */
+    if (pin_pw) raop_set_plist(raop, "pin", config->pin + 10000);  /* > 9999 = fixed code */
 
     unsigned short tcp[3] = {0, 0, 0};
     unsigned short udp[3] = {0, 0, 0};

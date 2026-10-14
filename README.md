@@ -48,7 +48,7 @@ appears next to it; right-click shows every function.
 
 - ⌘S takes a screenshot, ⌘R starts and stops a recording. Drag screenshots straight out of the window.
 - ⌘K opens the style panel: size, frame color, background, padding, shadow, aspect ratio.
-- ⌃⌘F presents the device full screen on your background.
+- ⌃⌘F presents the device full screen on your background. Esc, ⌃⌘F again or "Exit Presentation" at the top left end it; the button shows up when you move the mouse.
 - ⌘E opens the editor, for screenshots and recordings you already have.
 
 ## Screenshots
@@ -71,7 +71,7 @@ appears next to it; right-click shows every function.
 - **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: record, screenshot, sound, keep on top, full screen, style. Right-click shows every function.
 - **Style panel:** size (life-size, pixel-perfect, point-perfect, fit), frame on/off, frame color, background (transparent, gradients, color, image), padding, shadow, aspect ratio (1:1, 16:9, 9:16, 4:3).
 - **Screenshots and recordings** with or without frame and background. Transparent backgrounds produce PNG or HEVC with alpha for Keynote and video editors, otherwise H.264. Drag screenshots straight out of the window.
-- **Presentation mode:** device centered on your background, full screen, without menu bar and Dock.
+- **Presentation mode:** device centered on your background, full screen, without Dock; the menu bar slides in at the top edge. End it with Esc, ⌃⌘F or "Exit Presentation" at the top left.
 - **Editor:** frame existing screenshots and screen recordings afterwards, trim videos, two screenshots as a **duo** (side by side, staggered, tilted, perspective).
 - **Shortcuts:** "Frame screenshot" (usable as a Finder Quick Action), "Screenshot from iPhone", "Start or stop recording".
 

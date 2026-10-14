@@ -60,7 +60,8 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
 | `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche Übersetzung), Info.plist und Siri-Phrasen |
 | `Agent` | MirrorActs Zusatzbefehle für WebDriverAgent (schnelle Berührungen), von `scripts/build-agent.sh` mitkompiliert |
-| `scripts` | Skripte für Build, Agent, Release und Symbol |
+| `MirrorActTests` | Tests, laufen in einem Debug-Build der App (`scripts/test.sh`) |
+| `scripts` | Skripte für Build, Tests, Agent, Release und Symbol |
 
 ## Ohne Gerät testen
 
@@ -73,6 +74,16 @@ Ohne Gerät lässt sich die Darstellung prüfen:
 Das schreibt Rahmen, Stile, Duo-Posen und Teile der Oberfläche als PNG, nimmt zwei kurze
 Testvideos auf (mit Drehung und mit AAC-ELD-Ton wie über AirPlay) und rahmt eines davon wie der
 Editor.
+
+## Tests
+
+```bash
+scripts/test.sh
+```
+
+Führt `MirrorActTests` in einem Debug-Build der App aus; `scripts/test.sh PresentationTests` nur
+eine Klasse. Die App startet dabei ohne AirPlay-Empfänger, USB und adb. Die Tests öffnen kurz echte
+Fenster, auch das Präsentieren im Vollbild.
 
 ## Screenshots
 

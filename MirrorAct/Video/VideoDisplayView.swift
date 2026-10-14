@@ -3,7 +3,7 @@ import AppKit
 import AVFoundation
 import CoreMedia
 
-/// Zeigt CVPixelBuffer sofort an (AVSampleBufferDisplayLayer, "DisplayImmediately").
+/// Displays CVPixelBuffers immediately (AVSampleBufferDisplayLayer, "DisplayImmediately").
 final class VideoDisplayView: NSView {
     let displayLayer = AVSampleBufferDisplayLayer()
 
@@ -27,8 +27,8 @@ final class VideoDisplayView: NSView {
     }
 }
 
-/// Nimmt Bilder aus beliebigen Threads entgegen, merkt sich das letzte (für Screenshots)
-/// und reicht sie an die Anzeige weiter.
+/// Accepts frames from any thread, keeps the latest one (for screenshots)
+/// and passes them on to the display.
 final class FrameSink: @unchecked Sendable {
     private let lock = NSLock()
     private var latestBuffer: CVPixelBuffer?
@@ -37,9 +37,9 @@ final class FrameSink: @unchecked Sendable {
     private var formatDescription: CMVideoFormatDescription?
     private var activeRecorder: MirrorRecorder?
 
-    /// auf dem Main-Thread: neue Bildgrösse (z. B. Drehung)
+    /// on the main thread: new frame size (e.g. rotation)
     var onSizeChange: ((CGSize) -> Void)?
-    /// auf dem Main-Thread: erstes Bild nach attach/clear
+    /// on the main thread: first frame after attach/clear
     var onFirstFrame: (() -> Void)?
     private var deliveredFirstFrame = false
 
@@ -49,7 +49,7 @@ final class FrameSink: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// laufende Aufnahme (bekommt jedes Bild und den Ton)
+    /// active recording (receives every frame and the audio)
     var recorder: MirrorRecorder? {
         get { lock.lock(); defer { lock.unlock() }; return activeRecorder }
         set { lock.lock(); activeRecorder = newValue; lock.unlock() }
@@ -80,7 +80,7 @@ final class FrameSink: @unchecked Sendable {
         layer?.sampleBufferRenderer.flush(removingDisplayedImage: false, completionHandler: nil)
     }
 
-    /// time: Host-Zeit des Bildes (für Aufnahmen); ohne Angabe "jetzt"
+    /// time: host time of the frame (for recordings); "now" if omitted
     func push(_ pixelBuffer: CVPixelBuffer, time: CMTime? = nil) {
         let size = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
 
