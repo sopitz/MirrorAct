@@ -81,6 +81,15 @@ jobs:
             echo "::error::mirroract-airplay.exe depends on DLLs outside C:\\Windows"
             exit 1
           fi
+      - name: Check the UTF-8 application manifest
+        run: |
+          exe=build/airplay-helper/mirroract-airplay.exe
+          # genau eine RT_MANIFEST-Ressource (unsere hat das Standardmanifest von MinGW ersetzt)
+          objdump -x "$exe" | sed -n '/rsrc Resource Directory section/,/^$/p'
+          if ! grep -aq '<activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>' "$exe"; then
+            echo "::error::mirroract-airplay.exe lacks the manifest with activeCodePage UTF-8"
+            exit 1
+          fi
       - name: Smoke test
         run: build/airplay-helper/mirroract-airplay.exe --help
       - uses: actions/upload-artifact@v4

@@ -35,7 +35,16 @@ endif()
 
 add_executable(mirroract-airplay main.c "${BRIDGE_DIR}/airplay_bridge.c")
 target_include_directories(mirroract-airplay PRIVATE "${BRIDGE_DIR}" "${UXPLAY_SRC}/lib")
-target_compile_options(mirroract-airplay PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_options(mirroract-airplay PRIVATE "$<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wno-unused-parameter>")
+if(WIN32)
+  # Manifest mit activeCodePage UTF-8 (siehe mirroract-airplay.rc): argv, das STARTED-JSON, der
+  # mDNS-Name und UxPlays fopen der Schlüsseldatei arbeiten dann mit UTF-8 wie auf dem Mac.
+  # binutils ersetzt damit das Standardmanifest von MinGW (default-manifest.o).
+  enable_language(RC)
+  target_sources(mirroract-airplay PRIVATE mirroract-airplay.rc)
+  set_source_files_properties(mirroract-airplay.rc PROPERTIES
+      OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/mirroract-airplay.manifest")
+endif()
 
 if(APPLE)
   if(DEFINED ENV{HOMEBREW_PREFIX})

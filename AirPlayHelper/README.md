@@ -26,8 +26,12 @@ Linux (`libplist-dev`, `libssl-dev`, `pkg-config`) and Windows (MSYS2 UCRT64 wit
 `mingw-w64-ucrt-x86_64-{gcc,cmake,ninja,openssl,libplist,pkg-config}`): fetch UxPlay at the commit
 pinned in `scripts/bootstrap-uxplay.sh` into `Vendor/UxPlay`, then run the same two commands. The
 CMake file builds UxPlay's `lib`, `lib/playfair`, `lib/llhttp` and `lib/mdnsd` from source; on
-Windows the result is linked statically and depends only on system DLLs.
-`.github/workflows/airplay-helper.yml` does exactly this on all three platforms.
+Windows the result is linked statically and depends only on system DLLs, and it carries an
+application manifest with `activeCodePage` UTF-8 (`mirroract-airplay.rc`, Windows 10 1903 or later),
+so the command line, file names and everything the helper prints are UTF-8 as on the other
+platforms instead of the system's ANSI code page.
+`.github/workflows/airplay-helper.yml` does exactly this on all three platforms and checks the
+manifest in the Windows build.
 
 ## Command line
 
@@ -51,6 +55,8 @@ mirroract-airplay --name "MirrorAct" --device-id AA:BB:CC:DD:EE:FF --keyfile <pa
 stdout must be a pipe, not a terminal. Exit code 0 after `STOP`, end of stdin, SIGINT or SIGTERM;
 2 for invalid arguments; otherwise the (positive) bridge error code that was also sent in the
 `ERROR` frame. When the parent process dies, the helper exits (end of stdin, broken pipe).
+Arguments are UTF-8 on every platform; `--name` goes unchanged into the `STARTED` frame and the
+mDNS announcement.
 
 ## Protocol
 
@@ -102,4 +108,5 @@ End of stdin has the same effect as `STOP`. The constants are in `helper_protoco
 | `main.c` | argument parsing, frame writer (mutex, complete writes), stdin command thread, bridge callbacks |
 | `helper_protocol.h` | frame and command types |
 | `CMakeLists.txt` | build for macOS, Linux and Windows |
+| `mirroract-airplay.rc`, `mirroract-airplay.manifest` | Windows only: application manifest with the UTF-8 code page (replaces MinGW's default manifest) |
 | `../MirrorAct/AirPlay/airplay_bridge.c` | the receiver itself, shared with the Mac app |

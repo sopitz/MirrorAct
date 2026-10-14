@@ -1,0 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Anwendungsmanifest (Ressource 1, Typ 24 = RT_MANIFEST); ersetzt das Standardmanifest von MinGW.
+// activeCodePage UTF-8 (Windows 10 1903 und neuer): argv, fopen und die anderen schmalen
+// Windows-Funktionen arbeiten mit UTF-8 statt der ANSI-Codepage, wie auf dem Mac. Ohne das kommt
+// etwa "Buero" mit Umlaut als CP1252 an: im STARTED-JSON und im mDNS-Namen ist es dann kein
+// gueltiges UTF-8, und ein Schluesselpfad mit Zeichen ausserhalb der Codepage laesst sich nicht oeffnen.
+1 24 "mirroract-airplay.manifest"
