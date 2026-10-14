@@ -5,9 +5,9 @@
 #   scripts/build.sh            Release-Build + Installation
 #   scripts/build.sh --debug    Debug-Build
 #   scripts/build.sh --no-install   nur bauen
-#   scripts/build.sh NAME=WERT ...  Build-Einstellungen an xcodebuild weitergeben
+#   scripts/build.sh NAME=VALUE ... pass build settings on to xcodebuild
 # Signatur: standardmässig ad-hoc; eigenes Zertifikat in Config/Local.xcconfig
-# (Vorlage: Config/Local.xcconfig.example). MIRRORACT_DERIVED ersetzt den Build-Ordner.
+# (template: Config/Local.xcconfig.example). MIRRORACT_DERIVED replaces the build folder.
 set -euo pipefail
 
 ROOT=${0:A:h:h}

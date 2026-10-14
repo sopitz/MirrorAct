@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// mirroract-airplay: der AirPlay-Empfänger als eigenes Programm. Startet die Bridge
-// (MirrorAct/AirPlay/airplay_bridge.c) und reicht Video, Ton und Ereignisse als Rahmen über
-// stdout an die aufrufende App; Befehle kommen als Rahmen über stdin (helper_protocol.h, README.md).
-// So kann eine App ohne GPL-Code (etwa die Windows-Version) den UxPlay-Empfänger nutzen.
+// mirroract-airplay: the AirPlay receiver as a separate program. Starts the bridge
+// (MirrorAct/AirPlay/airplay_bridge.c) and passes video, audio and events as frames over
+// stdout to the calling app; commands arrive as frames over stdin (helper_protocol.h, README.md).
+// This lets an app without GPL code (such as the Windows version) use the UxPlay receiver.
 
 #include "airplay_bridge.h"
 #include "helper_protocol.h"
@@ -40,7 +40,7 @@ typedef struct {
     bool p2p;
 } options;
 
-/* ---- stdout: Rahmen schreiben, serialisiert über einen Mutex ---- */
+/* ---- stdout: write frames, serialized by a mutex ---- */
 
 static pthread_mutex_t out_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -62,7 +62,7 @@ static long io_read(void *data, size_t length) {
 #endif
 }
 
-/* schreibt alles; geht die Pipe kaputt, ist der Elternprozess weg und der Helfer beendet sich */
+/* writes everything; if the pipe breaks, the parent process is gone and the helper exits */
 static void write_all(const void *data, size_t length) {
     const uint8_t *p = data;
     while (length > 0) {
@@ -87,7 +87,7 @@ static void send_frame(uint8_t type, uint8_t flags, const void *payload, uint32_
     pthread_mutex_unlock(&out_lock);
 }
 
-/* ---- kleine Zeichenkettenhilfe für die JSON-Nutzlasten ---- */
+/* ---- small string helper for the JSON payloads ---- */
 
 typedef struct {
     char *data;
@@ -103,7 +103,7 @@ static void sb_puts(strbuf *b, const char *s) {
     while (*s) sb_putc(b, *s++);
 }
 
-/* JSON-String mit Anführungszeichen; UTF-8 bleibt, nur Steuerzeichen, " und \ werden maskiert */
+/* quoted JSON string; UTF-8 is kept, only control characters, " and \ are escaped */
 static void sb_json_string(strbuf *b, const char *s) {
     static const char hex[] = "0123456789abcdef";
     sb_putc(b, '"');
@@ -147,7 +147,7 @@ static void put_f32le(uint8_t *dst, float value) {
     put_u32le(dst, bits);
 }
 
-/* ---- Bridge-Callbacks → Rahmen (kommen auf den Threads der UxPlay-Bibliothek) ---- */
+/* ---- bridge callbacks → frames (called on the UxPlay library's threads) ---- */
 
 static void on_video(void *ctx, const uint8_t *data, int32_t length, bool is_h265) {
     if (length > 0) send_frame(MB_FRAME_VIDEO, is_h265 ? MB_VIDEO_FLAG_HEVC : 0, data, (uint32_t)length);
@@ -248,7 +248,7 @@ static void send_error(int code) {
     send_frame(MB_FRAME_ERROR, 0, buffer, (uint32_t)b.length);
 }
 
-/* ---- stdin: Befehle lesen, auf eigenem Thread ---- */
+/* ---- stdin: read commands, on a separate thread ---- */
 
 static atomic_bool stop_requested;
 static pthread_mutex_t state_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -261,7 +261,7 @@ static void request_stop(void) {
     pthread_mutex_unlock(&state_lock);
 }
 
-/* liest genau length Bytes; false bei Dateiende oder Fehler */
+/* reads exactly length bytes; false on end of file or error */
 static bool read_all(uint8_t *data, size_t length) {
     while (length > 0) {
         long n = io_read(data, length);
@@ -282,7 +282,7 @@ static void *stdin_loop(void *arg) {
     while (open && read_all(header, sizeof(header))) {
         uint32_t length = header[0] | (uint32_t)header[1] << 8 | (uint32_t)header[2] << 16 | (uint32_t)header[3] << 24;
         uint8_t type = header[4];
-        /* Befehle haben derzeit keine Nutzlast; eine vorhandene wird überlesen */
+        /* commands currently have no payload; any present is skipped */
         uint8_t skip[256];
         while (open && length > 0) {
             size_t chunk = length < sizeof(skip) ? length : sizeof(skip);
@@ -293,10 +293,10 @@ static void *stdin_loop(void *arg) {
         switch (type) {
         case MB_COMMAND_DISCONNECT: mb_airplay_disconnect(); break;
         case MB_COMMAND_STOP: open = false; break;
-        default: break; /* unbekannte Befehle werden ignoriert */
+        default: break; /* unknown commands are ignored */
         }
     }
-    request_stop(); /* Dateiende und STOP wirken gleich */
+    request_stop(); /* end of file and STOP have the same effect */
     return NULL;
 }
 
@@ -304,7 +304,7 @@ static void on_signal(int sig) {
     atomic_store(&stop_requested, true);
 }
 
-/* ---- Argumente ---- */
+/* ---- arguments ---- */
 
 static void usage(FILE *out) {
     fputs("Usage: mirroract-airplay --name <name> --device-id AA:BB:CC:DD:EE:FF --keyfile <path>\n"
@@ -405,7 +405,7 @@ int main(int argc, char **argv) {
     _setmode(_fileno(stdin), _O_BINARY);
     if (_isatty(STDOUT_FD)) {
 #else
-    signal(SIGPIPE, SIG_IGN); /* kaputte Pipe meldet write() als EPIPE, siehe write_all */
+    signal(SIGPIPE, SIG_IGN); /* a broken pipe is reported by write() as EPIPE, see write_all */
     if (isatty(STDOUT_FD)) {
 #endif
         fputs("mirroract-airplay: stdout must be a pipe (binary frames), not a terminal\n", stderr);
@@ -419,7 +419,7 @@ int main(int argc, char **argv) {
         fputs("mirroract-airplay: could not start the stdin thread\n", stderr);
         return 2;
     }
-    pthread_detach(reader); /* hängt bei einem Signal noch in read(); der Prozess endet trotzdem */
+    pthread_detach(reader); /* on a signal it still hangs in read(); the process exits anyway */
 
     mb_airplay_config config = {
         .name = opt.name,
@@ -455,7 +455,7 @@ int main(int argc, char **argv) {
     }
     send_started(opt.name, mb_airplay_port());
 
-    /* laufen lassen, bis STOP, Dateiende auf stdin oder ein Signal kommt */
+    /* run until STOP, end of file on stdin or a signal arrives */
     pthread_mutex_lock(&state_lock);
     while (!atomic_load(&stop_requested)) {
         struct timespec until;

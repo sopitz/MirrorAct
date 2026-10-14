@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // AirPlay-Empfänger auf Basis der UxPlay-Bibliothek. Entspricht dem Ablauf in
 // UxPlays uxplay.cpp (start_dnssd → start_raop_server → register_dnssd), aber ohne
-// GStreamer: Video und Audio gehen roh an Swift bzw. an den Helfer (AirPlayHelper).
-// Läuft auf macOS (Bonjour über dns_sd, EXTERNAL_DNS_SD), Linux und Windows/MinGW
-// (UxPlays eigener mDNS-Responder lib/mdnsd).
+// GStreamer: video and audio go raw to Swift or to the helper (AirPlayHelper).
+// Runs on macOS (Bonjour via dns_sd, EXTERNAL_DNS_SD), Linux and Windows/MinGW
+// (UxPlay's own mDNS responder lib/mdnsd).
 
 #include "airplay_bridge.h"
 
@@ -40,7 +40,7 @@ static atomic_int open_connections;
 static atomic_int missed_feedback;
 static atomic_bool reset_requested;
 
-/* Aufwecken des Service-Threads: Pipe und poll() (POSIX), Auto-Reset-Event (Windows) */
+/* waking the service thread: pipe and poll() (POSIX), auto-reset event (Windows) */
 #ifdef _WIN32
 static HANDLE wake_event;
 static bool winsock_started;
@@ -212,7 +212,7 @@ static void *service_loop(void *arg) {
 
     while (atomic_load(&service_running)) {
 #ifdef _WIN32
-        /* kein Bonjour-Socket zu bedienen (lib/mdnsd hat einen eigenen Thread): nur aufs Aufwecken warten */
+        /* no Bonjour socket to service (lib/mdnsd has its own thread): just wait for the wake-up */
         WaitForSingleObject(wake_event, 1000);
         if (!atomic_load(&service_running)) break;
 #else
@@ -220,7 +220,7 @@ static void *service_loop(void *arg) {
         int count = 0;
         fds[count++] = (struct pollfd){.fd = wake_pipe[0], .events = POLLIN};
 #ifdef EXTERNAL_DNS_SD
-        /* nur eine externe dns_sd-Bibliothek (Bonjour, Avahi) gibt Sockets heraus, die bedient werden müssen */
+        /* only an external dns_sd library (Bonjour, Avahi) hands out sockets that need servicing */
         int services[3] = {-1, -1, -1};
         for (int s = 0; s < 2; s++) {
             if (service_failed[s]) continue;
@@ -237,7 +237,7 @@ static void *service_loop(void *arg) {
 
         if (ready > 0) {
             if (fds[0].revents & POLLIN) {
-                /* Weckzeichen leeren, sonst kehrt poll() ab jetzt sofort zurück */
+                /* drain the wake byte, otherwise poll() returns immediately from now on */
                 char drain[8];
                 (void)read(wake_pipe[0], drain, sizeof(drain));
             }
@@ -316,8 +316,8 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     unsigned char pin_pw = config->pin > 0 ? 1 : 0;
     int error = 0;
 #ifdef _WIN32
-    /* WSAStartup vor dnssd_init: lib/mdnsd holt sich den Hostnamen mit gethostname(), das
-       ohne Winsock scheitert (dann hiesse der Empfänger "UxPlay.local") */
+    /* WSAStartup before dnssd_init: lib/mdnsd gets the host name with gethostname(), which
+       fails without Winsock (the receiver would then be called "UxPlay.local") */
     if (netutils_init() < 0) {
         bridge_log(LOGGER_ERR, "WSAStartup failed");
         return -3;

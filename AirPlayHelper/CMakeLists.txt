@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# mirroract-airplay: AirPlay-Empfänger als eigenes Programm (siehe README.md).
+# mirroract-airplay: the AirPlay receiver as a separate program (see README.md).
 #
 #   cmake -S AirPlayHelper -B build/airplay-helper -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build/airplay-helper
 #
-# macOS: linkt dieselben fertigen Bibliotheken wie die Mac-App (Vendor/uxplay-build nach
-# scripts/bootstrap-uxplay.sh, OpenSSL und libplist statisch aus Homebrew; Bonjour über dns_sd).
-# Windows (MinGW/MSYS2) und Linux: baut UxPlays Bibliotheken aus Vendor/UxPlay mit, mit dessen
-# eigenem mDNS-Responder lib/mdnsd; UxPlays Haupt-CMake (GStreamer) wird nicht benutzt.
+# macOS: links the same prebuilt libraries as the Mac app (Vendor/uxplay-build from
+# scripts/bootstrap-uxplay.sh, OpenSSL and libplist statically from Homebrew; Bonjour via dns_sd).
+# Windows (MinGW/MSYS2) and Linux: builds UxPlay's libraries from Vendor/UxPlay alongside, with its
+# own mDNS responder lib/mdnsd; UxPlay's main CMake (GStreamer) is not used.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -37,9 +37,9 @@ add_executable(mirroract-airplay main.c "${BRIDGE_DIR}/airplay_bridge.c")
 target_include_directories(mirroract-airplay PRIVATE "${BRIDGE_DIR}" "${UXPLAY_SRC}/lib")
 target_compile_options(mirroract-airplay PRIVATE "$<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wno-unused-parameter>")
 if(WIN32)
-  # Manifest mit activeCodePage UTF-8 (siehe mirroract-airplay.rc): argv, das STARTED-JSON, der
-  # mDNS-Name und UxPlays fopen der Schlüsseldatei arbeiten dann mit UTF-8 wie auf dem Mac.
-  # binutils ersetzt damit das Standardmanifest von MinGW (default-manifest.o).
+  # Manifest with activeCodePage UTF-8 (see mirroract-airplay.rc): argv, the STARTED JSON, the
+  # mDNS name and UxPlay's fopen of the key file then work with UTF-8 as on the Mac.
+  # binutils uses it to replace MinGW's default manifest (default-manifest.o).
   enable_language(RC)
   target_sources(mirroract-airplay PRIVATE mirroract-airplay.rc)
   set_source_files_properties(mirroract-airplay.rc PROPERTIES
@@ -67,7 +67,7 @@ if(APPLE)
       message(FATAL_ERROR "${lib} missing: run scripts/bootstrap-uxplay.sh and brew install openssl@3 libplist")
     endif()
   endforeach()
-  # dieselben Definitionen wie die App (project.yml): dnssd_t hat mit UXPLAY_HAVE_APPLE_P2P ein Feld mehr
+  # same definitions as the app (project.yml): with UXPLAY_HAVE_APPLE_P2P, dnssd_t has one more field
   target_compile_definitions(mirroract-airplay PRIVATE
       EXTERNAL_DNS_SD=1 UXPLAY_HAVE_APPLE_P2P=1 NOHOLD=1 PLIST_210=1 PLIST_230=1 SYS_ENDIAN_H=1)
   target_include_directories(mirroract-airplay PRIVATE
@@ -80,28 +80,28 @@ if(APPLE)
 else()
   set(NO_MARCH_NATIVE ON)
   if(WIN32)
-    # UxPlay prüft teils WIN32, teils _WIN32; statische Bibliotheken, damit nur System-DLLs bleiben.
-    # LIBPLIST_STATIC: sonst erwartet plist.h die Funktionen als DLL-Import (__imp_plist_*)
+    # UxPlay checks WIN32 in some places, _WIN32 in others; static libraries so only system DLLs remain.
+    # LIBPLIST_STATIC: otherwise plist.h expects the functions as DLL imports (__imp_plist_*)
     add_compile_definitions(WIN32 LIBPLIST_STATIC)
     set(OPENSSL_USE_STATIC_LIBS ON)
     set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
-    # die System-Importbibliotheken müssen hinter libcrypto.a und libairplay.a stehen (ein Durchlauf
-    # des Linkers): CMAKE_C_STANDARD_LIBRARIES kommt ans Ende jeder Linkzeile
+    # the system import libraries must come after libcrypto.a and libairplay.a (single linker
+    # pass): CMAKE_C_STANDARD_LIBRARIES goes at the end of every link line
     set(CMAKE_C_STANDARD_LIBRARIES "${CMAKE_C_STANDARD_LIBRARIES} -lws2_32 -liphlpapi -lbcrypt -lcrypt32 -ladvapi32")
   endif()
   add_subdirectory("${UXPLAY_SRC}/lib/llhttp" uxplay/llhttp)
   add_subdirectory("${UXPLAY_SRC}/lib/playfair" uxplay/playfair)
   add_subdirectory("${UXPLAY_SRC}/lib/mdnsd" uxplay/mdnsd)
   add_subdirectory("${UXPLAY_SRC}/lib" uxplay/lib)
-  # lib/mdnsd braucht utils_hwaddr_* aus libairplay: Kreis, den CMake für statische Bibliotheken
-  # durch Wiederholen auf der Linkzeile auflöst
+  # lib/mdnsd needs utils_hwaddr_* from libairplay: a cycle that CMake resolves for static libraries
+  # by repeating them on the link line
   target_link_libraries(dnssd PUBLIC airplay)
   target_link_libraries(mirroract-airplay PRIVATE airplay dnssd playfair llhttp)
   if(WIN32)
     target_link_libraries(mirroract-airplay PRIVATE ws2_32 iphlpapi bcrypt crypt32 advapi32)
     target_link_options(mirroract-airplay PRIVATE -static)
   else()
-    # playfair rechnet mit sin() (libm)
+    # playfair uses sin() (libm)
     target_link_libraries(mirroract-airplay PRIVATE pthread m)
   endif()
 endif()
