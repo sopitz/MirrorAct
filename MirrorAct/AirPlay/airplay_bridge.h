@@ -42,6 +42,8 @@ typedef struct {
 
 /* 0 on success, otherwise a negative error code */
 int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks *callbacks);
+/* TCP port of the running receiver, 0 when not started */
+uint16_t mb_airplay_port(void);
 void mb_airplay_stop(void);
 /* disconnects the connected device; the receiver stays ready */
 void mb_airplay_disconnect(void);

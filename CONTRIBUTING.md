@@ -45,7 +45,8 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 
 | Folder | Content |
 |---|---|
-| `MirrorAct/AirPlay` | `airplay_bridge.c` – thin C layer over UxPlay's AirPlay library (Bonjour, heartbeat, restart), `AirPlayReceiver` |
+| `MirrorAct/AirPlay` | `airplay_bridge.c` – thin C layer over UxPlay's AirPlay library (Bonjour or UxPlay's own mDNS responder, heartbeat, restart; builds on macOS, Linux and Windows), `AirPlayReceiver` |
+| `AirPlayHelper` | `mirroract-airplay` – the same receiver as a separate program for other apps (frames over stdout, commands over stdin; protocol and build in [`AirPlayHelper/README.md`](AirPlayHelper/README.md)); built by `.github/workflows/airplay-helper.yml` for macOS, Windows and Linux |
 | `MirrorAct/Android` | `ADB` (adb, device list, Wi-Fi), `ScrcpyClient` (scrcpy protocol: video, audio, control sockets), `AndroidControl` (mouse and keyboard as scrcpy control messages) |
 | `MirrorAct/Audio` | `AACAudioPlayer` (AAC-ELD from AirPlay, AAC-LC from Android, without buffering) |
 | `MirrorAct/Video` | `AnnexBDecoder` (H.264/HEVC → VideoToolbox), `FrameSink` / `VideoDisplayView` (AVSampleBufferDisplayLayer) |
