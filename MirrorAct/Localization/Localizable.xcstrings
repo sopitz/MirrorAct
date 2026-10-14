@@ -1714,6 +1714,7 @@
       }
     },
     "iPad (with Home button)" : {
+      "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1724,6 +1725,7 @@
       }
     },
     "iPad (without Home button)" : {
+      "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1734,6 +1736,7 @@
       }
     },
     "iPhone SE (2nd generation)" : {
+      "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1744,6 +1747,7 @@
       }
     },
     "iPhone SE (3rd generation)" : {
+      "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
