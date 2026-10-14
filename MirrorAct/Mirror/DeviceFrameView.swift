@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
 
-/// Zeichnet das Gehäuse, enthält die Videoanzeige und darüber Notch/Dynamic Island.
+/// Draws the chassis, holds the video view and the notch/Dynamic Island above it.
 final class DeviceFrameView: NSView, NSDraggingSource {
     let videoView = VideoDisplayView(frame: .zero)
     private let cutoutView = CutoutView(frame: .zero)
     let placeholder = NSTextField(labelWithString: "")
 
-    /// Ziehen in der Ecke unten rechts ändert die Grösse
+    /// Dragging the bottom-right corner resizes
     var onResizeDrag: ((_ phase: NSEvent.Phase, _ delta: CGSize) -> Void)?
     var onMagnify: ((CGFloat) -> Void)?
-    /// ⌥-Ziehen: Screenshot als Datei herausziehen
+    /// ⌥-drag: drag out a screenshot as a file
     var onDragOut: ((NSEvent) -> Void)?
-    /// Rechtsklick
+    /// Right-click
     var menuProvider: (() -> NSMenu?)?
 
-    /// Bedienung des Geräts (nil = nur anzeigen): Klicken/Ziehen, Scrollen und Mittelklick im
-    /// Bildschirm, Tasten und Einfügen. Punkte in Koordinaten dieser Ansicht.
+    /// Device control (nil = display only): click/drag, scroll and middle-click on the
+    /// screen, keys and paste. Points in this view's coordinates.
     var onTouch: ((TouchPhase, CGPoint) -> Void)?
     var onScroll: ((NSEvent, CGPoint) -> Void)?
     var onMiddleClick: (() -> Void)?
@@ -59,7 +59,7 @@ final class DeviceFrameView: NSView, NSDraggingSource {
     override var mouseDownCanMoveWindow: Bool { false }
     override var acceptsFirstResponder: Bool { onKey != nil }
 
-    /// ein Klick auf das inaktive Fenster bedient das Gerät gleich mit
+    /// a click on the inactive window also reaches the device right away
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         guard let event, onTouch != nil else { return false }
         return isOnScreen(convert(event.locationInWindow, from: nil))
@@ -82,7 +82,7 @@ final class DeviceFrameView: NSView, NSDraggingSource {
         model.drawChassis(in: ctx, color: bezelColor)
     }
 
-    // MARK: Maus
+    // MARK: Mouse
 
     private var resizeRect: CGRect {
         guard let model = layoutModel else { return .zero }
@@ -105,7 +105,7 @@ final class DeviceFrameView: NSView, NSDraggingSource {
             return
         }
         if let onTouch, !resizeRect.contains(point), !event.modifierFlags.contains(.command), isOnScreen(point) {
-            // Berührung: bis zum Loslassen verfolgen (⌘-Ziehen verschiebt das Fenster)
+            // touch: track until release (⌘-drag moves the window)
             window?.makeFirstResponder(self)
             onTouch(.began, point)
             while let next = window?.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
@@ -168,7 +168,7 @@ final class DeviceFrameView: NSView, NSDraggingSource {
         if onKey?(event) != true { super.keyUp(with: event) }
     }
 
-    /// ⌘V: Zwischenablage des Macs auf dem Gerät einfügen (nur, wenn es bedienbar ist)
+    /// ⌘V: paste the Mac's clipboard on the device (only if it can be controlled)
     @objc func paste(_ sender: Any?) {
         onPaste?()
     }
@@ -184,7 +184,7 @@ final class DeviceFrameView: NSView, NSDraggingSource {
     }
 }
 
-/// Notch / Dynamic Island über dem Video
+/// Notch / Dynamic Island above the video
 private final class CutoutView: NSView {
     var layoutModel: FrameLayout? { didSet { needsDisplay = true } }
 

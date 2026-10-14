@@ -2,8 +2,8 @@
 import CoreGraphics
 import Foundation
 
-/// Aussehen eines Geräts: Bildschirmecken, Notch/Dynamic Island/Kameraloch, Home-Button.
-/// Alle Verhältnisse beziehen sich auf die Bildschirmbreite im Hochformat.
+/// Appearance of a device: screen corners, Notch/Dynamic Island/camera hole, Home button.
+/// All ratios are relative to the screen width in portrait.
 struct DeviceProfile: Equatable {
     enum Family: Equatable { case iPhone, iPad, android }
 
@@ -11,7 +11,7 @@ struct DeviceProfile: Equatable {
         case none
         case notch(width: CGFloat, height: CGFloat)
         case island(width: CGFloat, height: CGFloat, top: CGFloat)
-        /// rundes Kameraloch (Android), Mittelpunkt von links/oben
+        /// round camera hole (Android), center from left/top
         case hole(centerX: CGFloat, centerY: CGFloat, diameter: CGFloat)
     }
 
@@ -20,13 +20,13 @@ struct DeviceProfile: Equatable {
     var homeButton: Bool
     var cutout: Cutout
     var screenCornerRatio: CGFloat
-    /// Bildschirmgrösse in iOS-Punkten (Hochformat), für "Tatsächliche Grösse"
+    /// screen size in iOS points (portrait), for "Point-Perfect"
     var pointSize: CGSize?
-    /// physische Pixelbreite und Pixeldichte des Displays, für "Lebensgross"
+    /// physical pixel width and pixel density of the display, for "Life-Size"
     var nativePixelWidth: CGFloat?
     var ppi: CGFloat?
 
-    /// Breite des Bildschirms in Millimetern (Hochformat)
+    /// Screen width in millimeters (portrait)
     var physicalWidthMM: CGFloat? {
         guard let px = nativePixelWidth, let ppi, ppi > 0 else { return nil }
         return px / ppi * 25.4
@@ -41,10 +41,10 @@ struct DeviceProfile: Equatable {
         }
     }
 
-    // MARK: Bekannte Bauformen
+    // MARK: Known form factors
 
     private static let notch13 = Cutout.notch(width: 0.415, height: 0.085)   // iPhone 13, 13 Pro, 14, 16e
-    private static let notch12 = Cutout.notch(width: 0.536, height: 0.082)   // iPhone 12-Reihe
+    private static let notch12 = Cutout.notch(width: 0.536, height: 0.082)   // iPhone 12 series
     private static let notchX = Cutout.notch(width: 0.557, height: 0.080)    // X, XS, 11 Pro
     private static let notchMax = Cutout.notch(width: 0.505, height: 0.073)  // XS Max, 11 Pro Max
     private static let notchXR = Cutout.notch(width: 0.565, height: 0.073)   // XR, 11
@@ -71,7 +71,7 @@ struct DeviceProfile: Equatable {
                       nativePixelWidth: points.map { $0.width * 2 }, ppi: ppi)
     }
 
-    /// Android-Gerät nach seinen eigenen Angaben (Pixel, dpi-Stufe, Aussparung, Eckenradius)
+    /// Android device from its own data (pixels, dpi bucket, cutout, corner radius)
     static func android(name: String?, screenPixels: CGSize? = nil, densityDpi: CGFloat? = nil, ppi: CGFloat? = nil,
                         cutoutRect: CGRect? = nil, cornerRadius: CGFloat? = nil) -> DeviceProfile {
         var cutout = Cutout.hole(centerX: 0.5, centerY: 0.045, diameter: 0.034)
@@ -80,8 +80,8 @@ struct DeviceProfile: Equatable {
         if let pixels = screenPixels, pixels.width > 0 {
             let W = pixels.width
             if let rect = cutoutRect, rect.width > 0, rect.height > 0 {
-                // freistehend und quadratisch: das Loch selbst; am Rand anliegend oder höher als breit:
-                // eine Begrenzung mit Abstand, das Loch ist kleiner
+                // free-standing and square: the hole itself; touching the edge or taller than wide:
+                // a bounding area with margin, the hole is smaller
                 let square = abs(rect.width - rect.height) < 0.2 * max(rect.width, rect.height)
                 let diameter = min(rect.width, rect.height) * (square && rect.minY > 0 ? 1 : 0.65)
                 cutout = .hole(centerX: rect.midX / W, centerY: rect.midY / W, diameter: diameter / W)
@@ -96,7 +96,7 @@ struct DeviceProfile: Equatable {
                              ppi: ppi)
     }
 
-    /// Modellkennung (z. B. "iPhone14,2") → Profil
+    /// Model identifier (e.g. "iPhone14,2") → profile
     static func forModelIdentifier(_ identifier: String) -> DeviceProfile? {
         let p390 = CGSize(width: 390, height: 844), p428 = CGSize(width: 428, height: 926)
         let p375 = CGSize(width: 375, height: 812), p414 = CGSize(width: 414, height: 896)
@@ -142,7 +142,7 @@ struct DeviceProfile: Equatable {
             if identifier.hasPrefix("iPad") {
                 return pad(nil, homeButton: false, corner: 0.022, points: nil)
             }
-            // neuere, hier nicht aufgeführte iPhones haben eine Dynamic Island
+            // newer iPhones not listed here have a Dynamic Island
             if identifier.hasPrefix("iPhone"),
                let major = Int(identifier.dropFirst(6).split(separator: ",").first ?? ""), major >= 18 {
                 return phone(nil, island, corner: 0.150, points: nil)
@@ -151,7 +151,7 @@ struct DeviceProfile: Equatable {
         }
     }
 
-    /// Bildschirmauflösung in Pixeln (beliebige Ausrichtung) → Profil
+    /// Screen resolution in pixels (any orientation) → profile
     static func forScreenPixels(_ size: CGSize) -> DeviceProfile? {
         let w = Int(min(size.width, size.height).rounded()), h = Int(max(size.width, size.height).rounded())
         switch (w, h) {
@@ -179,7 +179,7 @@ struct DeviceProfile: Equatable {
         }
     }
 
-    /// Fallback über das Seitenverhältnis (z. B. skalierte AirPlay-Ströme)
+    /// Fallback by aspect ratio (e.g. scaled AirPlay streams)
     static func forAspect(_ size: CGSize) -> DeviceProfile {
         let ratio = max(size.width, size.height) / max(1, min(size.width, size.height))
         if ratio < 1.6 {
@@ -191,7 +191,7 @@ struct DeviceProfile: Equatable {
         return phone(nil, island, corner: 0.140, points: nil)
     }
 
-    /// Auswahl im Editor (neueste zuerst); "auto" = nach Auflösung
+    /// Choices in the editor (newest first); "auto" = by resolution
     static let selectableModels: [(id: String, name: String)] = {
         let ids = ["iPhone17,2", "iPhone17,1", "iPhone17,4", "iPhone17,3", "iPhone17,5",
                    "iPhone16,2", "iPhone16,1", "iPhone15,5", "iPhone15,4", "iPhone15,3", "iPhone15,2",
@@ -213,7 +213,7 @@ struct DeviceProfile: Equatable {
         }
     }
 
-    /// Bestes verfügbares Profil
+    /// Best available profile
     static func resolve(modelIdentifier: String?, screenPixels: CGSize?, frameSize: CGSize) -> DeviceProfile {
         var profile: DeviceProfile?
         if let id = modelIdentifier { profile = forModelIdentifier(id) }

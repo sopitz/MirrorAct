@@ -1,8 +1,8 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Holt den scrcpy-Server (feste Version, Prüfsumme) nach Vendor/scrcpy/scrcpy-server.
-# Er läuft auf dem Android-Gerät und liefert Bild, Ton und nimmt Eingaben entgegen.
-# Der Client in MirrorAct/Android spricht genau das Protokoll dieser Version.
+# Fetches the scrcpy server (pinned version, checksum) into Vendor/scrcpy/scrcpy-server.
+# It runs on the Android device, delivers video and audio, and accepts input.
+# The client in MirrorAct/Android speaks exactly this version's protocol.
 set -euo pipefail
 
 ROOT=${0:A:h:h}

@@ -2,7 +2,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Bedienelemente für die Gestaltung (Einstellungen und Editor)
+/// Controls for the style (settings and editor)
 struct StyleControls: View {
     @Binding var style: FrameStyle
     @Binding var showFrame: Bool
@@ -57,7 +57,7 @@ struct StyleControls: View {
         }
     }
 
-    /// beim Wechsel weg von «Transparent» Abstand und Schatten vorbelegen
+    /// when switching away from “Transparent”, preset padding and shadow
     private var backgroundSelection: Binding<BackgroundKind> {
         Binding(get: { style.background }, set: { kind in
             var updated = style
@@ -81,7 +81,7 @@ struct StyleControls: View {
         panel.allowedContentTypes = [.image]
         panel.message = String(localized: "Choose background image")
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        // Kopie im App-Ordner, damit das Bild auch nach Verschieben des Originals bleibt
+        // Copy in the app folder, so the image stays even after the original is moved
         let target = AppSettings.shared.supportDirectory
             .appendingPathComponent("Hintergrund-\(UUID().uuidString.prefix(8)).\(url.pathExtension)")
         let path = (try? FileManager.default.copyItem(at: url, to: target)) != nil ? target.path : url.path
@@ -100,7 +100,7 @@ struct StyleControls: View {
     }
 }
 
-/// Schachbrett hinter transparenten Vorschauen
+/// Checkerboard behind transparent previews
 struct Checkerboard: View {
     var body: some View {
         Canvas { context, size in

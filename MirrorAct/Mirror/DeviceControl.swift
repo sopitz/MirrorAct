@@ -1,32 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
 
-/// Bedienung eines Geräts über das Spiegelfenster. Das Fenster rechnet Maus und Trackpad in
-/// Bildschirmkoordinaten um: (0, 0) oben links, (1, 1) unten rechts, ausgerichtet wie das Videobild.
-/// Eingaben kommen nur an, solange `state == .ready`.
+/// Control of a device through the mirror window. The window converts mouse and trackpad input to
+/// screen coordinates: (0, 0) top left, (1, 1) bottom right, oriented like the video image.
+/// Input only arrives while `state == .ready`.
 protocol DeviceControl: AnyObject {
-    /// Tasten für Kontextmenü (alle) und Werkzeugleiste (die ersten drei, in der Reihenfolge des Geräts)
+    /// Buttons for the context menu (all) and the tool rail (the first three, in the device's order)
     var buttons: [DeviceButton] { get }
-    /// Symbol einer Taste, wie sie auf dem Gerät aussieht (Standard: `button.symbol`)
+    /// Symbol of a button as it looks on the device (default: `button.symbol`)
     func glyph(for button: DeviceButton) -> DeviceButton.Glyph
 
-    /// Android: immer bereit; iPhone: erst nach start() (Agent auf dem Gerät)
+    /// Android: always ready; iPhone: only after start() (agent on the device)
     var state: ControlState { get }
-    /// lässt sich ein- und ausschalten (Menü «Gerät bedienen»); false = immer an, solange verbunden
+    /// can be turned on and off (menu "Control Device"); false = always on while connected
     var startsOnDemand: Bool { get }
-    /// auf dem Main-Thread
+    /// on the main thread
     var onStateChange: ((ControlState) -> Void)? { get set }
     func start()
-    /// beim Ausschalten und beim Schliessen des Fensters
+    /// when turning off and when closing the window
     func stop()
 
     func touch(_ phase: TouchPhase, at point: CGPoint)
-    /// Mausrad oder Trackpad; Werte wie NSEvent.scrollingDeltaX/Y (Punkte bei präzisem Scrollen, sonst Zeilen)
+    /// Mouse wheel or trackpad; values like NSEvent.scrollingDeltaX/Y (points for precise scrolling, otherwise lines)
     func scroll(at point: CGPoint, dx: CGFloat, dy: CGFloat, precise: Bool)
-    /// keyDown/keyUp ohne ⌘ (Menükürzel gehen vor); true = verarbeitet
+    /// keyDown/keyUp without ⌘ (menu shortcuts take precedence); true = handled
     func key(_ event: NSEvent) -> Bool
     func press(_ button: DeviceButton)
-    /// Text aus der Zwischenablage des Macs einfügen (⌘V)
+    /// Paste text from the Mac's clipboard (⌘V)
     func paste(_ text: String)
 }
 
@@ -44,7 +44,7 @@ extension DeviceControl {
 
 enum ControlState: Equatable {
     case off, starting, ready
-    /// Meldung für den Benutzer (mehrzeilig möglich)
+    /// Message for the user (may span several lines)
     case failed(String)
 }
 
@@ -57,7 +57,7 @@ enum DeviceButton: CaseIterable, Identifiable {
 
     var id: Self { self }
 
-    /// SF Symbol, wahlweise gedreht (Samsungs «|||» sind drei waagrechte Linien, um 90° gedreht)
+    /// SF Symbol, optionally rotated (Samsung's "|||" is three horizontal lines rotated by 90°)
     struct Glyph: Equatable {
         var symbol: String
         var rotation: Double = 0

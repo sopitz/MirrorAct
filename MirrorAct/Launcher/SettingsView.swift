@@ -4,11 +4,11 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     static let width: CGFloat = 500
-    /// Titel- und Symbolleiste des Fensters (gemessen 88 pt)
+    /// Title bar and toolbar of the window (measured 88 pt)
     static let windowChrome: CGFloat = 90
     private static let screenMargin: CGFloat = 20
 
-    /// Höhe, ab der eine Seite scrollt, damit das Fenster auf den Bildschirm passt
+    /// Height above which a page scrolls, so the window fits on the screen
     /// (MacBook Air 13": 1470 × 956)
     static func maxPageHeight(visibleHeight: CGFloat) -> CGFloat {
         max(300, visibleHeight - windowChrome - screenMargin)
@@ -33,7 +33,7 @@ struct SettingsView: View {
 }
 
 extension View {
-    /// so hoch wie der Inhalt, höchstens maxHeight; darüber scrollt das Formular
+    /// as tall as the content, at most maxHeight; beyond that the form scrolls
     func settingsPage(maxHeight: CGFloat) -> some View {
         SettingsPageLayout(maxHeight: maxHeight) { self }
     }
@@ -53,7 +53,7 @@ private struct SettingsPageLayout: Layout {
     }
 }
 
-// MARK: Allgemein
+// MARK: General
 
 struct GeneralSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
@@ -162,7 +162,7 @@ struct GeneralSettingsView: View {
     }
 }
 
-// MARK: Gestaltung
+// MARK: Style
 
 struct DesignSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
@@ -185,7 +185,7 @@ struct DesignSettingsView: View {
     }
 }
 
-/// Vorschau mit dem aktuellen Bild des Spiegelfensters (sonst Testbild), auf Schachbrett für Transparenz
+/// Preview with the mirror window's current image (otherwise a test image), on a checkerboard for transparency
 struct DesignPreview: View {
     let style: FrameStyle
     let showFrame: Bool
@@ -213,7 +213,7 @@ struct DesignPreview: View {
             profile = MainActor.assumeIsolated { session.profile }
         }
         guard let full = screen ?? RenderTest.testScreen(size: CGSize(width: 1170, height: 2532)) else { return nil }
-        // verkleinert rendern, damit die Vorschau flüssig bleibt
+        // render downscaled so the preview stays smooth
         let scale = min(1, 520 / CGFloat(max(full.width, full.height)))
         let small = Self.scaled(full, by: scale) ?? full
         return FrameRenderer.render(screen: small, profile: profile, showFrame: showFrame, style: style)

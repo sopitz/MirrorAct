@@ -2,23 +2,23 @@
 import AppKit
 import CoreGraphics
 
-/// Gestaltung für Screenshots, Aufnahmen und Präsentation: Rahmenfarbe, Hintergrund, Abstand, Schatten, Format
+/// Style for screenshots, recordings and presentation: frame color, background, padding, shadow, aspect ratio
 struct FrameStyle: Codable, Equatable {
     var bezelColor: BezelColor = .graphite
     var background: BackgroundKind = .transparent
     var color: RGBA = RGBA(red: 0.13, green: 0.13, blue: 0.15)
     var gradient: GradientPreset = .ocean
     var imagePath: String?
-    /// Abstand um das Gerät, relativ zur kürzeren Geräteseite
+    /// Padding around the device, relative to the shorter device side
     var padding: Double = 0
     var shadow: Bool = false
     var aspect: CanvasAspect = .auto
-    /// ohne Rahmen: Ecken wie das Gerät abrunden
+    /// without a frame: round the corners like the device
     var roundedScreen: Bool = true
 
     var isPlainScreen: Bool { background == .transparent && padding == 0 && !shadow }
 
-    /// Schwarzer Rand zum Einpassen gedrehter Bilder in eine feste Leinwand
+    /// Black border for fitting rotated images into a fixed canvas
     static let letterbox = FrameStyle(background: .color, color: RGBA(red: 0, green: 0, blue: 0),
                                       padding: 0, shadow: false, roundedScreen: false)
 }
@@ -74,7 +74,7 @@ enum CanvasAspect: String, Codable, CaseIterable, Identifiable {
         case .landscape4x3: return "4:3"
         }
     }
-    /// Breite / Höhe
+    /// Width / height
     var ratio: CGFloat? {
         switch self {
         case .auto: return nil
@@ -111,7 +111,7 @@ enum GradientPreset: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// Gehäusefarben (Metallrahmen und Tasten; die Front bleibt schwarz)
+/// Chassis colors (metal frame and buttons; the front stays black)
 enum BezelColor: String, Codable, CaseIterable, Identifiable {
     case graphite, black, silver, gold, naturalTitanium, blue, purple
     var id: String { rawValue }
@@ -126,7 +126,7 @@ enum BezelColor: String, Codable, CaseIterable, Identifiable {
         case .purple: return String(localized: "Deep Purple")
         }
     }
-    /// Verlauf hell → dunkel → mittel
+    /// Gradient light → dark → medium
     var metal: [CGColor] {
         func c(_ r: Double, _ g: Double, _ b: Double) -> CGColor { CGColor(srgbRed: r, green: g, blue: b, alpha: 1) }
         switch self {
@@ -145,7 +145,7 @@ enum BezelColor: String, Codable, CaseIterable, Identifiable {
         return CGColor(srgbRed: min(1, comps[0] * 1.15), green: min(1, comps[1] * 1.15),
                        blue: min(1, comps[2] * 1.15), alpha: 1)
     }
-    /// Lichtkante: auf hellen Farben dunkler
+    /// Highlight edge: darker on light colors
     var highlight: CGColor {
         switch self {
         case .silver, .gold, .naturalTitanium, .blue: return CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.18)
@@ -155,10 +155,10 @@ enum BezelColor: String, Codable, CaseIterable, Identifiable {
     var swatch: NSColor { NSColor(cgColor: metal[0]) ?? .gray }
 }
 
-// MARK: Hintergrund zeichnen
+// MARK: Drawing the background
 
 extension FrameStyle {
-    /// Zeichnet den Hintergrund in `rect` (geflippter Kontext); transparent zeichnet nichts
+    /// Draws the background into `rect` (flipped context); transparent draws nothing
     func drawBackground(in ctx: CGContext, rect: CGRect, image: CGImage?) {
         switch background {
         case .transparent:
@@ -178,7 +178,7 @@ extension FrameStyle {
                 ctx.fill(rect)
                 return
             }
-            // füllend skalieren, mittig
+            // scale to fill, centered
             let scale = max(rect.width / CGFloat(image.width), rect.height / CGFloat(image.height))
             let size = CGSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
             let target = CGRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2,

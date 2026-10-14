@@ -3,7 +3,7 @@ import AppKit
 import AVFoundation
 import SwiftUI
 
-/// `MirrorAct --render-test <ordner>`: rendert Gehäuse für einige Geräte als PNG (zur Kontrolle ohne Gerät)
+/// `MirrorAct --render-test <folder>`: renders the chassis of a few devices as PNG (for checking without a device)
 enum RenderTest {
     static func run(into directory: URL) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -24,7 +24,7 @@ enum RenderTest {
                   let image = FrameRenderer.render(screen: screen, profile: profile, showFrame: true) else { continue }
             FrameRenderer.writePNG(image, to: directory.appendingPathComponent("\(name).png"))
         }
-        // Gestaltung: Hintergründe, Farben, Formate
+        // Style: backgrounds, colors, aspect ratios
         let screen = testScreen(size: CGSize(width: 1170, height: 2532))!
         let screenQuer = testScreen(size: CGSize(width: 2532, height: 1170))!
         let p13 = DeviceProfile.forModelIdentifier("iPhone14,2")!
@@ -43,7 +43,7 @@ enum RenderTest {
                 FrameRenderer.writePNG(out, to: directory.appendingPathComponent("\(name).png"))
             }
         }
-        // Duo in allen Posen
+        // Duo in all poses
         let p15 = DeviceProfile.forModelIdentifier("iPhone16,1")!
         let screen2 = testScreen(size: CGSize(width: 1179, height: 2556), hue: 0.45)!
         for pose in DuoPose.allCases {
@@ -85,7 +85,7 @@ enum RenderTest {
         print("Render-Test: \(directory.path)")
     }
 
-    /// Aufnahme-Test: 2 s synthetische Bilder (mit Drehung) ohne und mit Rahmen, danach Kontrolle mit AVAsset
+    /// Recording test: 2 s of synthetic images (with rotation) without and with a frame, then a check with AVAsset
     static func recordTest(into directory: URL, done: @escaping () -> Void) {
         let portrait = testScreen(size: CGSize(width: 1170, height: 2532))!
         let landscape = testScreen(size: CGSize(width: 2532, height: 1170))!
@@ -105,7 +105,7 @@ enum RenderTest {
                                                      audioSampleRate: withFrame ? nil : player.sampleRate)
             else { print("recorder error"); continue }
             if !withFrame {
-                // Ton wie bei AirPlay: AAC-ELD-Pakete alle ~11 ms
+                // Audio as with AirPlay: AAC-ELD packets every ~11 ms
                 player.recordTap = { recorder.appendAudio($0) }
                 DispatchQueue.global().async {
                     usleep(50_000)
@@ -118,7 +118,7 @@ enum RenderTest {
             let portraitBuffer = pixelBuffer(from: portrait)!, landscapeBuffer = pixelBuffer(from: landscape)!
             group.enter()
             DispatchQueue.global().async {
-                // wie in echt: ein Bild alle ~16 ms
+                // as in real use: one image every ~16 ms
                 for i in 0..<120 {
                     recorder.appendVideo(i < 90 ? portraitBuffer : landscapeBuffer, at: MirrorRecorder.now)
                     usleep(16_000)
@@ -159,7 +159,7 @@ enum RenderTest {
             }
         }
         group.notify(queue: .main) {
-            // vorhandenes Video rahmen (wie im Editor)
+            // frame an existing video (as in the editor)
             Task {
                 let input = directory.appendingPathComponent("aufnahme.mov")
                 let output = directory.appendingPathComponent("editor-video.mov")
@@ -186,7 +186,7 @@ enum RenderTest {
         }
     }
 
-    /// 440-Hz-Ton als AAC-ELD (44.1 kHz, stereo, 480 Frames), wie ihn das iPhone schickt
+    /// 440 Hz tone as AAC-ELD (44.1 kHz, stereo, 480 frames), as the iPhone sends it
     private static func eldTestPackets() -> [Data] {
         var description = AudioStreamBasicDescription(
             mSampleRate: 44100, mFormatID: kAudioFormatMPEG4AAC_ELD, mFormatFlags: 0, mBytesPerPacket: 0,
@@ -244,7 +244,7 @@ enum RenderTest {
         }
     }
 
-    /// Verlauf mit Statusleiste, damit Notch und Ecken beurteilbar sind
+    /// Gradient with a status bar, so Notch and corners can be judged
     static func testScreen(size: CGSize, hue: CGFloat = 0) -> CGImage? {
         let w = Int(size.width), h = Int(size.height)
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,

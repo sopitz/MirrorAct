@@ -1,10 +1,10 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Führt die Tests aus (MirrorActTests, laufen in einem Debug-Build der App).
-#   scripts/test.sh                       alle Tests
-#   scripts/test.sh PresentationTests     nur diese Klasse (auch Klasse/testName)
-# Die Tests öffnen kurz echte Fenster, auch Präsentieren im Vollbild.
+# Runs the tests (MirrorActTests, run in a debug build of the app).
+#   scripts/test.sh                       all tests
+#   scripts/test.sh PresentationTests     only this class (also Class/testName)
+# The tests briefly open real windows, including presenting in full screen.
 set -euo pipefail
 
 ROOT=${0:A:h:h}

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
 
-/// Vollbild-Präsentation: Gerät mittig auf dem gewählten Hintergrund, ohne Kopfleiste.
-/// Beenden mit Esc, ⌃⌘F oder dem Knopf oben links, der erscheint, sobald sich die Maus bewegt.
+/// Full-screen presentation: device centered on the chosen background, without a title bar.
+/// Exit with Esc, ⌃⌘F or the button at the top left, which appears as soon as the mouse moves.
 final class PresentationWindow: NSWindow {
-    /// so lange bleibt der Knopf nach der letzten Mausbewegung sichtbar
+    /// how long the button stays visible after the last mouse movement
     static var controlsHideDelay: TimeInterval = 3
 
     var onExit: (() -> Void)?
@@ -33,7 +33,7 @@ final class PresentationWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
-    /// Gerät einsetzen, unter dem Knopf
+    /// insert the device, below the button
     func embed(_ view: NSView) {
         content.addSubview(view, positioned: .below, relativeTo: controls)
     }
@@ -43,7 +43,7 @@ final class PresentationWindow: NSWindow {
         super.orderOut(sender)
     }
 
-    // MARK: Knopf zum Beenden
+    // MARK: Exit button
 
     private func setUpControls() {
         controls.material = .hudWindow
@@ -88,7 +88,7 @@ final class PresentationWindow: NSWindow {
         onExit?()
     }
 
-    /// zeigen und nach controlsHideDelay ohne Mausbewegung wieder ausblenden
+    /// show, then hide again after controlsHideDelay without mouse movement
     func showControls() {
         controls.alphaValue = 1
         hideTimer?.invalidate()
@@ -153,7 +153,7 @@ final class PresentationContentView: NSView {
         CATransaction.commit()
     }
 
-    /// Hintergrund aus der Gestaltung; transparent wird schwarz
+    /// background from the style; transparent becomes black
     func setBackground(style: FrameStyle, scale: CGFloat) {
         let size = CGSize(width: max(1, bounds.width * scale), height: max(1, bounds.height * scale))
         guard style.background != .transparent,

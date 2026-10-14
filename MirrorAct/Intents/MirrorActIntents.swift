@@ -3,8 +3,8 @@ import AppIntents
 import AppKit
 import UniformTypeIdentifiers
 
-/// Kurzbefehle: Screenshots einrahmen (auch als Finder-Schnellaktion nutzbar),
-/// Screenshot vom gespiegelten Gerät, Aufnahme starten/beenden.
+/// Shortcuts: frame screenshots (also usable as a Finder Quick Action),
+/// screenshot of the mirrored device, start/stop recording.
 
 struct FrameScreenshotIntent: AppIntent {
     static var title: LocalizedStringResource = "Frame Screenshot"

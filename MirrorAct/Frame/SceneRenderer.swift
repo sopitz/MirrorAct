@@ -3,14 +3,14 @@ import CoreImage
 import CoreVideo
 import Foundation
 
-/// Setzt ein Bildschirmbild mit Gehäuse, Hintergrund, Abstand und Schatten zusammen (Core Image).
-/// Gemeinsam für Screenshots, «Screenshot einrahmen» und Aufnahmen; die statischen Ebenen
-/// werden pro Bildgrösse einmal gezeichnet.
+/// Composes a screen image with chassis, background, padding and shadow (Core Image).
+/// Shared by screenshots, “Frame Screenshot” and recordings; the static layers
+/// are drawn once per image size.
 final class SceneRenderer: @unchecked Sendable {
     let style: FrameStyle
     let profile: DeviceProfile
     let showFrame: Bool
-    /// feste Leinwand (Aufnahme, damit eine Drehung die Videogrösse nicht ändert)
+    /// fixed canvas (recording, so a rotation does not change the video size)
     let fixedCanvas: CGSize?
 
     static let sharedContext = CIContext(options: [.cacheIntermediates: false])
@@ -20,13 +20,13 @@ final class SceneRenderer: @unchecked Sendable {
     private lazy var backgroundImage: CGImage? = style.loadBackgroundImage()
     private var cachedSize: CGSize = .zero
     private var scene: Scene?
-    /// AVVideoComposition ruft aus Hintergrund-Threads auf
+    /// AVVideoComposition calls in from background threads
     private let lock = NSLock()
 
     private struct Scene {
         let canvas: CGSize
-        let under: CIImage          // Hintergrund, Schatten, Gehäuse
-        let mask: CIImage           // Bildschirmfläche
+        let under: CIImage          // background, shadow, chassis
+        let mask: CIImage           // screen area
         let cutout: CIImage?        // Notch / Dynamic Island
         let screenTransform: CGAffineTransform
     }
@@ -47,7 +47,7 @@ final class SceneRenderer: @unchecked Sendable {
         self.context = context
     }
 
-    /// Ist das Ergebnis einfach der unveränderte Bildschirm?
+    /// Is the result simply the unchanged screen?
     static func isPassthrough(style: FrameStyle, showFrame: Bool) -> Bool {
         !showFrame && style.isPlainScreen && !style.roundedScreen
     }
@@ -123,7 +123,7 @@ final class SceneRenderer: @unchecked Sendable {
         context.render(result, to: output, bounds: CGRect(origin: .zero, size: canvas), colorSpace: colorSpace)
     }
 
-    // MARK: Statische Ebenen
+    // MARK: Static layers
 
     private func buildScene(for size: CGSize) -> Scene? {
         let g = Self.geometry(style: style, profile: profile, showFrame: showFrame, screenSize: size,
@@ -140,7 +140,7 @@ final class SceneRenderer: @unchecked Sendable {
             if style.shadow {
                 let d = min(layout.totalSize.width, layout.totalSize.height) * g.scale
                 ctx.saveGState()
-                // Schattenversatz wirkt im Geräteraum (y nach oben): negativ = nach unten
+                // Shadow offset applies in device space (y up): negative = down
                 ctx.setShadow(offset: CGSize(width: 0, height: -d * 0.03), blur: d * 0.09,
                               color: CGColor(gray: 0, alpha: 0.45))
                 ctx.concatenate(device)
@@ -178,7 +178,7 @@ final class SceneRenderer: @unchecked Sendable {
         return Scene(canvas: canvas, under: under, mask: mask, cutout: cutout, screenTransform: transform)
     }
 
-    /// Zeichnet in einen geflippten Kontext (oben links, y nach unten)
+    /// Draws into a flipped context (top left, y down)
     private func draw(_ size: CGSize, _ block: (CGContext) -> Void) -> CIImage? {
         let width = Int(size.width.rounded(.up)), height = Int(size.height.rounded(.up))
         guard width > 0, height > 0,

@@ -2,11 +2,11 @@
 import AVFoundation
 import CoreImage
 
-/// Rahmt vorhandene Videos (z. B. Bildschirmaufnahmen vom iPhone) über eine AVVideoComposition
+/// Frames existing videos (e.g. screen recordings from the iPhone) via an AVVideoComposition
 enum VideoFramer {
     struct Source {
         let asset: AVURLAsset
-        let size: CGSize              // angezeigte Grösse (Drehung berücksichtigt)
+        let size: CGSize              // displayed size (rotation applied)
         let transform: CGAffineTransform
         let duration: CMTime
     }
@@ -32,12 +32,12 @@ enum VideoFramer {
                       transform: transform, duration: duration)
     }
 
-    /// Ist Transparenz nötig (→ HEVC mit Alpha)?
+    /// Is transparency needed (→ HEVC with alpha)?
     static func needsAlpha(style: FrameStyle, showFrame: Bool) -> Bool {
         !SceneRenderer.isPassthrough(style: style, showFrame: showFrame) && style.background == .transparent
     }
 
-    /// previewScale < 1 rendert kleiner (flüssige Vorschau)
+    /// previewScale < 1 renders smaller (smooth preview)
     static func composition(for source: Source, style: FrameStyle, profile: DeviceProfile, showFrame: Bool,
                             previewScale: CGFloat = 1) async throws -> AVVideoComposition? {
         if SceneRenderer.isPassthrough(style: style, showFrame: showFrame), previewScale == 1 { return nil }
@@ -62,7 +62,7 @@ enum VideoFramer {
         return composition
     }
 
-    /// preferredTransform gilt für y nach unten; Core Image rechnet mit y nach oben
+    /// preferredTransform assumes y pointing down; Core Image works with y pointing up
     private static func ciTransform(for transform: CGAffineTransform) -> CGAffineTransform? {
         guard !transform.isIdentity else { return nil }
         let flip = CGAffineTransform(scaleX: 1, y: -1)

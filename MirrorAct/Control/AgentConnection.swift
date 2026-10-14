@@ -2,13 +2,13 @@
 import Darwin
 import Foundation
 
-/// HTTP/1.1 zum Agent (WebDriverAgent) auf dem Gerät, über das Kabel (usbmuxd) oder WLAN.
-/// Blockierend und nicht threadsicher: nur von der Warteschlange der Steuerung aus benutzen.
+/// HTTP/1.1 to the agent (WebDriverAgent) on the device, over the cable (usbmuxd) or Wi-Fi.
+/// Blocking and not thread-safe: use only from the control queue.
 final class AgentConnection {
     enum Route: CustomStringConvertible {
-        /// über usbmuxd (Kabel oder WLAN-Kopplung)
+        /// via usbmuxd (cable or Wi-Fi pairing)
         case usbmux(USBMux.Device)
-        /// direkt per TCP
+        /// directly via TCP
         case network(host: String)
 
         var description: String {
@@ -40,12 +40,12 @@ final class AgentConnection {
         fd = -1
     }
 
-    /// Antwortet der Agent? (kurzer Versuch, ohne Wiederholung)
+    /// Does the agent respond? (short attempt, no retry)
     func isAlive() -> Bool {
         (try? request("GET", "/status", timeout: 3, retry: false)) != nil
     }
 
-    /// führt einen Befehl aus und liefert "value" der JSON-Antwort
+    /// runs a command and returns "value" of the JSON response
     @discardableResult
     func request(_ method: String, _ path: String, body: [String: Any]? = nil,
                  timeout: Double = 20, retry: Bool = true) throws -> Any? {
@@ -59,7 +59,7 @@ final class AgentConnection {
         do {
             response = try roundTrip(message, timeout: timeout)
         } catch where retry {
-            // Keep-alive-Verbindung kann inzwischen geschlossen sein: einmal neu verbinden
+            // the keep-alive connection may have closed in the meantime: reconnect once
             disconnect()
             response = try roundTrip(message, timeout: timeout)
         }
@@ -122,7 +122,7 @@ final class AgentConnection {
         if headers["transfer-encoding"]?.lowercased() == "chunked" {
             return (status, try readChunked(rest))
         }
-        // ohne Länge: bis die Gegenstelle schliesst
+        // no length: read until the other side closes
         while let more = try? Socket.readSome(fd) { rest += more }
         disconnect()
         return (status, rest)

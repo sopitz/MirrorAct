@@ -3,7 +3,7 @@ import AppKit
 import AVFoundation
 import UniformTypeIdentifiers
 
-/// Ein offener Editor: ein oder zwei Bilder (Duo) oder ein Video
+/// An open editor: one or two images (duo) or a video
 @MainActor
 final class EditorDocument: ObservableObject, Identifiable {
     enum Content {
@@ -57,7 +57,7 @@ final class EditorDocument: ObservableObject, Identifiable {
         return DeviceProfile.resolve(modelIdentifier: nil, screenPixels: size, frameSize: size)
     }
 
-    // MARK: Vorschau
+    // MARK: Preview
 
     private func scheduleRefresh() {
         refreshTask?.cancel()
@@ -82,7 +82,7 @@ final class EditorDocument: ObservableObject, Identifiable {
         }
     }
 
-    /// Profil nach der Originalgrösse (die Vorschau rendert verkleinerte Bilder)
+    /// Profile by original size (the preview renders scaled-down images)
     private var originalSizes: [CGSize] {
         guard case let .images(_, images) = content else { return [] }
         return images.map { CGSize(width: $0.width, height: $0.height) }
@@ -108,9 +108,9 @@ final class EditorDocument: ObservableObject, Identifiable {
         }
     }
 
-    // MARK: Bilder exportieren
+    // MARK: Export images
 
-    /// volle Auflösung
+    /// full resolution
     func renderFull() -> CGImage? {
         guard case let .images(_, images) = content else { return nil }
         return render(images)
@@ -154,7 +154,7 @@ final class EditorDocument: ObservableObject, Identifiable {
         message = String(localized: "Copied to the clipboard")
     }
 
-    /// Datei für Teilen bzw. Herausziehen (temporär)
+    /// File for sharing or dragging out (temporary)
     func temporaryExport() async -> URL? {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("MirrorAct", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -167,7 +167,7 @@ final class EditorDocument: ObservableObject, Identifiable {
         return url
     }
 
-    // MARK: Video exportieren
+    // MARK: Export video
 
     func exportVideo(to url: URL) async {
         guard let source = videoSource else { return }
