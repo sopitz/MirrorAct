@@ -1,15 +1,15 @@
-// Gemeinsame Einstellungen. Eigene Werte (Signatur, Bundle-ID) gehören in Local.xcconfig,
-// siehe Local.xcconfig.example. Local.xcconfig wird nicht eingecheckt.
+// Shared settings. Your own values (signing, bundle ID) belong in Local.xcconfig,
+// see Local.xcconfig.example. Local.xcconfig is not checked in.
 
-// Homebrew (scripts/build.sh setzt den Wert aus `brew --prefix`)
+// Homebrew (scripts/build.sh sets the value from `brew --prefix`)
 HOMEBREW_PREFIX = /opt/homebrew
 
 PRODUCT_BUNDLE_IDENTIFIER = io.github.sopitz.MirrorAct
 
-// Die UxPlay-Bibliothek wird nur für die Architektur dieses Macs gebaut
+// The UxPlay library is built only for this Mac's architecture
 ARCHS = $(NATIVE_ARCH_ACTUAL)
 
-// Standard: ad-hoc signieren, ohne Entwicklerkonto
+// Default: ad hoc signing, no developer account
 CODE_SIGN_STYLE = Manual
 CODE_SIGN_IDENTITY = -
 DEVELOPMENT_TEAM =

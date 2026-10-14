@@ -15,13 +15,13 @@ enum DuoPose: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// Zwei Geräte auf einem gemeinsamen Hintergrund, in verschiedenen Posen
+/// Two devices on a shared background, in different poses
 enum DuoRenderer {
     static func render(screens: [CGImage], profiles: [DeviceProfile], style: FrameStyle, showFrame: Bool,
                        pose: DuoPose, context: CIContext = SceneRenderer.sharedContext) -> CGImage? {
         guard screens.count == 2, profiles.count == 2 else { return nil }
 
-        // 1. jedes Gerät einzeln, freigestellt
+        // 1. each device on its own, cut out
         var deviceStyle = style
         deviceStyle.background = .transparent
         deviceStyle.padding = 0
@@ -34,14 +34,14 @@ enum DuoRenderer {
             devices.append(CIImage(cgImage: image))
         }
 
-        // 2. gleiche Höhe
+        // 2. same height
         let height = devices.map(\.extent.height).max() ?? 1
         devices = devices.map { $0.transformed(by: CGAffineTransform(scaleX: height / $0.extent.height,
                                                                       y: height / $0.extent.height)) }
         let w0 = devices[0].extent.width, w1 = devices[1].extent.width
         let gap = 0.12 * min(w0, w1)
 
-        // 3. Pose (Core Image: y nach oben)
+        // 3. pose (Core Image: y points up)
         var placed: [CIImage]
         switch pose {
         case .sideBySide:
@@ -58,7 +58,7 @@ enum DuoRenderer {
                       perspective(devices[1], facingRight: false).transformed(by: CGAffineTransform(translationX: w0 * 0.92 + gap * 0.5, y: 0))]
         }
 
-        // 4. Leinwand: Inhalt + Abstand, ggf. Seitenverhältnis
+        // 4. canvas: content + padding, aspect ratio if set
         let content = placed.reduce(CGRect.null) { $0.union($1.extent) }
         let pad = CGFloat(style.padding) * min(w0, w1)
         var canvas = CGSize(width: content.width + 2 * pad, height: content.height + 2 * pad)
@@ -70,7 +70,7 @@ enum DuoRenderer {
                                       y: (canvas.height - content.height) / 2 - content.minY)
         placed = placed.map { $0.transformed(by: shift) }
 
-        // 5. Hintergrund, Schatten, Geräte
+        // 5. background, shadow, devices
         var result = background(style: style, size: canvas)
         if style.shadow {
             for device in placed {
@@ -93,7 +93,7 @@ enum DuoRenderer {
         return image.transformed(by: t)
     }
 
-    /// leicht um die Hochachse gedreht: die abgewandte Seite wird schmaler und kürzer
+    /// slightly rotated around the vertical axis: the far side gets narrower and shorter
     private static func perspective(_ image: CIImage, facingRight: Bool) -> CIImage {
         let e = image.extent
         let near: CGFloat = 1, far: CGFloat = 0.90, depth: CGFloat = 0.86

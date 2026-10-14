@@ -3,14 +3,14 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Randloses, transparentes Fenster in Form des Geräts
+/// Borderless, transparent window shaped like the device
 final class MirrorWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 
-/// Spiegelfenster: nur das Gerät; rechts daneben eine Werkzeugleiste, die beim Überfahren
-/// mit der Maus erscheint. Alle Funktionen zusätzlich per Rechtsklick und Tastenkürzel.
+/// Mirror window: just the device, with a tool rail to its right that appears when the mouse
+/// hovers over it. Every function is also available via right-click and keyboard shortcuts.
 @MainActor
 final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     static let railGap: CGFloat = 10
@@ -26,7 +26,8 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     private var zoom: CGFloat = 1
     private var placed = false
     private var resizeStartZoom: CGFloat = 1
-    private var presentation: PresentationWindow?
+    private(set) var presentation: PresentationWindow?
+    var isPresenting: Bool { presentation != nil }
     private var hideTask: Task<Void, Never>?
     private(set) var actions: MirrorActions!
 
@@ -140,7 +141,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         chrome.styleOpen = true
     }
 
-    // MARK: Werkzeuge ein-/ausblenden
+    // MARK: Show/hide tools
 
     private func setHovering(_ inside: Bool) {
         hideTask?.cancel()
@@ -151,7 +152,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// verzögert, damit die Leiste beim Wechsel vom Gerät zur Leiste nicht flackert
+    /// delayed so the rail doesn't flicker when moving from the device to the rail
     private func scheduleHide() {
         hideTask?.cancel()
         hideTask = Task { [weak self] in
@@ -162,9 +163,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    // MARK: Kontextmenü
+    // MARK: Context menu
 
-    private func contextMenu() -> NSMenu {
+    func contextMenu() -> NSMenu {
         let menu = NSMenu()
         let a = actions!
         menu.addItem(ActionMenuItem(session.isRecording ? String(localized: "Stop Recording") : String(localized: "Start Recording"), key: "r", a.toggleRecording))
@@ -198,7 +199,8 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         menu.addItem(ActionMenuItem(String(localized: "Keep on Top"), key: "t", state: settings.alwaysOnTop) { [weak self] in
             self?.settings.alwaysOnTop.toggle()
         })
-        menu.addItem(ActionMenuItem(String(localized: "Present"), a.present))
+        menu.addItem(ActionMenuItem(presentation == nil ? String(localized: "Present")
+                                                        : String(localized: "Exit Presentation"), a.present))
         menu.addItem(.separator())
 
         let size = NSMenu()
@@ -235,7 +237,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         return menu
     }
 
-    // MARK: Grösse
+    // MARK: Size
 
     private func layout(for zoom: CGFloat) -> FrameLayout {
         let screen = session.screenPointSize
@@ -274,7 +276,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     func actualSize() { setZoom(1) }
     func fitToScreen() { setZoom(fittingZoom(maxZoom: 3)) }
 
-    /// 1 Pixel des Geräts = 1 Pixel des Monitors
+    /// 1 device pixel = 1 display pixel
     func pixelPerfect() {
         let backing = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         let points = session.screenPointSize
@@ -284,7 +286,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         setZoom(pixelWidth / backing / max(1, min(points.width, points.height)))
     }
 
-    /// so gross wie das echte Gerät (nach Pixeldichte des Monitors)
+    /// as large as the real device (based on the display's pixel density)
     func lifeSize() {
         guard let screen = window?.screen ?? NSScreen.main,
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
@@ -312,7 +314,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        // native Grössenänderung: Seitenverhältnis des Geräts halten
+        // native resizing: keep the device's aspect ratio
         let unit = layout(for: 1).totalSize
         let proposed = (frameSize.width - Self.railGap - MirrorToolRail.width) / max(1, unit.width)
         zoom = max(0.25, min(3, proposed))
@@ -332,7 +334,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         let model = layout(for: zoom)
         frameView.layoutModel = model
         let size = contentSize(for: model)
-        // obere linke Ecke bleibt stehen
+        // top-left corner stays put
         let frame = NSRect(x: window.frame.minX, y: window.frame.maxY - size.height,
                            width: size.width, height: size.height)
         window.setFrame(frame, display: true, animate: false)
@@ -358,7 +360,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in self?.window?.invalidateShadow() }
     }
 
-    // MARK: Präsentation
+    // MARK: Presentation
 
     func togglePresentation() {
         presentation == nil ? enterPresentation() : exitPresentation(reshow: true)
@@ -371,13 +373,14 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         presentation.onExit = { [weak self] in self?.exitPresentation(reshow: true) }
         self.presentation = presentation
         frameView.removeFromSuperview()
-        presentation.content.addSubview(frameView)
+        presentation.embed(frameView)
         presentation.content.frame = CGRect(origin: .zero, size: screen.frame.size)
         presentation.content.setBackground(style: settings.style, scale: screen.backingScaleFactor)
         window?.orderOut(nil)
         presentation.makeKeyAndOrderFront(nil)
         if frameView.acceptsFirstResponder { presentation.makeFirstResponder(frameView) }
-        NSApp.presentationOptions = [.hideDock, .hideMenuBar]
+        // menu bar appears when the mouse moves to the top edge
+        NSApp.presentationOptions = [.hideDock, .autoHideMenuBar]
         NSCursor.setHiddenUntilMouseMoves(true)
         layoutPresentation()
     }
@@ -417,7 +420,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         layer.shadowOpacity = on ? 0.45 : 0
         layer.shadowRadius = on ? 30 : 0
         layer.shadowOffset = CGSize(width: 0, height: -12)
-        // fester Umriss: sonst berechnet Core Animation den Schatten bei jedem Videobild neu
+        // fixed outline: otherwise Core Animation recomputes the shadow on every video frame
         layer.shadowPath = on ? frameView.layoutModel?.silhouettePath : nil
     }
 
@@ -428,9 +431,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         applyPresentationShadow()
     }
 
-    // MARK: Bedienen
+    // MARK: Control
 
-    /// Bedienung ein-/ausschalten (iPhone: Agent auf dem Gerät starten)
+    /// Turn control on/off (iPhone: start the agent on the device)
     func toggleControl() {
         guard let control = session.control else {
             NSSound.beep()
@@ -456,7 +459,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         frameView.onMiddleClick = ready ? { [weak self] in self?.session.control?.press(.home) } : nil
         frameView.onKey = ready ? { [weak self] event in
             guard let self else { return false }
-            if self.presentation != nil, event.keyCode == 53 {   // Esc beendet die Präsentation
+            if self.presentation != nil, event.keyCode == 53 {   // Esc ends the presentation
                 if event.type == .keyDown { self.exitPresentation(reshow: true) }
                 return true
             }
@@ -480,7 +483,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// Punkt im Gerätebild → Bildschirmkoordinaten 0…1 (das Video füllt den Bildschirm, «aspect fill»)
+    /// Point in the device image → screen coordinates 0…1 (the video fills the screen, "aspect fill")
     private func devicePoint(_ point: CGPoint) -> CGPoint? {
         guard let screen = frameView.layoutModel?.screenRect, screen.width > 0, screen.height > 0 else { return nil }
         let video = session.frameSize == .zero ? screen.size : session.frameSize
@@ -525,7 +528,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-/// Inhalt des Fensters (geflippt, transparent); meldet, ob die Maus darüber ist
+/// Window content (flipped, transparent); reports whether the mouse is over it
 private final class ContainerView: NSView {
     var onLayout: (() -> Void)?
     var onHover: ((Bool) -> Void)?
@@ -558,7 +561,7 @@ private final class ContainerView: NSView {
     }
 }
 
-/// Menüeintrag mit Closure
+/// Menu item with a closure
 final class ActionMenuItem: NSMenuItem {
     private let handler: () -> Void
 

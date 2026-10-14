@@ -60,7 +60,8 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche Übersetzung), Info.plist und Siri-Phrasen |
 | `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Ecken, Punkte, ppi) für alle MirrorAct-Apps; als Ressource in die App gebündelt; ausserhalb der App kompilierte Swift-Werkzeuge (z. B. mit swiftc) können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen; die Windows-App liest dieselbe Datei. `scripts/build.sh` prüft sie als striktes JSON (keine Kommas am Ende), und die App bricht beim Start bei unbekannten Schlüsseln oder widersprüchlichen Einträgen ab. Ein Name darin, der eine Übersetzung braucht, bekommt einen manuellen Eintrag in `MirrorAct/Localization/Localizable.xcstrings`, weil der Compiler ihn nicht extrahieren kann |
 | `Agent` | MirrorActs Zusatzbefehle für WebDriverAgent (schnelle Berührungen), von `scripts/build-agent.sh` mitkompiliert |
-| `scripts` | Skripte für Build, Agent, Release, Symbol und die Prüfung der Geräteprofile |
+| `MirrorActTests` | Tests, laufen in einem Debug-Build der App (`scripts/test.sh`) |
+| `scripts` | Skripte für Build, Tests, Agent, Release, Symbol und die Prüfung der Geräteprofile |
 
 ## Ohne Gerät testen
 
@@ -77,6 +78,16 @@ Editor.
 Nach Änderungen an `Shared/DeviceProfiles.json` prüft `scripts/test-device-profiles.sh`, ob die
 Tabelle gültig ist und ob fehlerhafte Einträge (vertippte Schlüssel, falsche Pixelgrössen,
 unbekannte Aussparungen) mit einer klaren Meldung abgelehnt werden.
+
+## Tests
+
+```bash
+scripts/test.sh
+```
+
+Führt `MirrorActTests` in einem Debug-Build der App aus; `scripts/test.sh PresentationTests` nur
+eine Klasse. Die App startet dabei ohne AirPlay-Empfänger, USB und adb. Die Tests öffnen kurz echte
+Fenster, auch das Präsentieren im Vollbild.
 
 ## Screenshots
 

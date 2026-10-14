@@ -2,8 +2,8 @@
 import CoreGraphics
 import Foundation
 
-/// Aussehen eines Geräts: Bildschirmecken, Notch/Dynamic Island/Kameraloch, Home-Button.
-/// Alle Verhältnisse beziehen sich auf die Bildschirmbreite im Hochformat.
+/// Appearance of a device: screen corners, Notch/Dynamic Island/camera hole, Home button.
+/// All ratios are relative to the screen width in portrait.
 /// The tables for this live in `Shared/DeviceProfiles.json`, shared with the other MirrorAct apps.
 struct DeviceProfile: Equatable {
     enum Family: Equatable { case iPhone, iPad, android }
@@ -12,7 +12,7 @@ struct DeviceProfile: Equatable {
         case none
         case notch(width: CGFloat, height: CGFloat)
         case island(width: CGFloat, height: CGFloat, top: CGFloat)
-        /// rundes Kameraloch (Android), Mittelpunkt von links/oben
+        /// round camera hole (Android), center from left/top
         case hole(centerX: CGFloat, centerY: CGFloat, diameter: CGFloat)
     }
 
@@ -21,13 +21,13 @@ struct DeviceProfile: Equatable {
     var homeButton: Bool
     var cutout: Cutout
     var screenCornerRatio: CGFloat
-    /// Bildschirmgrösse in iOS-Punkten (Hochformat), für "Tatsächliche Grösse"
+    /// screen size in iOS points (portrait), for "Point-Perfect"
     var pointSize: CGSize?
-    /// physische Pixelbreite und Pixeldichte des Displays, für "Lebensgross"
+    /// physical pixel width and pixel density of the display, for "Life-Size"
     var nativePixelWidth: CGFloat?
     var ppi: CGFloat?
 
-    /// Breite des Bildschirms in Millimetern (Hochformat)
+    /// Screen width in millimeters (portrait)
     var physicalWidthMM: CGFloat? {
         guard let px = nativePixelWidth, let ppi, ppi > 0 else { return nil }
         return px / ppi * 25.4
@@ -114,7 +114,7 @@ struct DeviceProfile: Equatable {
                      pixels: entry.pixels, ppi: entry.ppi)
     }
 
-    /// Android-Gerät nach seinen eigenen Angaben (Pixel, dpi-Stufe, Aussparung, Eckenradius)
+    /// Android device from its own data (pixels, dpi bucket, cutout, corner radius)
     static func android(name: String?, screenPixels: CGSize? = nil, densityDpi: CGFloat? = nil, ppi: CGFloat? = nil,
                         cutoutRect: CGRect? = nil, cornerRadius: CGFloat? = nil) -> DeviceProfile {
         let defaults = table.android
@@ -124,8 +124,8 @@ struct DeviceProfile: Equatable {
         if let pixels = screenPixels, pixels.width > 0 {
             let W = pixels.width
             if let rect = cutoutRect, rect.width > 0, rect.height > 0 {
-                // freistehend und quadratisch: das Loch selbst; am Rand anliegend oder höher als breit:
-                // eine Begrenzung mit Abstand, das Loch ist kleiner
+                // free-standing and square: the hole itself; touching the edge or taller than wide:
+                // a bounding area with margin, the hole is smaller
                 let square = abs(rect.width - rect.height) < 0.2 * max(rect.width, rect.height)
                 let diameter = min(rect.width, rect.height) * (square && rect.minY > 0 ? 1 : 0.65)
                 cutout = .hole(centerX: rect.midX / W, centerY: rect.midY / W, diameter: diameter / W)
@@ -140,7 +140,7 @@ struct DeviceProfile: Equatable {
                              ppi: ppi)
     }
 
-    /// Modellkennung (z. B. "iPhone14,2") → Profil
+    /// Model identifier (e.g. "iPhone14,2") → profile
     static func forModelIdentifier(_ identifier: String) -> DeviceProfile? {
         if let entry = table.models[identifier] {
             return profile(entry)
@@ -160,14 +160,14 @@ struct DeviceProfile: Equatable {
         return nil
     }
 
-    /// Bildschirmauflösung in Pixeln (beliebige Ausrichtung) → Profil
+    /// Screen resolution in pixels (any orientation) → profile
     static func forScreenPixels(_ size: CGSize) -> DeviceProfile? {
         let w = Int(min(size.width, size.height).rounded()), h = Int(max(size.width, size.height).rounded())
         guard let entry = table.byPixels["\(w)x\(h)"] else { return nil }
         return profile(entry, pixels: (w, h))
     }
 
-    /// Fallback über das Seitenverhältnis (z. B. skalierte AirPlay-Ströme)
+    /// Fallback by aspect ratio (e.g. scaled AirPlay streams)
     static func forAspect(_ size: CGSize) -> DeviceProfile {
         let ratio = max(size.width, size.height) / max(1, min(size.width, size.height))
         let aspect = table.byAspect
@@ -180,7 +180,7 @@ struct DeviceProfile: Equatable {
         return phone(nil, cutout("island"), corner: aspect.islandCorner, points: nil)
     }
 
-    /// Auswahl im Editor (neueste zuerst); "auto" = nach Auflösung
+    /// Choices in the editor (newest first); "auto" = by resolution
     static let selectableModels: [(id: String, name: String)] = {
         var list = table.selectable.models.compactMap { id in
             forModelIdentifier(id)?.marketingName.map { (id: id, name: $0) }
@@ -198,7 +198,7 @@ struct DeviceProfile: Equatable {
         return forModelIdentifier(id)
     }
 
-    /// Bestes verfügbares Profil
+    /// Best available profile
     static func resolve(modelIdentifier: String?, screenPixels: CGSize?, frameSize: CGSize) -> DeviceProfile {
         var profile: DeviceProfile?
         if let id = modelIdentifier { profile = forModelIdentifier(id) }

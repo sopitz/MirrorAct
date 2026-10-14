@@ -2,14 +2,14 @@
 import AVFoundation
 import Foundation
 
-/// Spielt AAC-Pakete ohne Puffer ab: AirPlay (AAC-ELD, 44.1 kHz, 480 Frames je Paket) und Android
-/// (AAC-LC, 48 kHz, 1024 Frames). Staut sich etwas, werden Pakete verworfen (Latenz vor Lückenlosigkeit).
+/// Plays AAC packets without buffering: AirPlay (AAC-ELD, 44.1 kHz, 480 frames per packet) and Android
+/// (AAC-LC, 48 kHz, 1024 frames). If packets back up, they are dropped (latency over gapless playback).
 final class AACAudioPlayer: @unchecked Sendable {
     struct Format {
         var formatID: AudioFormatID
         var sampleRate: Double
         var framesPerPacket: UInt32
-        /// AudioSpecificConfig; bei Android kommt sie erst mit dem ersten Paket (setCookie)
+        /// AudioSpecificConfig; for Android it only arrives with the first packet (setCookie)
         var cookie: Data?
 
         static let airPlay = Format(formatID: kAudioFormatMPEG4AAC_ELD, sampleRate: 44100, framesPerPacket: 480,
@@ -30,7 +30,7 @@ final class AACAudioPlayer: @unchecked Sendable {
     private var gain: Float = 1
     private var isMuted = false
 
-    /// höchstens so viele Pakete in der Warteschlange (etwa 140 ms)
+    /// at most this many packets in the queue (about 140 ms)
     private let maxQueued: Int
 
     let sampleRate: Double
@@ -38,7 +38,7 @@ final class AACAudioPlayer: @unchecked Sendable {
     private var tap: ((CMSampleBuffer) -> Void)?
     private var audioFormatDescription: CMAudioFormatDescription?
 
-    /// bekommt jeden dekodierten Block mit Host-Zeit (für Aufnahmen), auch wenn stumm
+    /// receives every decoded block with host time (for recordings), even when muted
     var recordTap: ((CMSampleBuffer) -> Void)? {
         get { tapLock.lock(); defer { tapLock.unlock() }; return tap }
         set { tapLock.lock(); tap = newValue; tapLock.unlock() }
@@ -64,7 +64,7 @@ final class AACAudioPlayer: @unchecked Sendable {
         set { queue.async { self.isMuted = newValue; self.applyVolume() } }
     }
 
-    /// AirPlay-Lautstärke in dB (−30 … 0, −144 = stumm)
+    /// AirPlay volume in dB (−30 … 0, −144 = muted)
     func setAirPlayVolume(_ db: Float) {
         queue.async {
             self.gain = db <= -144 ? 0 : max(0, min(1, (db + 30) / 30))
@@ -73,16 +73,16 @@ final class AACAudioPlayer: @unchecked Sendable {
     }
 
     func handle(_ data: Data, compressionType: UInt8) {
-        guard compressionType == 8 else { return }   // nur AAC-ELD (Spiegelung)
+        guard compressionType == 8 else { return }   // AAC-ELD only (mirroring)
         play(data)
     }
 
-    /// ein AAC-Paket (ohne ADTS-Kopf)
+    /// one AAC packet (without ADTS header)
     func play(_ data: Data) {
         queue.async { self.decodeAndPlay(data) }
     }
 
-    /// AudioSpecificConfig des Stroms (Android: erstes Paket)
+    /// the stream's AudioSpecificConfig (Android: first packet)
     func setCookie(_ data: Data) {
         queue.async {
             self.cookie = data

@@ -1,10 +1,10 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Prüft Shared/DeviceProfiles.json als striktes JSON (RFC 8259).
-# Foundation liest auch Kommas am Ende, NaN und doppelte Schlüssel; die Windows-App
-# (System.Text.Json) nicht. Darum muss die Datei hier strenger durchgehen als in der Mac-App.
-#   scripts/check-device-profiles.sh [DATEI]
+# Checks Shared/DeviceProfiles.json as strict JSON (RFC 8259).
+# Foundation also reads trailing commas, NaN and duplicate keys; the Windows app
+# (System.Text.Json) does not. So the file has to pass a stricter check here than in the Mac app.
+#   scripts/check-device-profiles.sh [FILE]
 set -euo pipefail
 
 ROOT=${0:A:h:h}

@@ -3,12 +3,12 @@ import AppKit
 import Combine
 import Foundation
 
-/// Bedienung eines iPhones/iPads über den Test-Agent (WebDriverAgent): startet ihn per `xcodebuild`
-/// auf dem Gerät und schickt Tippen, Wischen, Text und Tasten. Braucht Xcode, den Entwicklermodus
-/// auf dem Gerät und einen mit dem eigenen Team gebauten Agent (scripts/build-agent.sh).
+/// Control of an iPhone/iPad via the test agent (WebDriverAgent): launches it on the device with
+/// `xcodebuild` and sends taps, swipes, text and buttons. Needs Xcode, Developer Mode on the
+/// device and an agent built with your own team (scripts/build-agent.sh).
 @MainActor
 final class IOSControl: @preconcurrency DeviceControl {
-    /// Punkt auf dem Bildschirm, 0…1 in der angezeigten Ausrichtung, mit Zeit seit Berührungsbeginn
+    /// Point on the screen, 0…1 in the displayed orientation, with time since the touch began
     struct TouchPoint {
         var x: CGFloat
         var y: CGFloat
@@ -26,15 +26,15 @@ final class IOSControl: @preconcurrency DeviceControl {
     private let worker = ControlWorker()
     private var liveObserver: AnyCancellable?
     private var endedObserver: NSObjectProtocol?
-    /// Gerät, dessen Agent diese Bedienung gestartet hat oder nutzt
+    /// Device whose agent this control started or uses
     private var agentUDID: String?
-    /// Agent übernommen (AgentRunners.acquire): beim Ausschalten nur freigeben, er läuft noch eine Weile
+    /// Agent taken over (AgentRunners.acquire): when turning off, only release it; it keeps running for a while
     private var holdsAgent = false
 
-    /// laufende Berührung
+    /// current touch
     private var touchPath: [TouchPoint] = []
     private var touchStart: TimeInterval = 0
-    /// laufendes Scrollen (als Wischgeste)
+    /// current scroll (as a swipe gesture)
     private var scrollPath: [TouchPoint] = []
     private var scrollStart: TimeInterval = 0
     private var scrollFinish: DispatchWorkItem?
@@ -54,7 +54,7 @@ final class IOSControl: @preconcurrency DeviceControl {
                 self.lost(String(localized: "the agent on the device stopped"))
             }
         }
-        // beim Verbinden (erstes Bild) gleich starten, wenn so eingestellt
+        // start right away on connecting (first image), if set up that way
         liveObserver = session.$state.removeDuplicates().sink { [weak self] state in
             guard state == .live else { return }
             DispatchQueue.main.async { self?.startAutomatically() }
@@ -67,25 +67,25 @@ final class IOSControl: @preconcurrency DeviceControl {
 
     private var isActive: Bool { state == .ready || state == .starting }
 
-    /// Agent mit scripts/build-agent.sh gebaut?
+    /// Agent built with scripts/build-agent.sh?
     static var isAgentBuilt: Bool { ControlWorker.agentTestRun() != nil }
 
-    /// Bild im Querformat (Koordinaten des Agents folgen der Ausrichtung der App)
+    /// Image in landscape (the agent's coordinates follow the app's orientation)
     private var landscape: Bool {
         guard let size = session?.frameSize, size != .zero else { return false }
         return size.width > size.height
     }
 
-    /// Bildschirm in iOS-Punkten, ausgerichtet wie das Bild
+    /// Screen in iOS points, oriented like the image
     private var screenPoints: CGSize { session?.screenPointSize ?? CGSize(width: 390, height: 844) }
 
-    // MARK: Start / Stopp
+    // MARK: Start / Stop
 
     func start() {
         begin(automatic: false)
     }
 
-    /// Start beim Verbinden; klappt es nicht (Agent fehlt, Gerät gesperrt …), bleibt der Knopf «Bedienen»
+    /// Start on connecting; if that fails (agent missing, device locked …), the "Control" button stays
     private func startAutomatically() {
         guard AppSettings.shared.autoStartControl, ControlWorker.agentTestRun() != nil else { return }
         switch state {
@@ -99,7 +99,7 @@ final class IOSControl: @preconcurrency DeviceControl {
         let name = session?.deviceName ?? ""
         state = .starting
         worker.start(deviceName: name, launch: { [weak self] udid, testRun, onOutput in
-            // läuft auf dem Main-Thread
+            // runs on the main thread
             MainActor.assumeIsolated {
                 guard let self else { return nil }
                 self.agentUDID = udid
@@ -118,7 +118,7 @@ final class IOSControl: @preconcurrency DeviceControl {
                     if error is CancellationError { return }
                     Log.error("Control\(automatic ? " (automatic start)" : ""): \(error.localizedDescription)")
                     self.releaseAgent()
-                    // automatisch: still auf den Knopf «Bedienen» zurückfallen; der sagt beim Klick, was fehlt
+                    // automatic: quietly fall back to the "Control" button; clicking it says what is missing
                     self.state = automatic ? .off : .failed(error.localizedDescription)
                 }
             }
@@ -141,7 +141,7 @@ final class IOSControl: @preconcurrency DeviceControl {
         state = .failed(String(localized: "Control was interrupted: \(message)"))
     }
 
-    /// übernommener Agent läuft noch eine Weile (nächster Start sofort), ein halb gestarteter wird beendet
+    /// a taken-over agent keeps running for a while (next start is instant), a half-started one is terminated
     private func releaseAgent() {
         guard let udid = agentUDID else { return }
         if holdsAgent {
@@ -153,7 +153,7 @@ final class IOSControl: @preconcurrency DeviceControl {
         holdsAgent = false
     }
 
-    // MARK: Eingaben
+    // MARK: Input
 
     func touch(_ phase: TouchPhase, at point: CGPoint) {
         guard state == .ready else { return }
@@ -165,7 +165,7 @@ final class IOSControl: @preconcurrency DeviceControl {
         case .moved:
             guard !touchPath.isEmpty else { return }
             let sample = TouchPoint(x: point.x, y: point.y, time: now - touchStart)
-            // höchstens ~80 Punkte pro Sekunde; der letzte Punkt bleibt immer aktuell
+            // at most ~80 points per second; the last point is always kept current
             if touchPath.count > 1, sample.time - touchPath[touchPath.count - 2].time < 0.012 {
                 touchPath[touchPath.count - 1] = sample
             } else {
@@ -179,7 +179,7 @@ final class IOSControl: @preconcurrency DeviceControl {
                 .max() ?? 0
             let distance = max(moved, hypot((point.x - first.x) * points.width, (point.y - first.y) * points.height))
             if distance < 8 {
-                // Tippen oder Halten (Dauer wie mit der Maus, mindestens 50 ms)
+                // tap or hold (duration as with the mouse, at least 50 ms)
                 send([first, TouchPoint(x: first.x, y: first.y, time: max(0.05, duration))])
             } else {
                 touchPath.append(TouchPoint(x: point.x, y: point.y, time: duration))
@@ -189,8 +189,8 @@ final class IOSControl: @preconcurrency DeviceControl {
         }
     }
 
-    /// Trackpad und Mausrad als Wischgeste: beim Loslassen der Finger abgeschickt,
-    /// iOS rollt dann selbst nach. Phasen kommen aus dem gerade verarbeiteten NSEvent.
+    /// Trackpad and mouse wheel as a swipe gesture: sent when the fingers lift,
+    /// iOS then adds the momentum itself. Phases come from the NSEvent being processed.
     func scroll(at point: CGPoint, dx: CGFloat, dy: CGFloat, precise: Bool) {
         guard state == .ready else { return }
         if let event = NSApp.currentEvent, event.type == .scrollWheel,
@@ -203,7 +203,7 @@ final class IOSControl: @preconcurrency DeviceControl {
             if event.phase.contains(.ended) || event.phase.contains(.cancelled) { finishScroll() }
             return
         }
-        // Mausrad ohne Phasen: kurz sammeln
+        // mouse wheel without phases: collect briefly
         if scrollPath.isEmpty { beginScroll(at: point) }
         let factor: CGFloat = precise ? 1 : 40
         addScroll(dx * factor, dy * factor)
@@ -218,7 +218,7 @@ final class IOSControl: @preconcurrency DeviceControl {
         scrollPath = [TouchPoint(x: point.x, y: point.y, time: 0)]
     }
 
-    /// dx/dy: Inhalt bewegt sich in diese Richtung, also auch der Finger (1 Punkt = 1 iOS-Punkt)
+    /// dx/dy: the content moves in this direction, so the finger does too (1 point = 1 iOS point)
     private func addScroll(_ dx: CGFloat, _ dy: CGFloat) {
         guard let last = scrollPath.last, dx != 0 || dy != 0 else { return }
         let points = screenPoints
@@ -253,7 +253,7 @@ final class IOSControl: @preconcurrency DeviceControl {
         case 53: return false             // Esc
         default:
             guard let characters = event.characters, !characters.isEmpty else { return false }
-            // Pfeil- und Funktionstasten kann der Agent nicht tippen
+            // the agent can't type arrow and function keys
             let printable = characters.unicodeScalars.filter { scalar in
                 !(0xF700...0xF8FF).contains(scalar.value) && scalar.value >= 0x20 && scalar.value != 0x7F
             }
@@ -280,7 +280,7 @@ final class IOSControl: @preconcurrency DeviceControl {
             if session?.profile.homeButton == true {
                 worker.enqueue(.doubleHome)
             } else {
-                // vom unteren Rand nach oben wischen und kurz halten
+                // swipe up from the bottom edge and hold briefly
                 send([TouchPoint(x: 0.5, y: 0.998, time: 0), TouchPoint(x: 0.5, y: 0.93, time: 0.08),
                       TouchPoint(x: 0.5, y: 0.75, time: 0.25), TouchPoint(x: 0.5, y: 0.62, time: 0.4),
                       TouchPoint(x: 0.5, y: 0.62, time: 0.85)])
@@ -289,7 +289,7 @@ final class IOSControl: @preconcurrency DeviceControl {
             send([TouchPoint(x: 0.3, y: 0.002, time: 0), TouchPoint(x: 0.3, y: 0.15, time: 0.1),
                   TouchPoint(x: 0.3, y: 0.6, time: 0.3)])
         case .back:
-            // Zurück-Geste vom linken Rand
+            // back gesture from the left edge
             send([TouchPoint(x: 0.002, y: 0.5, time: 0), TouchPoint(x: 0.15, y: 0.5, time: 0.08),
                   TouchPoint(x: 0.7, y: 0.5, time: 0.3)])
         case .rotate:
@@ -303,9 +303,9 @@ final class IOSControl: @preconcurrency DeviceControl {
     }
 }
 
-// MARK: - Hintergrund
+// MARK: - Background
 
-/// Verbindung und Befehlswarteschlange; alles Blockierende läuft auf `queue`
+/// Connection and command queue; everything blocking runs on `queue`
 private final class ControlWorker: @unchecked Sendable {
     enum Command {
         case touch([IOSControl.TouchPoint], landscape: Bool)
@@ -328,18 +328,18 @@ private final class ControlWorker: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: [Command] = []
     private var draining = false
-    /// erhöht bei jedem Start/Stopp; alte Befehle und Starts verfallen
+    /// incremented on every start/stop; old commands and starts expire
     private var generation = 0
 
-    // nur auf `queue`
+    // only on `queue`
     private var connection: AgentConnection?
     private var sessionID: String?
-    /// Bildschirm in Punkten, Hochformat
+    /// Screen in points, portrait
     private var screen = CGSize(width: 390, height: 844)
 
     // MARK: Start
 
-    /// completion: UDID des Geräts, dessen Agent die Bedienung nutzt
+    /// completion: UDID of the device whose agent the control uses
     func start(deviceName: String, launch: @escaping Launcher,
                completion: @escaping @Sendable (Result<String, Error>) -> Void) {
         let current = bumpGeneration()
@@ -390,7 +390,7 @@ private final class ControlWorker: @unchecked Sendable {
         }
         guard isCurrent(current) else { throw CancellationError() }
 
-        // läuft der Agent noch (nach dem Schliessen eines Fensters oder einem Absturz)? Dann sofort verbinden.
+        // is the agent still running (after a window was closed or a crash)? Then connect right away.
         let knownHost = DispatchQueue.main.sync { MainActor.assumeIsolated { AgentRunners.shared.host(udid: udid) } }
         if let running = routes(udid: udid, host: knownHost).lazy.map({ AgentConnection(route: $0) })
             .first(where: { $0.isAlive() }) {
@@ -399,7 +399,7 @@ private final class ControlWorker: @unchecked Sendable {
             return udid
         }
 
-        // gesperrt startet xcodebuild den Agent nicht (und beendet sich danach nicht von selbst)
+        // while locked, xcodebuild doesn't start the agent (and doesn't exit on its own afterwards)
         guard !DeviceInfoLookup.isLocked(udid: udid) else {
             throw StartError(message: String(localized: "Unlock the device and try again."))
         }
@@ -408,7 +408,7 @@ private final class ControlWorker: @unchecked Sendable {
         let started = Date()
         var serverURL: URL?
         do {
-            // dieser Build liegt schon auf dem Gerät: ohne erneute Installation starten (spart einige Sekunden)
+            // this build is already on the device: launch without reinstalling (saves a few seconds)
             let build = Self.agentBuildID()
             if let build, Self.installedBuild(udid: udid) == build,
                let installed = Self.installedTestRun(from: testRun, build: build) {
@@ -426,7 +426,7 @@ private final class ControlWorker: @unchecked Sendable {
                 Self.setInstalledBuild(build, udid: udid)
             }
         } catch is DeviceLocked {
-            // erst nach der Prüfung oben gesperrt worden
+            // locked only after the check above
             throw StartError(message: String(localized: "Unlock the device and try again."))
         }
         let host = serverURL?.host
@@ -445,7 +445,7 @@ private final class ControlWorker: @unchecked Sendable {
         throw StartError(message: String(localized: "The agent started, but the Mac can’t reach it."))
     }
 
-    /// usbmuxd (Kabel, sonst WLAN-Kopplung), sonst direkt an die Adresse, die der Agent meldet
+    /// usbmuxd (cable, otherwise Wi-Fi pairing), otherwise directly to the address the agent reports
     private func routes(udid: String, host: String?) -> [AgentConnection.Route] {
         var routes: [AgentConnection.Route] = []
         if let mux = USBMux.device(udid: udid) { routes.append(.usbmux(mux)) }
@@ -455,12 +455,12 @@ private final class ControlWorker: @unchecked Sendable {
 
     struct DeviceLocked: Error {}
 
-    /// startet den Agent per xcodebuild und wartet auf seine Adresse
+    /// launches the agent via xcodebuild and waits for its address
     private func launchAgent(udid: String, testRun: URL, deviceName: String, generation current: Int,
                              launch: Launcher) throws -> URL {
         let output = RunnerOutput()
         let started = Date()
-        // auf dem Main-Thread, wo auch stop() läuft: nach einem Stopp nichts mehr starten
+        // on the main thread, where stop() runs too: start nothing after a stop
         let launched: Process?? = DispatchQueue.main.sync {
             isCurrent(current) ? .some(launch(udid, testRun, { output.append($0) })) : .none
         }
@@ -480,7 +480,7 @@ private final class ControlWorker: @unchecked Sendable {
             }
             if !process.isRunning || Date().timeIntervalSince(started) > 120 {
                 if process.isRunning { process.interrupt() }
-                Thread.sleep(forTimeInterval: 0.3)   // letzte Ausgabe abwarten
+                Thread.sleep(forTimeInterval: 0.3)   // wait for the last output
                 throw StartError(message: output.failureReason())
             }
             Thread.sleep(forTimeInterval: 0.2)
@@ -499,7 +499,7 @@ private final class ControlWorker: @unchecked Sendable {
         guard let id = (session as? [String: Any])?["sessionId"] as? String else {
             throw StartError(message: String(localized: "The agent did not open a session."))
         }
-        // nach Gesten nicht auf das Ende von Animationen warten
+        // after gestures, don't wait for animations to finish
         try connection.request("POST", "/session/\(id)/appium/settings", body: ["settings": [
             "animationCoolOffTimeout": 0,
             "waitForIdleTimeout": 0,
@@ -517,20 +517,20 @@ private final class ControlWorker: @unchecked Sendable {
         AppSettings.shared.supportDirectory.appendingPathComponent("Agent", isDirectory: true)
     }
 
-    /// gebauter Agent in ~/Library/Application Support/MirrorAct/Agent
+    /// built agent in ~/Library/Application Support/MirrorAct/Agent
     static func agentTestRun() -> URL? {
         let files = (try? FileManager.default.contentsOfDirectory(at: agentDirectory, includingPropertiesForKeys: nil)) ?? []
         return files.first { $0.pathExtension == "xctestrun" }
     }
 
-    /// Kennung des gebauten Agents (scripts/build-agent.sh schreibt bei jedem Bau eine neue)
+    /// ID of the built agent (scripts/build-agent.sh writes a new one on every build)
     static func agentBuildID() -> String? {
         let url = agentDirectory.appendingPathComponent("build-id")
         let id = (try? String(contentsOf: url, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
         return id?.isEmpty == false ? id : nil
     }
 
-    /// welcher Build zuletzt auf dieses Gerät installiert wurde
+    /// which build was last installed on this device
     static func installedBuild(udid: String) -> String? {
         UserDefaults.standard.string(forKey: "agentBuild.\(udid)")
     }
@@ -539,8 +539,8 @@ private final class ControlWorker: @unchecked Sendable {
         UserDefaults.standard.set(build, forKey: "agentBuild.\(udid)")
     }
 
-    /// Variante der xctestrun-Datei, die den auf dem Gerät installierten Agent startet
-    /// (UseDestinationArtifacts, siehe `man xcodebuild.xctestrun`)
+    /// Variant of the xctestrun file that launches the agent installed on the device
+    /// (UseDestinationArtifacts, see `man xcodebuild.xctestrun`)
     static func installedTestRun(from testRun: URL, build: String) -> URL? {
         let dir = AppSettings.shared.supportDirectory.appendingPathComponent("AgentLaunch", isDirectory: true)
         let url = dir.appendingPathComponent("installed-\(build).xctestrun")
@@ -559,7 +559,7 @@ private final class ControlWorker: @unchecked Sendable {
             target["UITargetAppBundleIdentifier"] = host
             plist[key] = target
         }
-        // ältere Varianten gehören zu früheren Builds
+        // older variants belong to earlier builds
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         guard let out = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0),
@@ -567,7 +567,7 @@ private final class ControlWorker: @unchecked Sendable {
         return url
     }
 
-    // MARK: Befehle
+    // MARK: Commands
 
     func enqueue(_ command: Command) {
         let start = lock.withLock {
@@ -586,7 +586,7 @@ private final class ControlWorker: @unchecked Sendable {
                     return nil
                 }
                 var command = pending.removeFirst()
-                // schnell getippter Text: zusammen schicken
+                // quickly typed text: send it together
                 if case var .text(text) = command {
                     while case let .text(more)? = pending.first {
                         text += more
@@ -604,7 +604,7 @@ private final class ControlWorker: @unchecked Sendable {
                 Log.debug("Control: \(command.name) in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
             } catch {
                 guard isCurrent(current) else { continue }
-                // ein Fehler bei einer Geste (z. B. Gerät gesperrt) ist kein Verbindungsabbruch
+                // an error during a gesture (e.g. device locked) is not a lost connection
                 if connection.isAlive() {
                     Log.error("Control: \(command.name) failed: \(error.localizedDescription)")
                 } else {
@@ -617,7 +617,7 @@ private final class ControlWorker: @unchecked Sendable {
     private func execute(_ command: Command, connection: AgentConnection, session: String) throws {
         switch command {
         case let .touch(path, landscape):
-            // eigener Befehl des Agents (Agent/MirrorActCommands.m): ohne Abfrage der Bedienungshierarchie
+            // the agent's own command (Agent/MirrorActCommands.m): without querying the UI hierarchy
             let size = landscape ? CGSize(width: screen.height, height: screen.width) : screen
             try connection.request("POST", "/mirroract/touch",
                                    body: ["landscape": landscape, "points": Self.points(path, size: size)])
@@ -634,7 +634,7 @@ private final class ControlWorker: @unchecked Sendable {
         }
     }
 
-    /// [[x, y, t]] in iOS-Punkten, t in Sekunden ab Berührungsbeginn
+    /// [[x, y, t]] in iOS points, t in seconds since the touch began
     static func points(_ path: [IOSControl.TouchPoint], size: CGSize) -> [[Double]] {
         path.map { point in
             let x = min(max(point.x, 0), 1) * size.width, y = min(max(point.y, 0), 1) * size.height
@@ -655,7 +655,7 @@ private extension ControlWorker.Command {
     }
 }
 
-/// Ausgabe von `xcodebuild`: Adresse des Agents und lesbare Fehlermeldungen
+/// Output of `xcodebuild`: the agent's address and readable error messages
 private final class RunnerOutput: @unchecked Sendable {
     private let lock = NSLock()
     private var text = ""
@@ -675,7 +675,7 @@ private final class RunnerOutput: @unchecked Sendable {
         }
     }
 
-    /// xcodebuild: «Unlock … to Continue» – danach beendet es sich nicht von selbst
+    /// xcodebuild: "Unlock … to Continue" – after that it doesn't exit on its own
     var deviceLocked: Bool {
         let all = lock.withLock { text }
         return all.contains("because the device is locked") || all.contains("com.apple.dt.deviceprep Code=-3")
@@ -688,7 +688,7 @@ private final class RunnerOutput: @unchecked Sendable {
         return URL(string: String(all[start.upperBound..<end.lowerBound]))
     }
 
-    /// verständliche Meldung für die häufigsten Fehler, sonst die Fehlerzeilen von xcodebuild
+    /// clear message for the most common errors, otherwise xcodebuild's error lines
     func failureReason() -> String {
         let all = lock.withLock { text }
         let lower = all.lowercased()

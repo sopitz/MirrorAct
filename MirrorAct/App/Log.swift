@@ -2,7 +2,7 @@
 import Foundation
 import os
 
-/// Log in ~/Library/Logs/MirrorAct.log und ins System-Log
+/// Logs to ~/Library/Logs/MirrorAct.log and the system log
 enum Log {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "io.github.sopitz.MirrorAct", category: "app")
     private static let queue = DispatchQueue(label: "mirroract.log")

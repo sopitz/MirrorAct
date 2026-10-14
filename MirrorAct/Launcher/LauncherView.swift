@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import SwiftUI
 
-/// Startfenster: Gerätegalerie mit Karten, Karte «Kabellos» mit Code, Karte «Gerät verbinden» (Anleitung)
+/// Start window: device gallery with cards, “Wireless” card with code, “Connect a Device” card (guide)
 struct LauncherView: View {
     @ObservedObject private var model = AppModel.shared
     @ObservedObject private var usb = AppModel.shared.usb
@@ -12,7 +12,7 @@ struct LauncherView: View {
     @State private var guidePlatform = ConnectGuide.Platform.apple
     @State private var wirelessHint: DeviceCard.Model?
 
-    /// feste Inhalte für Vorschaubilder (README), sonst echte Geräte
+    /// fixed content for preview images (README), otherwise real devices
     struct Preview {
         var cards: [DeviceCard.Model]
         var status: String
@@ -62,7 +62,7 @@ struct LauncherView: View {
         }
     }
 
-    // MARK: Kopf
+    // MARK: Header
 
     private var header: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -112,7 +112,7 @@ struct LauncherView: View {
         }
     }
 
-    // MARK: Karten
+    // MARK: Cards
 
     private var cards: [DeviceCard.Model] {
         var result: [DeviceCard.Model] = []
@@ -176,7 +176,7 @@ struct LauncherView: View {
     }
 }
 
-// MARK: - Gerätekarte
+// MARK: - Device card
 
 struct DeviceCard: View {
     struct Model: Identifiable {
@@ -252,7 +252,7 @@ struct DeviceCard: View {
     }
 }
 
-/// kleines Gerätebild im passenden Rahmen (Notch, Dynamic Island …)
+/// small device image in the matching frame (Notch, Dynamic Island …)
 struct DeviceThumbnail: View {
     let modelIdentifier: String?
     let seed: String
@@ -285,9 +285,9 @@ struct DeviceThumbnail: View {
         return image
     }
 
-    /// ruhiger Verlauf als Platzhalter-Bildschirm, Farbe aus dem Gerätenamen
+    /// calm gradient as a placeholder screen, color derived from the device name
     private static func wallpaper(size: CGSize, seed: String) -> CGImage? {
-        // stabil über Neustarts (hashValue ist pro Prozess zufällig)
+        // stable across launches (hashValue is random per process)
         var hash: UInt32 = 2166136261
         for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16777619 }
         let hue = Double(hash % 360) / 360
@@ -303,7 +303,7 @@ struct DeviceThumbnail: View {
     }
 }
 
-// MARK: - Kabellos
+// MARK: - Wireless
 
 struct WirelessCard: View {
     let receiverName: String
@@ -359,7 +359,7 @@ struct WirelessCard: View {
     }
 }
 
-// MARK: - Gerät verbinden
+// MARK: - Connect a device
 
 struct AddDeviceCard: View {
     let action: () -> Void
@@ -391,7 +391,7 @@ struct AddDeviceCard: View {
     }
 }
 
-/// WLAN ohne Kabel (Android 11+): koppeln mit Code, dann verbinden
+/// Wi-Fi without a cable (Android 11+): pair with a code, then connect
 struct AndroidPairingPanel: View {
     @State private var pairAddress = ""
     @State private var code = ""
@@ -470,7 +470,7 @@ struct CardBackground: View {
     }
 }
 
-/// Geführte Einrichtung: Kabel und WLAN, mit Tipps bei Problemen
+/// Guided setup: cable and Wi-Fi, with troubleshooting tips
 struct ConnectGuide: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = AppSettings.shared

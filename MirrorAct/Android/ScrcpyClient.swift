@@ -3,10 +3,10 @@ import CoreVideo
 import Darwin
 import Foundation
 
-/// Client für den scrcpy-Server auf dem Android-Gerät (Protokoll der Version 4.1, siehe
-/// doc/develop.md im scrcpy-Projekt). Der Server wird per adb auf das Gerät kopiert und gestartet,
-/// verbindet sich über `adb reverse` mit einem lokalen Port und öffnet nacheinander drei Sockets:
-/// Video (H.264/H.265, Annex B), Ton (AAC) und Steuerung (Eingaben hin, Zwischenablage zurück).
+/// Client for the scrcpy server on the Android device (protocol version 4.1, see
+/// doc/develop.md in the scrcpy project). The server is copied to the device and started via adb,
+/// connects to a local port through `adb reverse` and opens three sockets in turn:
+/// video (H.264/H.265, Annex B), audio (AAC) and control (input out, clipboard back).
 final class ScrcpyClient: @unchecked Sendable {
     static let serverVersion = "4.1"
     private static let devicePath = "/data/local/tmp/mirroract-server.jar"
@@ -21,14 +21,14 @@ final class ScrcpyClient: @unchecked Sendable {
     let serial: String
     let options: Options
 
-    /// dekodierte Bilder (Thread des Videostroms)
+    /// decoded frames (video stream thread)
     var onFrame: ((CVPixelBuffer) -> Void)?
-    /// AAC: AudioSpecificConfig, danach einzelne Pakete (Thread des Tonstroms)
+    /// AAC: AudioSpecificConfig, then individual packets (audio stream thread)
     var onAudioConfig: ((Data) -> Void)?
     var onAudioPacket: ((Data) -> Void)?
-    /// Zwischenablage des Geräts hat sich geändert (Thread der Steuerung)
+    /// the device's clipboard changed (control thread)
     var onClipboard: ((String) -> Void)?
-    /// auf dem Main-Thread, höchstens einmal; nil = ohne besonderen Grund getrennt
+    /// on the main thread, at most once; nil = disconnected without a specific reason
     var onStop: ((String?) -> Void)?
 
     private let decoder = AnnexBDecoder()
@@ -48,7 +48,7 @@ final class ScrcpyClient: @unchecked Sendable {
         decoder.onError = { message in Log.error("Android video: \(message)") }
     }
 
-    /// Grösse des Videobilds (für Eingaben, die der Server darauf bezieht)
+    /// size of the video frame (for input the server maps onto it)
     var videoSize: CGSize {
         lock.lock()
         defer { lock.unlock() }
@@ -65,13 +65,13 @@ final class ScrcpyClient: @unchecked Sendable {
         }
     }
 
-    /// vom Benutzer beendet: ohne Rückmeldung
+    /// stopped by the user: no callback
     func stop() {
         onStop = nil
         finish(reason: nil)
     }
 
-    /// Steuernachricht senden (Reihenfolge bleibt erhalten)
+    /// send a control message (order is preserved)
     func send(_ message: Data) {
         writeQueue.async { [self] in
             lock.lock()
@@ -84,7 +84,7 @@ final class ScrcpyClient: @unchecked Sendable {
         }
     }
 
-    // MARK: Verbindungsaufbau
+    // MARK: Connection setup
 
     private func connect() throws {
         guard let server = Bundle.main.url(forResource: "scrcpy-server", withExtension: nil) else {
@@ -101,7 +101,7 @@ final class ScrcpyClient: @unchecked Sendable {
 
         try launchServer(scid: scid)
 
-        // Reihenfolge laut Protokoll: Video, Ton, Steuerung
+        // order per protocol: video, audio, control
         let video = try accept(listener.fd, timeout: 20)
         let audio = options.audio ? try accept(listener.fd, timeout: 5) : -1
         let control = try accept(listener.fd, timeout: 5)
@@ -155,7 +155,7 @@ final class ScrcpyClient: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// letzte Fehlermeldung des Servers (für die Anzeige)
+    /// last error message from the server (for display)
     private var serverError: String? {
         lock.lock()
         let log = serverLog
@@ -213,7 +213,7 @@ final class ScrcpyClient: @unchecked Sendable {
         return (fd, UInt16(bigEndian: address.sin_port))
     }
 
-    // MARK: Ströme
+    // MARK: Streams
 
     private static let codecH264: UInt32 = 0x6832_3634
     private static let codecH265: UInt32 = 0x6832_3635
@@ -222,7 +222,7 @@ final class ScrcpyClient: @unchecked Sendable {
     private static let flagConfig: UInt8 = 0x40
 
     private func readVideo(_ fd: Int32) {
-        // Gerätename (64 Byte) auf dem ersten Socket, dann die Codec-Kennung
+        // device name (64 bytes) on the first socket, then the codec ID
         guard Self.read(fd, count: 64) != nil, let codec = Self.readU32(fd) else {
             finish(reason: nil)
             return
@@ -234,7 +234,7 @@ final class ScrcpyClient: @unchecked Sendable {
         let hevc = codec == Self.codecH265
         while let header = Self.read(fd, count: 12) {
             if header[0] & Self.flagSession != 0 {
-                // neue Aufnahme (Start, Drehung): Bildgrösse
+                // new capture (start, rotation): frame size
                 let size = CGSize(width: Int(Self.u32(header, at: 4)), height: Int(Self.u32(header, at: 8)))
                 lock.lock()
                 currentVideoSize = size
@@ -253,7 +253,7 @@ final class ScrcpyClient: @unchecked Sendable {
     private func readAudio(_ fd: Int32) {
         guard let codec = Self.readU32(fd) else { return }
         guard codec == Self.codecAAC else {
-            // 0: Gerät liefert keinen Ton (vor Android 11 oder nicht erlaubt), 1: Fehler
+            // 0: device provides no audio (before Android 11 or not permitted), 1: error
             Log.info("Android audio unavailable (\(codec))")
             return
         }
@@ -269,7 +269,7 @@ final class ScrcpyClient: @unchecked Sendable {
         }
     }
 
-    /// Nachrichten vom Gerät: 0 Zwischenablage, 1 Bestätigung, 2 UHID-Ausgabe
+    /// messages from the device: 0 clipboard, 1 acknowledgement, 2 UHID output
     private func readControl(_ fd: Int32) {
         while let type = Self.read(fd, count: 1)?.first {
             switch type {
@@ -288,7 +288,7 @@ final class ScrcpyClient: @unchecked Sendable {
         }
     }
 
-    // MARK: Ende
+    // MARK: Shutdown
 
     private var isStopped: Bool {
         lock.lock()
@@ -321,7 +321,7 @@ final class ScrcpyClient: @unchecked Sendable {
         }
     }
 
-    // MARK: Lesen und Schreiben
+    // MARK: Reading and writing
 
     private static func read(_ fd: Int32, count: Int) -> Data? {
         guard count > 0 else { return Data() }
