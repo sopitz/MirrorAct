@@ -4,10 +4,10 @@ import SwiftUI
 import XCTest
 @testable import MirrorAct
 
-/// Einstellungen auf kleinen Bildschirmen (Issue #14: MacBook Air 13" mit 1470 × 956)
+/// Settings on small screens (issue #14: MacBook Air 13" with 1470 × 956)
 @MainActor
 final class SettingsLayoutTests: XCTestCase {
-    /// sichtbare Höhe bei 1470 × 956: abzüglich Menüleiste mit Notch
+    /// visible height at 1470 × 956: minus the menu bar with Notch
     private let smallScreen: CGFloat = 956 - 37
     private let largeScreen: CGFloat = 1692 - 25
 
@@ -21,7 +21,7 @@ final class SettingsLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(height + SettingsView.windowChrome, smallScreen)
     }
 
-    /// auf grossen Bildschirmen bleibt alles ohne Scrollen sichtbar
+    /// on large screens everything stays visible without scrolling
     func testPagesKeepTheirFullHeightOnLargeScreens() {
         XCTAssertEqual(pageHeight(GeneralSettingsView(), visibleHeight: largeScreen),
                        naturalHeight(GeneralSettingsView()), accuracy: 1)
@@ -29,7 +29,7 @@ final class SettingsLayoutTests: XCTestCase {
                        naturalHeight(DesignSettingsView()), accuracy: 1)
     }
 
-    /// windowChrome muss Titel- und Symbolleiste des echten Einstellungsfensters abdecken
+    /// windowChrome must cover the title bar and toolbar of the real settings window
     func testWindowChromeCoversTheRealSettingsWindow() throws {
         let window = try openSettingsWindow()
         defer { window.close() }
@@ -38,7 +38,7 @@ final class SettingsLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(chrome, SettingsView.windowChrome)
     }
 
-    // MARK: Hilfen
+    // MARK: Helpers
 
     private func pageHeight<V: View>(_ page: V, visibleHeight: CGFloat) -> CGFloat {
         let maxHeight = SettingsView.maxPageHeight(visibleHeight: visibleHeight)
@@ -55,7 +55,7 @@ final class SettingsLayoutTests: XCTestCase {
         return host.fittingSize.height
     }
 
-    /// wie «MirrorAct > Einstellungen …» (⌘,)
+    /// like “MirrorAct > Settings…” (⌘,)
     private func openSettingsWindow() throws -> NSWindow {
         let appMenu = try XCTUnwrap(NSApp.mainMenu?.items.first?.submenu)
         let index = try XCTUnwrap(appMenu.items.firstIndex { $0.keyEquivalent == "," })

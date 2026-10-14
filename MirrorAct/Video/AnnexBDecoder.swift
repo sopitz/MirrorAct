@@ -3,9 +3,9 @@ import CoreMedia
 import Foundation
 import VideoToolbox
 
-/// Dekodiert H.264/HEVC im Annex-B-Format (wie es die AirPlay-Bibliothek liefert) mit
-/// VideoToolbox. Gibt jedes Bild sofort aus: keine Umsortierung, kein Puffer
-/// (GStreamers vtdec hielt hier bis zu 16 Bilder zurück).
+/// Decodes H.264/HEVC in Annex B format (as delivered by the AirPlay library) with
+/// VideoToolbox. Outputs every frame immediately: no reordering, no buffering
+/// (GStreamer's vtdec held back up to 16 frames here).
 final class AnnexBDecoder {
     var onFrame: ((CVPixelBuffer) -> Void)?
     var onError: ((String) -> Void)?
@@ -72,7 +72,7 @@ final class AnnexBDecoder {
             waitingForKeyframe = false
         }
 
-        // Annex-B → AVCC (4 Byte Länge vor jeder NAL)
+        // Annex B → AVCC (4-byte length before each NAL)
         let total = slices.reduce(0) { $0 + 4 + $1.count }
         var blockBuffer: CMBlockBuffer?
         guard CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: total,
@@ -109,7 +109,7 @@ final class AnnexBDecoder {
             }
         }
         if status == kVTInvalidSessionErr {
-            // z. B. nach Ruhezustand: Session neu aufbauen und auf nächsten Keyframe warten
+            // e.g. after sleep: rebuild the session and wait for the next keyframe
             rebuildSession()
         } else if status != noErr {
             onError?("Decode error \(status)")
@@ -185,7 +185,7 @@ final class AnnexBDecoder {
         return status == noErr ? description : nil
     }
 
-    /// Zerlegt Annex-B in NAL-Einheiten (ohne Startcodes)
+    /// Splits Annex B into NAL units (without start codes)
     static func nalUnits(in bytes: UnsafeBufferPointer<UInt8>) -> [UnsafeBufferPointer<UInt8>] {
         var units: [UnsafeBufferPointer<UInt8>] = []
         let n = bytes.count
@@ -195,7 +195,7 @@ final class AnnexBDecoder {
             if bytes[i] == 0, bytes[i + 1] == 0, bytes[i + 2] == 1 {
                 if start >= 0 {
                     var end = i
-                    if end > start, bytes[end - 1] == 0 { end -= 1 }   // 4-Byte-Startcode
+                    if end > start, bytes[end - 1] == 0 { end -= 1 }   // 4-byte start code
                     units.append(UnsafeBufferPointer(rebasing: bytes[start..<end]))
                 }
                 i += 3

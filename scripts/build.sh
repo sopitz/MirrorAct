@@ -1,13 +1,13 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Baut MirrorAct.app und installiert sie nach ~/Applications.
-#   scripts/build.sh            Release-Build + Installation
-#   scripts/build.sh --debug    Debug-Build
-#   scripts/build.sh --no-install   nur bauen
-#   scripts/build.sh NAME=WERT ...  Build-Einstellungen an xcodebuild weitergeben
-# Signatur: standardmässig ad-hoc; eigenes Zertifikat in Config/Local.xcconfig
-# (Vorlage: Config/Local.xcconfig.example). MIRRORACT_DERIVED ersetzt den Build-Ordner.
+# Builds MirrorAct.app and installs it to ~/Applications.
+#   scripts/build.sh            release build + install
+#   scripts/build.sh --debug    debug build
+#   scripts/build.sh --no-install   build only
+#   scripts/build.sh NAME=VALUE ... pass build settings on to xcodebuild
+# Signing: ad hoc by default; your own certificate in Config/Local.xcconfig
+# (template: Config/Local.xcconfig.example). MIRRORACT_DERIVED replaces the build folder.
 set -euo pipefail
 
 ROOT=${0:A:h:h}

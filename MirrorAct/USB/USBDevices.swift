@@ -3,8 +3,8 @@ import AVFoundation
 import CoreMediaIO
 import Foundation
 
-/// Per Kabel verbundene iPhones/iPads, die macOS als Bildschirm-Aufnahmegerät anbietet
-/// (derselbe Weg wie QuickTime "Neue Filmaufnahme").
+/// iPhones/iPads connected by cable that macOS offers as a screen capture device
+/// (the same path as QuickTime "New Movie Recording").
 @MainActor
 final class USBDeviceMonitor: ObservableObject {
     struct Device: Identifiable, Hashable {
@@ -63,10 +63,10 @@ final class USBDeviceMonitor: ObservableObject {
     }
 }
 
-/// Bild (und Ton) eines per Kabel verbundenen Geräts
+/// Video (and audio) of a device connected by cable
 final class USBCaptureSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate,
     AVCaptureAudioDataOutputSampleBufferDelegate {
-    /// Ton für Aufnahmen: so konfiguriert, dass der Rekorder die Rate kennt
+    /// audio for recordings: configured so the recorder knows the rate
     static let audioSampleRate: Double = 48000
 
     let session = AVCaptureSession()
@@ -74,9 +74,9 @@ final class USBCaptureSession: NSObject, AVCaptureVideoDataOutputSampleBufferDel
     private let audioQueue = DispatchQueue(label: "mirroract.usb.audio", qos: .userInitiated)
     private var audioOutput: AVCaptureAudioPreviewOutput?
     private var audioDataOutput: AVCaptureAudioDataOutput?
-    /// Bild mit Host-Zeit
+    /// frame with host time
     var onFrame: ((CVPixelBuffer, CMTime) -> Void)?
-    /// Ton mit Host-Zeit (nur für Aufnahmen)
+    /// audio with host time (recordings only)
     var onAudio: ((CMSampleBuffer) -> Void)?
     var onStop: ((String?) -> Void)?
     private var observers: [NSObjectProtocol] = []
@@ -172,7 +172,7 @@ final class USBCaptureSession: NSObject, AVCaptureVideoDataOutputSampleBufferDel
         var errorDescription: String? { String(localized: "The device is already open in another app (such as QuickTime).") }
     }
 
-    /// Kamera- und Mikrofonfreigabe (für Bildschirm-Aufnahmegeräte nötig)
+    /// camera and microphone access (required for screen capture devices)
     static func requestAccess() async -> Bool {
         let video = await request(.video)
         _ = await request(.audio)

@@ -4,8 +4,8 @@ import Darwin
 import CoreGraphics
 import Foundation
 
-/// adb (Android Debug Bridge) aus Homebrew oder dem Android-SDK. Apps aus dem Finder erben
-/// den PATH der Shell nicht, darum werden die üblichen Orte direkt abgesucht.
+/// adb (Android Debug Bridge) from Homebrew or the Android SDK. Apps launched from the Finder
+/// don't inherit the shell's PATH, so the usual locations are searched directly.
 enum ADB {
     static var executable: URL? {
         var candidates: [String] = []
@@ -26,7 +26,7 @@ enum ADB {
         var errorDescription: String? { message }
     }
 
-    /// Führt adb aus und wartet (nicht auf dem Main-Thread aufrufen)
+    /// Runs adb and waits (don't call on the main thread)
     @discardableResult
     static func run(_ arguments: [String], serial: String? = nil, timeout: TimeInterval = 20) throws -> String {
         guard let executable else { throw Failure(message: String(localized: "adb not found")) }
@@ -39,7 +39,7 @@ enum ADB {
         process.standardInput = FileHandle.nullDevice
         try process.run()
 
-        // lesen, bevor gewartet wird: sonst blockiert adb bei vollem Puffer
+        // read before waiting: otherwise adb blocks once the buffer is full
         var output = Data()
         let reader = DispatchWorkItem { output = pipe.fileHandleForReading.readDataToEndOfFile() }
         DispatchQueue.global(qos: .userInitiated).async(execute: reader)
@@ -57,7 +57,7 @@ enum ADB {
     }
 }
 
-/// Angaben zu einem Android-Gerät (über `adb shell` gelesen)
+/// Details of an Android device (read via `adb shell`)
 struct AndroidDeviceInfo: Equatable {
     var serialNumber: String?
     var manufacturer: String?
@@ -65,15 +65,15 @@ struct AndroidDeviceInfo: Equatable {
     var marketingName: String?
     var userName: String?
     var sdk: Int?
-    /// Bildschirm in Pixeln (Hochformat) und dpi-Stufe, wie sie die Oberfläche verwendet
+    /// Screen in pixels (portrait) and density bucket (dpi) as the UI uses them
     var screenPixels: CGSize?
     var densityDpi: CGFloat?
-    /// tatsächliche Pixeldichte des Displays
+    /// actual pixel density of the display
     var physicalPPI: CGFloat?
-    /// Kamera-Aussparung und Radius der Bildschirmecken (Pixel, Hochformat)
+    /// Camera cutout and radius of the screen corners (pixels, portrait)
     var cutoutRect: CGRect?
     var cornerRadius: CGFloat?
-    /// Samsung: Reihenfolge der Navigationstasten (0 = Apps | Home | Zurück, 1 = Zurück | Home | Apps)
+    /// Samsung: order of the navigation buttons (0 = Recents | Home | Back, 1 = Back | Home | Recents)
     var samsungKeyOrder: Int?
 
     var displayModel: String {
@@ -96,7 +96,7 @@ struct AndroidDeviceInfo: Equatable {
                               ppi: physicalPPI, cutoutRect: cutoutRect, cornerRadius: cornerRadius)
     }
 
-    /// Ein einziger Aufruf, Zeilen «key=value»
+    /// A single call, lines "key=value"
     static func read(serial: String) throws -> AndroidDeviceInfo {
         let script = [
             "echo serial=$(getprop ro.serialno)",
@@ -133,7 +133,7 @@ struct AndroidDeviceInfo: Equatable {
         info.userName = value("name")
         info.sdk = value("sdk").flatMap { Int($0) }
         info.samsungKeyOrder = value("navorder").flatMap { Int($0) }
-        // "Physical size: 1080x2400" bzw. "Override size: …"
+        // "Physical size: 1080x2400" or "Override size: …"
         if let size = value("size")?.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) {
             let parts = size.split(separator: "x").compactMap { Double($0) }
             if parts.count == 2 {
@@ -147,7 +147,7 @@ struct AndroidDeviceInfo: Equatable {
         if let dpi = value("dpi")?.split(separator: " ").first.flatMap({ Double($0) }), dpi > 50 {
             info.physicalPPI = dpi
         }
-        // Form der Aussparung als Pfad (genau), sonst ihre Begrenzung
+        // shape of the cutout as a path (exact), otherwise its bounds
         // "boundingRect={Bounds=[Rect(0, 0 - 0, 0), Rect(498, 0 - 582, 145), …]}"
         if let spec = value("spec"), let width = info.screenPixels?.width,
            let circle = Self.parseCutoutCircle(spec, screenWidth: width, density: info.densityDpi ?? 160) {
@@ -161,9 +161,9 @@ struct AndroidDeviceInfo: Equatable {
         return info
     }
 
-    /// Kreis aus der Pfadbeschreibung der Aussparung, z. B. Samsung
-    /// "M 0,0 M 0, 8.53 a 12.44,12.44 0 1,0 0,24.89 a … Z @dp" oder "M 40,83 a 42.75,42.75 0 1 0 85.5,0 … @left".
-    /// x zählt von der Bildschirmmitte (@left: vom linken, @right: vom rechten Rand), @dp: in dp statt Pixeln.
+    /// Circle from the cutout's path description, e.g. Samsung
+    /// "M 0,0 M 0, 8.53 a 12.44,12.44 0 1,0 0,24.89 a … Z @dp" or "M 40,83 a 42.75,42.75 0 1 0 85.5,0 … @left".
+    /// x counts from the screen center (@left: from the left edge, @right: from the right edge), @dp: in dp instead of pixels.
     static func parseCutoutCircle(_ spec: String, screenWidth: CGFloat, density: CGFloat) -> CGRect? {
         let body = spec.replacingOccurrences(of: "cutoutSpec={", with: "").replacingOccurrences(of: "}", with: "")
         guard let arc = body.firstIndex(where: { $0 == "a" || $0 == "A" }), body[arc] == "a",
@@ -174,13 +174,13 @@ struct AndroidDeviceInfo: Equatable {
         let start = numbers(body[body.index(after: move)..<arc])
         let arcEnd = body[body.index(after: arc)...].firstIndex(where: { $0.isLetter }) ?? body.endIndex
         let values = numbers(body[body.index(after: arc)..<arcEnd])
-        // erster Halbkreis: Radius, dann Endpunkt relativ zum Start (gegenüberliegender Punkt)
+        // first semicircle: radius, then the end point relative to the start (the opposite point)
         guard start.count >= 2, values.count >= 7, values[0] > 0 else { return nil }
         let scale = body.contains("@dp") ? density / 160 : 1
         let radius = values[0] * scale
         var center = CGPoint(x: (start[0] + values[5] / 2) * scale, y: (start[1] + values[6] / 2) * scale)
         if body.contains("@left") {
-            // schon vom linken Rand
+            // already from the left edge
         } else if body.contains("@right") {
             center.x = screenWidth - center.x
         } else {
@@ -211,7 +211,7 @@ struct AndroidDeviceInfo: Equatable {
     }
 }
 
-/// Angeschlossene Android-Geräte (Kabel oder WLAN-Debugging), laufend über `adb track-devices`
+/// Connected Android devices (cable or wireless debugging), tracked continuously via `adb track-devices`
 @MainActor
 final class AndroidDeviceMonitor: ObservableObject {
     struct Device: Identifiable, Equatable {
@@ -219,13 +219,13 @@ final class AndroidDeviceMonitor: ObservableObject {
         let serial: String
         var id: String { serial }
         var state: State
-        /// aus `adb devices -l` (mit Unterstrichen), bis die Angaben gelesen sind
+        /// from `adb devices -l` (with underscores) until the details have been read
         var model: String?
         var info: AndroidDeviceInfo?
 
-        /// verbunden über WLAN (IP:Port oder mDNS-Name)
+        /// connected over Wi-Fi (IP:port or mDNS name)
         var isWireless: Bool { serial.contains(":") || serial.contains("._adb-tls-connect.") }
-        /// bleibt gleich über Kabel und WLAN
+        /// stays the same over cable and Wi-Fi
         var stableID: String { info?.serialNumber ?? serial }
         var name: String { info?.displayName ?? model?.replacingOccurrences(of: "_", with: " ") ?? "Android" }
     }
@@ -264,7 +264,7 @@ final class AndroidDeviceMonitor: ObservableObject {
                 self.process = nil
                 self.buffer = Data()
                 self.update([])
-                self.scheduleRetry(after: 3)   // adb-Server neu gestartet o. ä.
+                self.scheduleRetry(after: 3)   // adb server restarted or similar
             }
         }
         do {
@@ -285,7 +285,7 @@ final class AndroidDeviceMonitor: ObservableObject {
 
     func device(serial: String) -> Device? { devices.first { $0.serial == serial } }
 
-    /// Angaben erneut lesen (z. B. nach dem Erlauben des USB-Debuggings)
+    /// Read the details again (e.g. after USB debugging was allowed)
     func refreshInfo(for serial: String) {
         guard !infoRequests.contains(serial) else { return }
         infoRequests.insert(serial)
@@ -308,7 +308,7 @@ final class AndroidDeviceMonitor: ObservableObject {
         }
     }
 
-    /// Nachrichten: 4 Hex-Ziffern Länge, dann die Geräteliste wie `adb devices -l`
+    /// Messages: length as 4 hex digits, then the device list as in `adb devices -l`
     private func receive(_ data: Data) {
         buffer.append(data)
         while buffer.count >= 4 {
@@ -355,12 +355,12 @@ final class AndroidDeviceMonitor: ObservableObject {
     }
 }
 
-/// Android über WLAN: ein per Kabel verbundenes Gerät umstellen (adb tcpip) oder ab Android 11
-/// mit Kopplungscode koppeln («Kabelloses Debugging»). Aufrufe blockieren.
+/// Android over Wi-Fi: switch a device connected by cable (adb tcpip) or, from Android 11 on,
+/// pair it with a pairing code ("Wireless debugging"). Calls block.
 enum AndroidWireless {
     static let tcpPort = 5555
 
-    /// IP-Adresse des Geräts im WLAN, aus `ip route` ("… dev wlan0 … src 192.168.1.23")
+    /// The device's IP address on Wi-Fi, from `ip route` ("… dev wlan0 … src 192.168.1.23")
     static func wifiAddress(serial: String) throws -> String? {
         let routes = try ADB.run(["shell", "ip", "route"], serial: serial, timeout: 10)
         for line in routes.split(whereSeparator: \.isNewline) where line.contains("dev wlan") {
@@ -372,17 +372,17 @@ enum AndroidWireless {
         return nil
     }
 
-    /// Kabel → WLAN; danach kann das Kabel ab
+    /// cable → Wi-Fi; the cable can be unplugged afterwards
     static func switchToWiFi(serial: String) throws {
         guard let address = try wifiAddress(serial: serial) else {
             throw ADB.Failure(message: String(localized: "The phone is not connected to a Wi-Fi network."))
         }
         try ADB.run(["tcpip", String(tcpPort)], serial: serial, timeout: 10)
-        // adbd startet auf dem Gerät neu
+        // adbd restarts on the device
         var lastError: Error?
         for _ in 0..<10 {
             Thread.sleep(forTimeInterval: 0.6)
-            // schlafende Telefone antworten oft nicht auf ARP; ein Paket vom Telefon zum Mac weckt die Verbindung
+            // sleeping phones often don't answer ARP; a packet from the phone to the Mac wakes the connection
             if let mac = localAddress(near: address) {
                 _ = try? ADB.run(["shell", "ping", "-c", "1", "-W", "1", mac], serial: serial, timeout: 5)
             }
@@ -396,7 +396,7 @@ enum AndroidWireless {
         throw lastError ?? ADB.Failure(message: "adb connect")
     }
 
-    /// eigene IPv4-Adresse im selben Netz wie `address`
+    /// own IPv4 address on the same network as `address`
     static func localAddress(near address: String) -> String? {
         var target = in_addr()
         guard inet_pton(AF_INET, address, &target) == 1 else { return nil }
@@ -417,7 +417,7 @@ enum AndroidWireless {
         return nil
     }
 
-    /// "Gerät mit Kopplungscode koppeln": Adresse und Code aus dem Dialog auf dem Gerät
+    /// "Pair device with pairing code": address and code from the dialog on the device
     static func pair(address: String, code: String) throws {
         let output = try ADB.run(["pair", address, code], timeout: 20)
         guard output.contains("Successfully paired") else {
@@ -425,7 +425,7 @@ enum AndroidWireless {
         }
     }
 
-    /// adb meldet Fehler beim Verbinden mit Status 0, daher die Ausgabe prüfen
+    /// adb reports connection errors with status 0, so check the output
     static func connect(address: String) throws {
         let output = try ADB.run(["connect", address], timeout: 15)
         guard output.contains("connected to"), !output.contains("failed"), !output.contains("unable") else {

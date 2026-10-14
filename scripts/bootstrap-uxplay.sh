@@ -1,9 +1,9 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Holt die UxPlay-Quellen (fester Commit) nach Vendor/UxPlay und baut nur die
-# AirPlay-Bibliothek (libairplay + playfair + llhttp + dnssd) nach Vendor/uxplay-build.
-# Abhaengigkeiten (Homebrew): cmake pkgconf libplist openssl@3 gstreamer
-# (gstreamer nur, weil UxPlays CMake beim Konfigurieren danach sucht).
+# Fetches the UxPlay sources (pinned commit) into Vendor/UxPlay and builds only the
+# AirPlay library (libairplay + playfair + llhttp + dnssd) into Vendor/uxplay-build.
+# Dependencies (Homebrew): cmake pkgconf libplist openssl@3 gstreamer
+# (gstreamer only because UxPlay's CMake looks for it during configuration).
 set -euo pipefail
 
 ROOT=${0:A:h:h}

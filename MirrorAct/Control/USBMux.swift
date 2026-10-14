@@ -2,9 +2,9 @@
 import Darwin
 import Foundation
 
-/// Verbindung zu einem Port auf dem iPhone über usbmuxd – derselbe Kanal, den Xcode und der
-/// Finder über das Kabel nutzen. Protokoll: 16-Byte-Kopf (Länge, Version 1, Typ 8 = Plist, Tag)
-/// und eine XML-Plist; nach einem erfolgreichen "Connect" ist der Socket eine rohe TCP-Leitung.
+/// Connection to a port on the iPhone via usbmuxd – the same channel Xcode and the Finder use
+/// over the cable. Protocol: 16-byte header (length, version 1, type 8 = plist, tag) and an
+/// XML plist; after a successful "Connect" the socket is a raw TCP stream.
 enum USBMux {
     struct Device {
         let id: Int
@@ -39,15 +39,15 @@ enum USBMux {
         }
     }
 
-    /// Gerät mit dieser UDID (Schreibweise mit oder ohne Bindestrich), per Kabel bevorzugt;
-    /// über WLAN gekoppelte Geräte reicht usbmuxd ebenfalls durch
+    /// Device with this UDID (written with or without hyphen), preferring the cable;
+    /// usbmuxd passes through devices paired over Wi-Fi as well
     static func device(udid: String) -> Device? {
         let wanted = normalized(udid)
         let matches = (try? devices())?.filter { normalized($0.serial) == wanted } ?? []
         return matches.first { $0.isUSB } ?? matches.first
     }
 
-    /// offener Socket, verbunden mit `port` auf dem Gerät
+    /// open socket, connected to `port` on the device
     static func connect(deviceID: Int, port: UInt16) throws -> Int32 {
         let fd = try openSocket()
         do {
@@ -109,7 +109,7 @@ enum USBMux {
     }
 }
 
-/// Blockierende Socket-Hilfen (laufen auf der Warteschlange der Steuerung)
+/// Blocking socket helpers (run on the control queue)
 enum Socket {
     struct Closed: LocalizedError {
         var errorDescription: String? { "connection closed" }
@@ -135,7 +135,7 @@ enum Socket {
         }
     }
 
-    /// genau `count` Bytes
+    /// exactly `count` bytes
     static func read(_ fd: Int32, count: Int) throws -> Data {
         var data = Data(count: count)
         var offset = 0
@@ -150,7 +150,7 @@ enum Socket {
         return data
     }
 
-    /// was gerade ankommt (mindestens 1 Byte)
+    /// whatever is arriving right now (at least 1 byte)
     static func readSome(_ fd: Int32, max: Int = 64 * 1024) throws -> Data {
         var data = Data(count: max)
         let got = data.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress!, max) }
@@ -158,7 +158,7 @@ enum Socket {
         return data.prefix(got)
     }
 
-    /// TCP-Verbindung mit Zeitlimit für den Aufbau
+    /// TCP connection with a timeout for establishing it
     static func connectTCP(host: String, port: UInt16, timeout: Double = 5) throws -> Int32 {
         var hints = addrinfo(ai_flags: 0, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM, ai_protocol: IPPROTO_TCP,
                              ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)

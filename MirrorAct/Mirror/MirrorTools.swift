@@ -2,7 +2,7 @@
 import AppKit
 import SwiftUI
 
-/// Aktionen des Spiegelfensters (Werkzeugleiste, Stil-Panel, Kontextmenü)
+/// Actions of the mirror window (tool rail, style panel, context menu)
 struct MirrorActions {
     var close: () -> Void
     var present: () -> Void
@@ -17,19 +17,19 @@ struct MirrorActions {
     var screenshotFile: () -> URL?
     var toggleRecording: () -> Void
     var disconnect: () -> Void
-    /// Bedienung ein/aus und Gerätetasten (nur bei bedienbaren Geräten)
+    /// Control on/off and device buttons (only for controllable devices)
     var toggleControl: () -> Void = {}
     var press: (DeviceButton) -> Void = { _ in }
 }
 
-/// Sichtbarkeit der Werkzeuge
+/// Visibility of the tools
 @MainActor
 final class MirrorChrome: ObservableObject {
     @Published var hovering = false
     @Published var styleOpen = false
 }
 
-/// Senkrechte Werkzeugleiste rechts neben dem Gerät; erscheint, wenn die Maus über dem Fenster ist
+/// Vertical tool rail to the right of the device; appears when the mouse is over the window
 struct MirrorToolRail: View {
     static let width: CGFloat = 66
 
@@ -96,7 +96,7 @@ struct MirrorToolRail: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// Gerätetasten (Zurück, Home, Apps) oder der Schalter zum Einschalten der Bedienung
+    /// Device buttons (Back, Home, Apps) or the switch that turns on control
     @ViewBuilder private var controlButtons: some View {
         if let control = session.control, let state = session.controlState {
             if state == .ready {
@@ -124,7 +124,7 @@ struct MirrorToolRail: View {
         }
     }
 
-    /// bleibt sichtbar, solange aufgenommen wird
+    /// stays visible while recording
     private var recordButton: some View {
         Group {
             if let start = session.recordingStartedAt {
@@ -177,13 +177,13 @@ struct MirrorToolRail: View {
 }
 
 extension View {
-    /// Werkzeug ein-/ausblenden; ausgeblendet nicht klickbar
+    /// Show/hide a tool; not clickable while hidden
     func railItem(_ visible: Bool) -> some View {
         opacity(visible ? 1 : 0).allowsHitTesting(visible)
     }
 }
 
-/// kleine Gerätetaste (drei nebeneinander in der Werkzeugleiste)
+/// small device button (three side by side in the tool rail)
 private struct NavButton: View {
     let glyph: DeviceButton.Glyph
     let title: String
@@ -208,7 +208,7 @@ private struct NavButton: View {
     }
 }
 
-/// Knopf mit Symbol und kurzer Beschriftung
+/// Button with a symbol and a short label
 struct RailButton: View {
     let symbol: String
     let title: String
@@ -258,7 +258,7 @@ struct RailButton: View {
     }
 }
 
-/// Stil-Panel: alles zur Darstellung mit einem Klick
+/// Style panel: everything about the look, one click away
 struct StylePanel: View {
     @ObservedObject var session: MirrorSession
     @ObservedObject var settings = AppSettings.shared
@@ -420,7 +420,7 @@ struct StylePanel: View {
         .help(help)
     }
 
-    /// beim Wechsel weg von «Transparent» Abstand und Schatten vorbelegen
+    /// when switching away from "Transparent", preset padding and shadow
     private func setBackground(_ kind: BackgroundKind) {
         var style = settings.style
         if style.background == .transparent, kind != .transparent, style.padding == 0 {
@@ -441,7 +441,7 @@ struct StylePanel: View {
     }
 }
 
-/// kurze Hinweise unten auf dem Gerät ("gesichert" …); lässt Klicks durch
+/// short notices at the bottom of the device ("saved" …); lets clicks through
 struct MirrorHUD: View {
     @ObservedObject var session: MirrorSession
 
@@ -464,12 +464,12 @@ struct MirrorHUD: View {
     }
 }
 
-/// NSHostingView, die keine Klicks abfängt
+/// NSHostingView that doesn't intercept clicks
 final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// Fläche, mit der sich das randlose Fenster verschieben lässt
+/// Area for dragging the borderless window
 struct WindowDragArea: NSViewRepresentable {
     final class DragView: NSView {
         override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }

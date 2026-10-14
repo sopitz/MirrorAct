@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
 
-/// Bedienung eines Android-Geräts: Maus, Trackpad und Tastatur als Steuernachrichten des
-/// scrcpy-Servers (Format: app/src/control_msg.c im scrcpy-Projekt, alles Big Endian).
+/// Control of an Android device: mouse, trackpad and keyboard as control messages of the
+/// scrcpy server (format: app/src/control_msg.c in the scrcpy project, all big-endian).
 final class AndroidControl: DeviceControl {
     private let client: ScrcpyClient
     private let samsung: Bool
@@ -12,13 +12,13 @@ final class AndroidControl: DeviceControl {
     init(client: ScrcpyClient, info: AndroidDeviceInfo?) {
         self.client = client
         samsung = info?.manufacturer?.lowercased() == "samsung"
-        // wie die Navigationsleiste des Telefons: Samsung standardmässig Apps | Home | Zurück (umstellbar)
+        // like the phone's navigation bar: Samsung defaults to Recents | Home | Back (configurable)
         let navigation: [DeviceButton] = samsung && info?.samsungKeyOrder != 1
             ? [.recents, .home, .back] : [.back, .home, .recents]
         buttons = navigation + [.notifications, .volumeUp, .volumeDown, .power, .rotate]
     }
 
-    /// Symbole wie auf dem Telefon: Samsung «|||  ▢  <», sonst Android-Standard «◁  ○  □»
+    /// Icons as on the phone: Samsung "|||  ▢  <", otherwise the Android default "◁  ○  □"
     func glyph(for button: DeviceButton) -> DeviceButton.Glyph {
         switch (samsung, button) {
         case (true, .recents): DeviceButton.Glyph(symbol: "line.3.horizontal", rotation: 90)
@@ -30,12 +30,12 @@ final class AndroidControl: DeviceControl {
         default: DeviceButton.Glyph(symbol: button.symbol)
         }
     }
-    /// immer bedienbar, solange die Verbindung steht
+    /// always controllable while the connection is up
     let startsOnDemand = false
 
-    // MARK: Berührung und Scrollen
+    // MARK: Touch and scrolling
 
-    /// "Finger" statt Maus: Android behandelt die Eingabe wie eine Berührung des Bildschirms
+    /// "Finger" instead of mouse: Android treats the input like a touch on the screen
     private static let fingerPointer = UInt64(bitPattern: -2)
 
     func touch(_ phase: TouchPhase, at point: CGPoint) {
@@ -51,14 +51,14 @@ final class AndroidControl: DeviceControl {
         message.u64(Self.fingerPointer)
         message.append(position)
         message.u16(pressure)
-        message.u32(1)          // action button: primär
+        message.u32(1)          // action button: primary
         message.u32(buttons)
         client.send(message.data)
     }
 
     func scroll(at point: CGPoint, dx: CGFloat, dy: CGFloat, precise: Bool) {
         guard let position = position(point) else { return }
-        // wie SDL: präzise Trackpad-Werte (Punkte) auf Rad-Schritte verkleinern
+        // like SDL: scale precise trackpad values (points) down to wheel steps
         let factor: CGFloat = precise ? 0.1 : 1
         func fixed(_ value: CGFloat) -> UInt16 {
             let normalized = max(-1, min(1, value * factor / 16))
@@ -72,7 +72,7 @@ final class AndroidControl: DeviceControl {
         client.send(message.data)
     }
 
-    /// Punkt (0…1) → Pixel im Videobild + Bildgrösse; der Server verwirft Ereignisse zu einer alten Grösse
+    /// Point (0…1) → pixel in the video image + image size; the server drops events for an old size
     private func position(_ point: CGPoint) -> Message.Position? {
         let size = client.videoSize
         guard size.width > 0, size.height > 0 else { return nil }
@@ -81,12 +81,12 @@ final class AndroidControl: DeviceControl {
         return Message.Position(x: x, y: y, width: UInt16(size.width), height: UInt16(size.height))
     }
 
-    // MARK: Tasten
+    // MARK: Keys
 
     func press(_ button: DeviceButton) {
         switch button {
         case .back:
-            // zurück, oder Bildschirm einschalten, wenn er aus ist
+            // back, or turn the screen on if it is off
             for action: UInt8 in [0, 1] {
                 var message = Message(type: 4)
                 message.u8(action)
@@ -129,13 +129,13 @@ final class AndroidControl: DeviceControl {
             sendKey(keycode, down: down, repeat: event.isARepeat ? 1 : 0, meta: meta)
             return true
         }
-        // ⌃ + Buchstabe/Ziffer (z. B. ⌃A) als Tastencode
+        // ⌃ + letter/digit (e.g. ⌃A) as a key code
         if flags.contains(.control), let char = event.charactersIgnoringModifiers?.lowercased().unicodeScalars.first,
            let keycode = Self.keycode(for: char) {
             sendKey(keycode, down: down, repeat: event.isARepeat ? 1 : 0, meta: meta)
             return true
         }
-        // alles andere als Text: Umlaute und Sonderzeichen so, wie sie die Mac-Tastatur liefert
+        // everything else as text: umlauts and special characters as the Mac keyboard produces them
         guard let text = event.characters, !text.isEmpty,
               !text.unicodeScalars.contains(where: { $0.properties.generalCategory == .control
                                                      || (0xF700...0xF8FF).contains($0.value) }) else { return false }
@@ -147,16 +147,16 @@ final class AndroidControl: DeviceControl {
         return true
     }
 
-    /// macOS-Tastencode → Android-Tastencode
+    /// macOS key code → Android key code
     private static let specialKeys: [UInt16: UInt32] = [
         36: 66, 76: 66,     // Return, Enter → ENTER
         48: 61,             // Tab
         51: 67,             // ⌫ → DEL
         117: 112,           // ⌦ → FORWARD_DEL
         53: 4,              // Esc → BACK
-        123: 21, 124: 22, 125: 20, 126: 19,   // Pfeile
+        123: 21, 124: 22, 125: 20, 126: 19,   // arrows
         115: 122, 119: 123, // Home, End
-        116: 92, 121: 93,   // Bild auf/ab
+        116: 92, 121: 93,   // Page Up/Down
     ]
 
     private static func keycode(for char: Unicode.Scalar) -> UInt32? {
@@ -167,19 +167,19 @@ final class AndroidControl: DeviceControl {
         }
     }
 
-    // MARK: Zwischenablage
+    // MARK: Clipboard
 
     func paste(_ text: String) {
         clipboardSequence += 1
         var message = Message(type: 9)
         message.u64(clipboardSequence)
-        message.u8(1)               // gleich einfügen
+        message.u8(1)               // paste right away
         message.string(text)
         client.send(message.data)
     }
 }
 
-/// Steuernachricht im Binärformat des scrcpy-Servers
+/// Control message in the scrcpy server's binary format
 private struct Message {
     struct Position {
         let x: Int32, y: Int32, width: UInt16, height: UInt16
@@ -201,13 +201,13 @@ private struct Message {
         u16(position.height)
     }
 
-    /// Länge (4 Byte) + UTF-8; der Server nimmt höchstens 300 Byte Text bzw. 256 KiB Zwischenablage
+    /// Length (4 bytes) + UTF-8; the server takes at most 300 bytes of text or 256 KiB of clipboard
     mutating func string(_ text: String) {
         var bytes = Array(text.utf8)
         let limit = data.first == 1 ? 300 : (1 << 18) - 14
         if bytes.count > limit {
             bytes = Array(bytes.prefix(limit))
-            while let last = bytes.last, last & 0xC0 == 0x80 { bytes.removeLast() }   // kein halbes Zeichen
+            while let last = bytes.last, last & 0xC0 == 0x80 { bytes.removeLast() }   // no half characters
             if let last = bytes.last, last & 0x80 != 0 { bytes.removeLast() }
         }
         u32(UInt32(bytes.count))

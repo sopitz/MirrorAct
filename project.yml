@@ -95,7 +95,7 @@ targets:
         CLANG_WARN_DOCUMENTATION_COMMENTS: NO
         GCC_WARN_UNUSED_FUNCTION: NO
 
-  # Tests laufen in der App (scripts/test.sh)
+  # Tests run inside the app (scripts/test.sh)
   MirrorActTests:
     type: bundle.unit-test
     platform: macOS

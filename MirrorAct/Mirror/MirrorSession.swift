@@ -3,7 +3,7 @@ import AppKit
 import Combine
 import CoreGraphics
 
-/// Ein gespiegeltes Gerät: Quelle (Kabel, AirPlay oder Android), Zustand, Bildgrösse, Profil, Bedienung.
+/// A mirrored device: source (cable, AirPlay or Android), state, image size, profile, control.
 @MainActor
 final class MirrorSession: ObservableObject, Identifiable {
     enum Kind { case cable, wireless, android }
@@ -27,18 +27,18 @@ final class MirrorSession: ObservableObject, Identifiable {
     @Published var muted: Bool { didSet { onMuteChange?(muted) } }
     @Published var toast: String?
     @Published private(set) var recordingStartedAt: Date?
-    /// zuletzt gesicherte Datei (Screenshot oder Aufnahme), zum Herausziehen aus der Kopfleiste
+    /// most recently saved file (screenshot or recording), for dragging out of the tool rail
     @Published private(set) var lastExport: URL?
-    /// ungerahmte Fassung der letzten Datei für den Editor (nil = nicht nachträglich bearbeitbar)
+    /// unframed version of the last file for the editor (nil = can't be edited afterwards)
     @Published private(set) var lastEditable: URL?
-    /// Abtastrate des Tons dieser Quelle (für Aufnahmen); nil = ohne Ton
+    /// audio sample rate of this source (for recordings); nil = no audio
     var audioSampleRate: Double?
     var isRecording: Bool { recordingStartedAt != nil }
 
-    /// Profil aus den Angaben des Geräts (Android); hat Vorrang vor Modellkennung und Auflösung
+    /// profile from the device's own info (Android); takes precedence over model identifier and resolution
     var profileOverride: DeviceProfile? { didSet { updateProfile() } }
 
-    /// Bedienung über das Fenster (nil = nur anzeigen)
+    /// control through the window (nil = display only)
     var control: DeviceControl? {
         didSet {
             oldValue?.onStateChange = nil
@@ -46,12 +46,12 @@ final class MirrorSession: ObservableObject, Identifiable {
             controlState = control?.state
         }
     }
-    /// Zustand der Bedienung; nil = Gerät lässt sich nicht bedienen
+    /// control state; nil = device can't be controlled
     @Published private(set) var controlState: ControlState?
     var isControlReady: Bool { controlState == .ready }
 
     var onMuteChange: ((Bool) -> Void)?
-    /// Fenster wurde geschlossen: Quelle beenden
+    /// window was closed: stop the source
     var onClose: (() -> Void)?
 
     private var toastTask: Task<Void, Never>?
@@ -106,7 +106,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
     }
 
-    /// Bildschirmgrösse in macOS-Punkten bei 100 % (ausgerichtet wie das Bild)
+    /// screen size in macOS points at 100 % (oriented like the image)
     var screenPointSize: CGSize {
         let frame = frameSize == .zero ? CGSize(width: 1170, height: 2532) : frameSize
         let landscape = frame.width > frame.height
@@ -121,7 +121,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         return landscape ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
     }
 
-    // MARK: Aufnahme
+    // MARK: Recording
 
     func toggleRecording() {
         isRecording ? stopRecording() : startRecording()
@@ -140,7 +140,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         do {
             let recorder = try MirrorRecorder(url: url, frameSize: size, profile: profile, withFrame: withFrame,
                                               style: AppSettings.shared.style, audioSampleRate: audioSampleRate)
-            recorder.appendVideo(latest, at: MirrorRecorder.now)   // Startbild, auch wenn sich nichts bewegt
+            recorder.appendVideo(latest, at: MirrorRecorder.now)   // first frame, even if nothing moves
             sink.recorder = recorder
             recordingStartedAt = Date()
             Log.info("Recording started: \(url.lastPathComponent) (frame: \(withFrame), background: \(AppSettings.shared.style.background.rawValue))")
@@ -183,7 +183,7 @@ final class MirrorSession: ObservableObject, Identifiable {
                                     style: AppSettings.shared.style)
     }
 
-    /// ungerahmter Bildschirm im temporären Ordner (für den Editor)
+    /// unframed screen in the temporary folder (for the editor)
     private func rawScreenshotCopy() -> URL? {
         guard let buffer = sink.latest, let screen = FrameRenderer.cgImage(from: buffer) else { return nil }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("MirrorAct", isDirectory: true)
@@ -192,7 +192,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         return FrameRenderer.writePNG(screen, to: url) ? url : nil
     }
 
-    /// Screenshot als Datei im temporären Ordner (für Drag & Drop)
+    /// screenshot as a file in the temporary folder (for drag & drop)
     func screenshotFileForDragging(withFrame: Bool) -> URL? {
         guard let image = screenshotImage(withFrame: withFrame) else { return nil }
         let formatter = DateFormatter()

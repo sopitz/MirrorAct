@@ -1,16 +1,16 @@
-# Abhängigkeiten und Build (werden von scripts/ erzeugt)
+# Dependencies and build (created by scripts/)
 Vendor/
 MirrorAct.xcodeproj/
 build/
 DerivedData/
 
-# erzeugt von scripts/make-icon.sh
+# created by scripts/make-icon.sh
 Resources/AppIcon-1024.png
 
-# lokale Signatur
+# local signing
 Config/Local.xcconfig
 
-# xcodegen erzeugt Info.plist und Entitlements aus project.yml
+# xcodegen generates Info.plist and entitlements from project.yml
 MirrorAct/Info.plist
 MirrorAct/MirrorAct.entitlements
 

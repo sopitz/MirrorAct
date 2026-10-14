@@ -3,11 +3,11 @@
 import AppKit
 import SwiftUI
 
-/// Bilder fürs README aus den echten Ansichten der App (nur Debug-Builds).
-/// Die App zeichnet ihre eigenen Fenster in Bilder; das iPhone-Bild kommt aus der laufenden
-/// Spiegelung (sonst ein Testbild).
-///   MirrorAct --showcase <ordner>             ohne Gerät, mit Testbild
-///   laufende App: DistributedNotification "io.github.sopitz.MirrorAct.showcase", userInfo["dir"]
+/// Images for the README from the app's real views (debug builds only).
+/// The app draws its own windows into images; the iPhone image comes from the running
+/// mirroring (otherwise a test image).
+///   MirrorAct --showcase <folder>             without a device, with a test image
+///   running app: DistributedNotification "io.github.sopitz.MirrorAct.showcase", userInfo["dir"]
 @MainActor
 enum Showcase {
     static let notification = Notification.Name("io.github.sopitz.MirrorAct.showcase")
@@ -20,7 +20,7 @@ enum Showcase {
         }
     }
 
-    /// session: Sitzung, deren Bild verwendet wird (Standard: das vorderste Spiegelfenster)
+    /// session: session whose image is used (default: the frontmost mirror window)
     static func export(to dir: URL, session chosen: MirrorSession? = nil) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let live = chosen ?? AppModel.shared.keyMirror?.session
@@ -33,7 +33,7 @@ enum Showcase {
                                     deviceName: live?.kind == .android ? "Phone" : "iPhone",
                                     modelIdentifier: model, muted: false)
         session.state = .live
-        // Gerätetasten der Werkzeugleiste zeigen; danach gehört die Bedienung wieder der echten Sitzung
+        // Show the tool rail's device buttons; afterwards control belongs to the real session again
         let liveControl = live?.control
         session.control = liveControl
         defer {
@@ -50,9 +50,9 @@ enum Showcase {
         Log.info("Showcase: \(dir.path) (live frame: \(live?.sink.latest != nil))")
     }
 
-    // MARK: Motive
+    // MARK: Shots
 
-    /// Spiegelfenster mit Werkzeugleiste und offenem Stil-Panel auf einem Schreibtisch
+    /// Mirror window with tool rail and open style panel on a desktop
     private static func mirror(screen: CGImage, profile: DeviceProfile, session: MirrorSession) -> CGImage? {
         let canvas = CGSize(width: 1400, height: 900)
         let device = deviceImage(screen: screen, profile: profile, height: 780)
@@ -83,7 +83,7 @@ enum Showcase {
         }
     }
 
-    /// Startfenster mit Beispielgeräten
+    /// Start window with sample devices
     private static func startWindow() -> CGImage? {
         let preview = LauncherView.Preview(cards: [
             .init(id: "1", name: "iPhone 13 Pro", modelIdentifier: "iPhone14,2", status: String(localized: "Ready via cable"),
@@ -98,7 +98,7 @@ enum Showcase {
         return windowShot(content, size: size, title: nil, canvas: CGSize(width: 960, height: 700))
     }
 
-    /// Editor mit einem Screenshot auf Verlauf
+    /// Editor with a screenshot on a gradient
     private static func editor(screen: CGImage, model: String) -> CGImage? {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("iPhone Screenshot.png")
         guard FrameRenderer.writePNG(screen, to: file), let document = EditorDocument(urls: [file]) else { return nil }
@@ -113,16 +113,16 @@ enum Showcase {
                           canvas: CGSize(width: 1320, height: 900))
     }
 
-    /// Ergebnis: Screenshot mit Rahmen, Verlauf und Schatten (16:9)
+    /// Result: screenshot with frame, gradient and shadow (16:9)
     private static func framed(screen: CGImage, profile: DeviceProfile) -> CGImage? {
         FrameRenderer.render(screen: screen, profile: profile, showFrame: true,
                              style: FrameStyle(bezelColor: .naturalTitanium, background: .gradient, gradient: .ocean,
                                                padding: 0.16, shadow: true, aspect: .landscape16x9))
     }
 
-    // MARK: Bausteine
+    // MARK: Building blocks
 
-    /// Gerät im Rahmen in gewünschter Höhe (Punkte), gerendert mit doppelter Auflösung
+    /// Device in its frame at the requested height (points), rendered at double resolution
     private static func deviceImage(screen: CGImage, profile: DeviceProfile, height: CGFloat) -> CGImage? {
         let source = CGSize(width: screen.width, height: screen.height)
         let unit = FrameLayout(profile: profile, screenSize: source, showFrame: true).totalSize
@@ -133,7 +133,7 @@ enum Showcase {
                                     style: FrameStyle(bezelColor: AppSettings.shared.style.bezelColor))
     }
 
-    /// echte SwiftUI-Ansicht in einem unsichtbaren Fenster zeichnen (inkl. nativer Bedienelemente)
+    /// draw a real SwiftUI view in an invisible window (including native controls)
     private static func snapshot<V: View>(_ view: V, size: CGSize? = nil) -> CGImage? {
         let host = NSHostingView(rootView: view.environment(\.colorScheme, .dark))
         host.frame = CGRect(origin: .zero, size: size ?? host.fittingSize)
@@ -152,7 +152,7 @@ enum Showcase {
         return rep.cgImage
     }
 
-    /// Fensterinhalt mit Ecken, Titelleiste und Schatten auf dem Schreibtisch
+    /// Window content with corners, title bar and shadow on the desktop
     private static func windowShot(_ content: CGImage, size: CGSize, title: String?, canvas: CGSize) -> CGImage? {
         let titleHeight: CGFloat = title == nil ? 0 : 28
         let frame = CGRect(x: (canvas.width - size.width) / 2, y: (canvas.height - size.height - titleHeight) / 2,
@@ -209,7 +209,7 @@ enum Showcase {
                                options: [])
     }
 
-    /// Zeichenfläche in Punkten (oben links, y nach unten), doppelte Auflösung
+    /// Drawing surface in points (top left, y down), double resolution
     private static func compose(_ size: CGSize, _ draw: (CGContext) -> Void) -> CGImage? {
         let width = Int(size.width * scale), height = Int(size.height * scale)
         guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,

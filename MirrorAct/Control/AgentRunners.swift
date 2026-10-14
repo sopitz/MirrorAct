@@ -2,20 +2,20 @@
 import AppKit
 import Foundation
 
-/// Laufende Agents (`xcodebuild test-without-building`) je Gerät. Nach dem Ausschalten der
-/// Bedienung oder dem Schliessen des Fensters läuft ein Agent noch eine Weile weiter, damit die
-/// nächste Bedienung sofort bereit ist; beim Beenden von MirrorAct werden alle gestoppt.
+/// Running agents (`xcodebuild test-without-building`) per device. After control is turned off
+/// or the window is closed, an agent keeps running for a while so the next control session is
+/// ready right away; quitting MirrorAct stops them all.
 @MainActor
 final class AgentRunners {
     static let shared = AgentRunners()
-    /// so lange läuft ein Agent ohne Fenster weiter
+    /// how long an agent keeps running without a window
     static let keepAlive: TimeInterval = 5 * 60
-    /// object: UDID des Geräts, dessen Agent beendet wurde
+    /// object: UDID of the device whose agent ended
     static let endedNotification = Notification.Name("io.github.sopitz.MirrorAct.agentEnded")
 
     private struct Entry {
         let process: Process
-        /// Adresse, die der Agent meldet (für Geräte, die usbmuxd nicht kennt)
+        /// Address the agent reports (for devices usbmuxd doesn't know)
         var host: String?
         var users = 0
         var idleTimer: Timer?
@@ -30,7 +30,7 @@ final class AgentRunners {
         }
     }
 
-    /// startet den Agent; ein noch laufender für dasselbe Gerät wird vorher beendet
+    /// launches the agent; one still running for the same device is terminated first
     func launch(udid: String, testRun: URL, onOutput: @escaping @Sendable (String) -> Void) -> Process? {
         terminate(udid: udid)
         let process = Process()
@@ -64,7 +64,7 @@ final class AgentRunners {
             return nil
         }
         entries[udid] = Entry(process: process)
-        // bis jemand ihn übernimmt (acquire), läuft die Frist
+        // the timeout runs until someone takes it over (acquire)
         scheduleIdle(udid: udid)
         return process
     }
@@ -73,12 +73,12 @@ final class AgentRunners {
         entries[udid]?.host = host
     }
 
-    /// Adresse eines laufenden Agents für dieses Gerät
+    /// Address of a running agent for this device
     func host(udid: String) -> String? {
         entries[udid]?.host
     }
 
-    /// Bedienung nutzt den Agent; false = MirrorAct hat ihn nicht gestartet (z. B. früherer Lauf)
+    /// Control uses the agent; false = MirrorAct didn't launch it (e.g. an earlier run)
     @discardableResult
     func acquire(udid: String) -> Bool {
         guard entries[udid] != nil else { return false }
@@ -88,14 +88,14 @@ final class AgentRunners {
         return true
     }
 
-    /// Bedienung braucht den Agent nicht mehr: noch `keepAlive` laufen lassen
+    /// Control no longer needs the agent: keep it running for `keepAlive`
     func release(udid: String) {
         guard let entry = entries[udid] else { return }
         entries[udid]?.users = max(0, entry.users - 1)
         if entries[udid]?.users == 0 { scheduleIdle(udid: udid) }
     }
 
-    /// sofort beenden (Start abgebrochen oder fehlgeschlagen)
+    /// terminate right away (start cancelled or failed)
     func terminate(udid: String) {
         guard let entry = entries.removeValue(forKey: udid) else { return }
         entry.idleTimer?.invalidate()
