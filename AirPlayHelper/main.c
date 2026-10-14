@@ -2,7 +2,7 @@
 // mirroract-airplay: the AirPlay receiver as a separate program. Starts the bridge
 // (MirrorAct/AirPlay/airplay_bridge.c) and passes video, audio and events as frames over
 // stdout to the calling app; commands arrive as frames over stdin (helper_protocol.h, README.md).
-// This lets an app without GPL code (such as the Windows version) use the UxPlay receiver.
+// This lets other front ends, including ones without GPL code, use the UxPlay receiver.
 
 #include "airplay_bridge.h"
 #include "helper_protocol.h"
