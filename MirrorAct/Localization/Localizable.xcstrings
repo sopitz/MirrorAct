@@ -1483,6 +1483,26 @@
         }
       }
     },
+    "Exit Presentation" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Präsentation beenden"
+          }
+        }
+      }
+    },
+    "Exit Presentation (Esc or ⌃⌘F)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Präsentation beenden (Esc oder ⌃⌘F)"
+          }
+        }
+      }
+    },
     "Export failed: %@" : {
       "localizations" : {
         "de" : {
