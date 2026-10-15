@@ -33,6 +33,14 @@ final class AgentConnection {
         self.route = route
     }
 
+    /// usbmuxd (cable, otherwise Wi-Fi pairing), otherwise directly to the address the agent reports
+    static func routes(udid: String, host: String?) -> [Route] {
+        var routes: [Route] = []
+        if let mux = USBMux.device(udid: udid) { routes.append(.usbmux(mux)) }
+        if let host { routes.append(.network(host: host)) }
+        return routes
+    }
+
     deinit { disconnect() }
 
     func disconnect() {

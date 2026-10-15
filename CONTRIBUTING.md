@@ -53,7 +53,7 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/USB` | device discovery and capture (`AVCaptureDevice`, `.muxed`) |
 | `MirrorAct/Frame` | device profiles (`DeviceProfile` reads `Shared/DeviceProfiles.json`), frame geometry, `FrameStyle`, `SceneRenderer` (Core Image; shared by screenshots, recordings and the editor) |
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
-| `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
+| `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes, stopped when a wireless connection ends), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |

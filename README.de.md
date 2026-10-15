@@ -136,7 +136,8 @@ der Knopf **Bedienen**; ein Klick darauf (oder Gerät → Gerät bedienen, ⌥�
 was fehlt. Wer die Bedienung nur bei Bedarf will, schaltet unter MirrorAct → Einstellungen →
 Allgemein «Bedienung beim Verbinden starten» aus. Nach dem Ausschalten oder Schliessen des Fensters
 läuft der Agent noch fünf Minuten auf dem Gerät weiter, damit die Bedienung sofort wieder da ist;
-beim Beenden von MirrorAct wird er gestoppt. Danach:
+beim Beenden von MirrorAct wird er gestoppt. Endet eine kabellose Verbindung (auf dem Gerät, mit
+**Trennen** oder durch Schliessen des Fensters), stoppt der Agent sofort. Danach:
 
 - Klick: Tippen, Halten: langes Drücken, Ziehen: Wischen
 - Trackpad oder Mausrad: Scrollen (den Schwung ergänzt iOS selbst)

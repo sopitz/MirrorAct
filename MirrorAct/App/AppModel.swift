@@ -110,7 +110,9 @@ final class AppModel: ObservableObject {
                                     modelIdentifier: client.model, muted: !settings.playAudio)
         session.audioSampleRate = AACAudioPlayer.Format.airPlay.sampleRate
         session.onMuteChange = { [weak self] muted in self?.receiver.audio.muted = muted }
-        session.onClose = { [weak self] in
+        session.onClose = { [weak self, weak session] in
+            // closing ends the connection: don't keep the agent running on the iPhone
+            session?.control?.end()
             guard let self else { return }
             self.receiver.sink = nil
             self.receiver.disconnect()
@@ -129,6 +131,8 @@ final class AppModel: ObservableObject {
         activeWirelessClient = nil
         guard let session = wirelessSession else { return }
         session.stopRecording()
+        // nothing is connected anymore: turn control off and stop the agent on the iPhone
+        session.control?.end()
         if case .disconnected = session.state { return }
         session.state = .disconnected(String(localized: "Disconnected – choose “\(settings.receiverName)” on the iPhone again"))
         session.sink.clear()

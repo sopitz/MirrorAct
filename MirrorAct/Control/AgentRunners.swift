@@ -4,7 +4,8 @@ import Foundation
 
 /// Running agents (`xcodebuild test-without-building`) per device. After control is turned off
 /// or the window is closed, an agent keeps running for a while so the next control session is
-/// ready right away; quitting MirrorAct stops them all.
+/// ready right away; when the connection to the device ends, it stops at once (`shutdown`).
+/// Quitting MirrorAct stops them all.
 @MainActor
 final class AgentRunners {
     static let shared = AgentRunners()
@@ -100,6 +101,29 @@ final class AgentRunners {
         guard let entry = entries.removeValue(forKey: udid) else { return }
         entry.idleTimer?.invalidate()
         if entry.process.isRunning { entry.process.interrupt() }
+    }
+
+    /// The connection to the device ended: stop its agent now instead of keeping it running, unless
+    /// another window still uses it. The agent is asked to quit as well, so this also stops one
+    /// that MirrorAct didn't launch (earlier run) or whose xcodebuild no longer reaches the device.
+    func shutdown(udid: String) {
+        let entry = entries[udid]
+        guard (entry?.users ?? 0) == 0 else { return }
+        entries[udid] = nil
+        entry?.idleTimer?.invalidate()
+        let host = entry?.host, process = entry?.process
+        DispatchQueue.global(qos: .utility).async {
+            for route in AgentConnection.routes(udid: udid, host: host) {
+                do {
+                    try AgentConnection(route: route).request("GET", "/wda/shutdown", timeout: 3, retry: false)
+                    Log.info("Control: agent asked to quit (\(route))")
+                    break
+                } catch {
+                    continue
+                }
+            }
+            if process?.isRunning == true { process?.interrupt() }
+        }
     }
 
     private func scheduleIdle(udid: String) {
