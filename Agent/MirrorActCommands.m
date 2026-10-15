@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Zusatzbefehle für WebDriverAgent, von scripts/build-agent.sh in FBCustomCommands.m eingebunden.
-// POST /mirroract/touch schickt eine Berührung direkt an XCTest – ohne vorher die
-// Bedienungshierarchie der aktiven App abzufragen (das kostet bei WebDriverAgent ~0,5 s pro Geste).
+// Extra commands for WebDriverAgent, included in FBCustomCommands.m by scripts/build-agent.sh.
+// POST /mirroract/touch sends a touch straight to XCTest – without first querying the
+// UI hierarchy of the active app (in WebDriverAgent that costs ~0.5 s per gesture).
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 
@@ -22,8 +22,8 @@
 
 @implementation MirrorActCommands
 
-// Ausrichtung des Geräts abzufragen kostet ~0,3 s: im Hochformat (iPhone) gar nicht, sonst
-// höchstens alle 2 s – gilt für schnell aufeinanderfolgende Gesten
+// Querying the device orientation costs ~0.3 s: not at all in portrait (iPhone), otherwise
+// at most every 2 s – applies to gestures in quick succession
 static UIInterfaceOrientation MirrorActOrientation = UIInterfaceOrientationPortrait;
 static BOOL MirrorActOrientationLandscape = NO;
 static NSDate *MirrorActOrientationDate = nil;
@@ -35,7 +35,7 @@ static NSDate *MirrorActOrientationDate = nil;
   ];
 }
 
-/// Ausrichtung der Oberfläche: Hoch- oder Querformat laut Bild, die Seite vom Gerät
+/// Interface orientation: portrait or landscape according to the image, the side from the device
 + (UIInterfaceOrientation)interfaceOrientationForLandscape:(BOOL)landscape
 {
   BOOL pad = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad;
@@ -48,7 +48,7 @@ static NSDate *MirrorActOrientationDate = nil;
   }
   UIDeviceOrientation device = XCUIDevice.sharedDevice.orientation;
   if (landscape) {
-    // UIDeviceOrientationLandscapeLeft entspricht UIInterfaceOrientationLandscapeRight (gleicher Wert)
+    // UIDeviceOrientationLandscapeLeft corresponds to UIInterfaceOrientationLandscapeRight (same value)
     if (device == UIDeviceOrientationLandscapeLeft || device == UIDeviceOrientationLandscapeRight) {
       MirrorActOrientation = (UIInterfaceOrientation)device;
     } else if (!UIInterfaceOrientationIsLandscape(MirrorActOrientation)) {
@@ -64,8 +64,8 @@ static NSDate *MirrorActOrientationDate = nil;
   return MirrorActOrientation;
 }
 
-/// {"landscape": bool, "points": [[x, y, t], …]}: Punkte wie auf dem Bildschirm zu sehen (iOS-Punkte),
-/// t in Sekunden ab Berührungsbeginn. Antwortet, wenn die Geste abgespielt ist.
+/// {"landscape": bool, "points": [[x, y, t], …]}: points as seen on the screen (iOS points),
+/// t in seconds since the touch began. Responds once the gesture has been played back.
 + (id<FBResponsePayload>)handleTouch:(FBRouteRequest *)request
 {
   NSArray<NSArray<NSNumber *> *> *points = request.arguments[@"points"];

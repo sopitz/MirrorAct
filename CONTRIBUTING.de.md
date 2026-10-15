@@ -45,12 +45,13 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 
 | Ordner | Inhalt |
 |---|---|
-| `MirrorAct/AirPlay` | `airplay_bridge.c` – dünne C-Schicht über UxPlays AirPlay-Bibliothek (Bonjour, Heartbeat, Neustart), `AirPlayReceiver` |
+| `MirrorAct/AirPlay` | `airplay_bridge.c` – dünne C-Schicht über UxPlays AirPlay-Bibliothek (Bonjour oder UxPlays eigener mDNS-Responder, Heartbeat, Neustart; baut auf macOS, Linux und Windows), `AirPlayReceiver` |
+| `AirPlayHelper` | `mirroract-airplay` – derselbe Empfänger als eigenes Programm für andere Apps (Rahmen über stdout, Befehle über stdin; Protokoll und Build in [`AirPlayHelper/README.md`](AirPlayHelper/README.md), Englisch); `.github/workflows/airplay-helper.yml` baut ihn für macOS, Windows und Linux |
 | `MirrorAct/Android` | `ADB` (adb, Geräteliste, WLAN), `ScrcpyClient` (scrcpy-Protokoll: Video-, Ton- und Steuer-Socket), `AndroidControl` (Maus und Tastatur als scrcpy-Steuernachrichten) |
 | `MirrorAct/Audio` | `AACAudioPlayer` (AAC-ELD von AirPlay, AAC-LC von Android, ohne Puffer) |
 | `MirrorAct/Video` | `AnnexBDecoder` (H.264/HEVC → VideoToolbox), `FrameSink` / `VideoDisplayView` (AVSampleBufferDisplayLayer) |
 | `MirrorAct/USB` | Geräte finden und Bild abgreifen (`AVCaptureDevice`, `.muxed`) |
-| `MirrorAct/Frame` | Geräteprofile, Rahmengeometrie, `FrameStyle`, `SceneRenderer` (Core Image; gemeinsam für Screenshots, Aufnahmen und Editor) |
+| `MirrorAct/Frame` | Geräteprofile (`DeviceProfile` liest `Shared/DeviceProfiles.json`), Rahmengeometrie, `FrameStyle`, `SceneRenderer` (Core Image; gemeinsam für Screenshots, Aufnahmen und Editor) |
 | `MirrorAct/Mirror` | Spiegelfenster, Werkzeugleiste, Stil-Panel, Präsentieren, `DeviceControl` (Schnittstelle zum Bedienen eines Geräts) |
 | `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, Host-Zeit, variable Bildrate) |
@@ -58,9 +59,10 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
 | `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche Übersetzung), Info.plist und Siri-Phrasen |
+| `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Ecken, Punkte, ppi) für alle MirrorAct-Apps; als Ressource in die App gebündelt; ausserhalb der App kompilierte Swift-Werkzeuge (z. B. mit swiftc) können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen; andere MirrorAct-Apps lesen dieselbe Datei. `scripts/build.sh` prüft sie als striktes JSON (keine Kommas am Ende), und die App bricht beim Start bei unbekannten Schlüsseln oder widersprüchlichen Einträgen ab. Ein Name darin, der eine Übersetzung braucht, bekommt einen manuellen Eintrag in `MirrorAct/Localization/Localizable.xcstrings`, weil der Compiler ihn nicht extrahieren kann |
 | `Agent` | MirrorActs Zusatzbefehle für WebDriverAgent (schnelle Berührungen), von `scripts/build-agent.sh` mitkompiliert |
 | `MirrorActTests` | Tests, laufen in einem Debug-Build der App (`scripts/test.sh`) |
-| `scripts` | Skripte für Build, Tests, Agent, Release und Symbol |
+| `scripts` | Skripte für Build, Tests, Agent, Release, Symbol und die Prüfung der Geräteprofile |
 
 ## Ohne Gerät testen
 
@@ -73,6 +75,10 @@ Ohne Gerät lässt sich die Darstellung prüfen:
 Das schreibt Rahmen, Stile, Duo-Posen und Teile der Oberfläche als PNG, nimmt zwei kurze
 Testvideos auf (mit Drehung und mit AAC-ELD-Ton wie über AirPlay) und rahmt eines davon wie der
 Editor.
+
+Nach Änderungen an `Shared/DeviceProfiles.json` prüft `scripts/test-device-profiles.sh`, ob die
+Tabelle gültig ist und ob fehlerhafte Einträge (vertippte Schlüssel, falsche Pixelgrössen,
+unbekannte Aussparungen) mit einer klaren Meldung abgelehnt werden.
 
 ## Tests
 

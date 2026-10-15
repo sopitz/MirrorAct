@@ -1,11 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// AirPlay-Empfänger auf Basis der UxPlay-Bibliothek. Entspricht dem Ablauf in
-// UxPlays uxplay.cpp (start_dnssd → start_raop_server → register_dnssd), aber ohne
-// GStreamer: Video und Audio gehen roh an Swift.
+// AirPlay receiver built on the UxPlay library. Follows the sequence in
+// UxPlay's uxplay.cpp (start_dnssd → start_raop_server → register_dnssd), but without
+// GStreamer: video and audio go raw to Swift or to the helper (AirPlayHelper).
+// Runs on macOS (Bonjour via dns_sd, EXTERNAL_DNS_SD), Linux and Windows/MinGW
+// (UxPlay's own mDNS responder lib/mdnsd).
 
 #include "airplay_bridge.h"
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <poll.h>
+#include <unistd.h>
+#endif
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
@@ -13,13 +23,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "dnssd.h"
 #include "logger.h"
+#include "netutils.h"
 #include "raop.h"
 
-#define MISSED_FEEDBACK_LIMIT 15 /* Sekunden ohne Heartbeat bis zur Trennung */
+#define MISSED_FEEDBACK_LIMIT 15 /* seconds without heartbeat before disconnecting */
 
 static raop_t *raop;
 static dnssd_t *dnssd;
@@ -29,7 +39,14 @@ static atomic_bool service_running;
 static atomic_int open_connections;
 static atomic_int missed_feedback;
 static atomic_bool reset_requested;
+
+/* waking the service thread: pipe and poll() (POSIX), auto-reset event (Windows) */
+#ifdef _WIN32
+static HANDLE wake_event;
+static bool winsock_started;
+#else
 static int wake_pipe[2] = {-1, -1};
+#endif
 
 static void bridge_log(int level, const char *format, ...) __attribute__((format(printf, 2, 3)));
 static void bridge_log(int level, const char *format, ...) {
@@ -46,7 +63,37 @@ static void notify_connections(void) {
     if (cb.connections) cb.connections(cb.ctx, atomic_load(&open_connections));
 }
 
-/* ---- raop-Callbacks ---- */
+static int wake_init(void) {
+#ifdef _WIN32
+    wake_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    return wake_event ? 0 : -1;
+#else
+    return pipe(wake_pipe);
+#endif
+}
+
+static void wake_signal(void) {
+#ifdef _WIN32
+    if (wake_event) SetEvent(wake_event);
+#else
+    (void)write(wake_pipe[1], "x", 1);
+#endif
+}
+
+static void wake_close(void) {
+#ifdef _WIN32
+    if (wake_event) {
+        CloseHandle(wake_event);
+        wake_event = NULL;
+    }
+#else
+    close(wake_pipe[0]);
+    close(wake_pipe[1]);
+    wake_pipe[0] = wake_pipe[1] = -1;
+#endif
+}
+
+/* ---- raop callbacks ---- */
 
 static void on_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *data) {
     if (cb.video && data->data && data->data_len > 0) {
@@ -131,7 +178,7 @@ static const char *on_passwd(void *cls, int *len) {
 static void on_export_dacp(void *cls, const char *active_remote, const char *dacp_id) {}
 static int on_video_set_codec(void *cls, video_codec_t codec) { return 0; }
 
-/* HLS ist abgeschaltet; die Callbacks müssen trotzdem existieren */
+/* HLS is disabled; the callbacks must exist anyway */
 static void on_video_play(void *cls, const char *location, const float start_position) {}
 static void on_video_scrub(void *cls, const float position) {}
 static void on_video_rate(void *cls, const float rate) {}
@@ -143,7 +190,7 @@ static void on_raop_log(void *cls, int level, const char *msg) {
     if (cb.log) cb.log(cb.ctx, level, msg);
 }
 
-/* ---- Hintergrund-Thread: Bonjour-Sockets bedienen, Heartbeat, Neustarts ---- */
+/* ---- background thread: serve Bonjour sockets, heartbeat, restarts ---- */
 
 static void restart_httpd(void) {
     unsigned short port = raop_get_port(raop);
@@ -158,28 +205,43 @@ static void restart_httpd(void) {
 }
 
 static void *service_loop(void *arg) {
+#ifdef EXTERNAL_DNS_SD
     bool service_failed[2] = {false, false};
+#endif
     time_t last_tick = time(NULL);
 
     while (atomic_load(&service_running)) {
+#ifdef _WIN32
+        /* no Bonjour socket to service (lib/mdnsd has its own thread): just wait for the wake-up */
+        WaitForSingleObject(wake_event, 1000);
+        if (!atomic_load(&service_running)) break;
+#else
         struct pollfd fds[3];
-        int services[3];
         int count = 0;
-        fds[count] = (struct pollfd){.fd = wake_pipe[0], .events = POLLIN};
-        services[count++] = -1;
+        fds[count++] = (struct pollfd){.fd = wake_pipe[0], .events = POLLIN};
+#ifdef EXTERNAL_DNS_SD
+        /* only an external dns_sd library (Bonjour, Avahi) hands out sockets that need servicing */
+        int services[3] = {-1, -1, -1};
         for (int s = 0; s < 2; s++) {
             if (service_failed[s]) continue;
             int fd = dnssd_get_service_fd(dnssd, s);
             if (fd >= 0) {
-                fds[count] = (struct pollfd){.fd = fd, .events = POLLIN};
-                services[count++] = s;
+                services[count] = s;
+                fds[count++] = (struct pollfd){.fd = fd, .events = POLLIN};
             }
         }
+#endif
 
         int ready = poll(fds, count, 1000);
         if (!atomic_load(&service_running)) break;
 
         if (ready > 0) {
+            if (fds[0].revents & POLLIN) {
+                /* drain the wake byte, otherwise poll() returns immediately from now on */
+                char drain[8];
+                (void)read(wake_pipe[0], drain, sizeof(drain));
+            }
+#ifdef EXTERNAL_DNS_SD
             for (int i = 1; i < count; i++) {
                 if (fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
                     service_failed[services[i]] = true;
@@ -189,7 +251,9 @@ static void *service_loop(void *arg) {
                     bridge_log(LOGGER_ERR, "Bonjour service %d stopped responding", services[i]);
                 }
             }
+#endif
         }
+#endif
 
         time_t now = time(NULL);
         if (now != last_tick) {
@@ -211,7 +275,7 @@ static void *service_loop(void *arg) {
     return NULL;
 }
 
-/* ---- öffentliche Funktionen ---- */
+/* ---- public functions ---- */
 
 static void teardown(void) {
     if (raop) {
@@ -224,6 +288,12 @@ static void teardown(void) {
         dnssd_destroy(dnssd);
         dnssd = NULL;
     }
+#ifdef _WIN32
+    if (winsock_started) {
+        netutils_cleanup();
+        winsock_started = false;
+    }
+#endif
 }
 
 int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks *callbacks) {
@@ -245,17 +315,29 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
 
     unsigned char pin_pw = config->pin > 0 ? 1 : 0;
     int error = 0;
+#ifdef _WIN32
+    /* WSAStartup before dnssd_init: lib/mdnsd gets the host name with gethostname(), which
+       fails without Winsock (the receiver would then be called "UxPlay.local") */
+    if (netutils_init() < 0) {
+        bridge_log(LOGGER_ERR, "WSAStartup failed");
+        return -3;
+    }
+    winsock_started = true;
+#endif
     dnssd = dnssd_init(config->name, (int)strlen(config->name), hw_addr, 6, pin_pw, &error);
     if (error || !dnssd) {
         bridge_log(LOGGER_ERR, "dnssd_init failed (%d)", error);
         dnssd = NULL;
+        teardown();
         return -3;
     }
+#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
     dnssd_set_peer_to_peer(dnssd, config->peer_to_peer ? 1 : 0);
-    dnssd_set_airplay_features(dnssd, 0, 0);  /* kein HLS-Video */
+#endif
+    dnssd_set_airplay_features(dnssd, 0, 0);  /* no HLS video */
     dnssd_set_airplay_features(dnssd, 4, 0);
     dnssd_set_airplay_features(dnssd, 42, config->h265 ? 1 : 0);  /* Screen Multi Codec (HEVC) */
-    dnssd_set_airplay_features(dnssd, 27, pin_pw);  /* Legacy Pairing, nötig für pin und AWDL */
+    dnssd_set_airplay_features(dnssd, 27, pin_pw);  /* legacy pairing, needed for pin and AWDL */
 
     raop_callbacks_t rc;
     memset(&rc, 0, sizeof(rc));
@@ -300,7 +382,7 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     }
     raop_set_log_callback(raop, on_raop_log, NULL);
     raop_set_log_level(raop, config->log_level);
-    /* nohold = 1: ein neues Gerät übernimmt die Verbindung */
+    /* nohold = 1: a new device takes over the connection */
     if (raop_init2(raop, 1, config->device_id, config->keyfile)) {
         free(raop);
         raop = NULL;
@@ -312,7 +394,7 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     raop_set_plist(raop, "height", config->height);
     raop_set_plist(raop, "refreshRate", config->refresh_rate);
     raop_set_plist(raop, "maxFPS", config->max_fps);
-    if (pin_pw) raop_set_plist(raop, "pin", config->pin + 10000);  /* > 9999 = fester Code */
+    if (pin_pw) raop_set_plist(raop, "pin", config->pin + 10000);  /* > 9999 = fixed code */
 
     unsigned short tcp[3] = {0, 0, 0};
     unsigned short udp[3] = {0, 0, 0};
@@ -330,7 +412,7 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     }
     bridge_log(LOGGER_INFO, "AirPlay receiver \"%s\" on port %u", config->name, port);
 
-    if (pipe(wake_pipe) != 0) {
+    if (wake_init() != 0) {
         teardown();
         return -7;
     }
@@ -340,21 +422,22 @@ int mb_airplay_start(const mb_airplay_config *config, const mb_airplay_callbacks
     atomic_store(&service_running, true);
     if (pthread_create(&service_thread, NULL, service_loop, NULL) != 0) {
         atomic_store(&service_running, false);
-        close(wake_pipe[0]);
-        close(wake_pipe[1]);
+        wake_close();
         teardown();
         return -8;
     }
     return 0;
 }
 
+uint16_t mb_airplay_port(void) {
+    return raop ? raop_get_port(raop) : 0;
+}
+
 void mb_airplay_stop(void) {
     if (atomic_exchange(&service_running, false)) {
-        (void)write(wake_pipe[1], "x", 1);
+        wake_signal();
         pthread_join(service_thread, NULL);
-        close(wake_pipe[0]);
-        close(wake_pipe[1]);
-        wake_pipe[0] = wake_pipe[1] = -1;
+        wake_close();
     }
     teardown();
     atomic_store(&open_connections, 0);
@@ -363,5 +446,5 @@ void mb_airplay_stop(void) {
 void mb_airplay_disconnect(void) {
     if (!atomic_load(&service_running)) return;
     atomic_store(&reset_requested, true);
-    (void)write(wake_pipe[1], "x", 1);
+    wake_signal();
 }

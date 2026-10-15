@@ -21,7 +21,7 @@ struct MirrorActApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// läuft als Gastgeber der Tests (scripts/test.sh): kein Empfänger, kein USB, kein adb
+    /// runs as the test host (scripts/test.sh): no receiver, no USB, no adb
     static var isTesting: Bool { NSClassFromString("XCTestCase") != nil }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

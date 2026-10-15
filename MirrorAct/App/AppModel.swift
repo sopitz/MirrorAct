@@ -4,7 +4,7 @@ import AVFoundation
 import Combine
 import UniformTypeIdentifiers
 
-/// Zentrale Steuerung: Geräte, AirPlay-Empfänger, Spiegelfenster
+/// Central coordinator: devices, AirPlay receiver, mirror windows
 @MainActor
 final class AppModel: ObservableObject {
     static let shared = AppModel()
@@ -34,7 +34,7 @@ final class AppModel: ObservableObject {
 
     var keyMirror: MirrorWindowController? { Self.keyMirror(among: Array(controllers.values)) }
 
-    /// das präsentierte Spiegelfenster, sonst das aktive, sonst irgendeins
+    /// the presenting mirror window, otherwise the active one, otherwise any
     static func keyMirror(among controllers: [MirrorWindowController]) -> MirrorWindowController? {
         controllers.first { $0.isPresenting } ?? controllers.first { $0.window?.isKeyWindow == true }
             ?? controllers.first
@@ -70,7 +70,7 @@ final class AppModel: ObservableObject {
         startAndroid()
     }
 
-    // MARK: Kabellos (AirPlay)
+    // MARK: Wireless (AirPlay)
 
     func restartReceiver() {
         let config = AirPlayReceiver.Config(
@@ -134,7 +134,7 @@ final class AppModel: ObservableObject {
         session.sink.clear()
     }
 
-    // MARK: Kabel (USB)
+    // MARK: Cable (USB)
 
     func openCableDevice(_ device: USBDeviceMonitor.Device) {
         let key = "usb:\(device.id)"
@@ -213,7 +213,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: Android (adb + scrcpy-Server)
+    // MARK: Android (adb + scrcpy server)
 
     private var androidClients: [String: ScrcpyClient] = [:]
     private var androidAudio: [String: AACAudioPlayer] = [:]
@@ -245,7 +245,7 @@ final class AppModel: ObservableObject {
                 settings.remember(.init(key: device.stableID, transport: .android, name: info.displayName,
                                         modelIdentifier: "android", lastSeen: Date()))
             }
-            // Fenster noch offen, Gerät wieder da (Kabel neu eingesteckt): weiterspiegeln
+            // Window still open, device back (cable plugged in again): keep mirroring
             let key = Self.androidKey(device)
             if let controller = controllers[key], androidClients[key] == nil {
                 connectAndroid(device, session: controller.session)
@@ -269,7 +269,7 @@ final class AppModel: ObservableObject {
             return
         }
         guard device.info != nil else {
-            // Angaben (Name, Bildschirm) zuerst lesen, sonst ändert sich die Kennung des Fensters
+            // Read the details (name, screen) first, otherwise the window's identifier changes
             Task {
                 var loaded = device
                 loaded.info = try? await Task.detached { try AndroidDeviceInfo.read(serial: device.serial) }.value
@@ -328,7 +328,7 @@ final class AppModel: ObservableObject {
             session.stopRecording()
             session.control = nil
             session.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
-            // Kabel ab, WLAN noch da (oder umgekehrt): über die andere Verbindung weiter
+            // Cable unplugged, Wi-Fi still there (or vice versa): continue over the other connection
             if let other = self.android.devices.first(where: {
                 $0.state == .ready && $0.serial != device.serial && $0.info != nil && Self.androidKey($0) == key
             }) {
@@ -346,7 +346,7 @@ final class AppModel: ObservableObject {
         client.start()
     }
 
-    /// per Kabel verbundenes Android-Gerät auf WLAN umstellen; ein offenes Fenster verbindet sich neu
+    /// switch a cable-connected Android device to Wi-Fi; an open window reconnects
     func switchAndroidToWiFi(_ device: AndroidDeviceMonitor.Device) {
         let name = device.name
         Task {
@@ -363,7 +363,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// "iPhone oder iPad spiegeln …"
+    /// "Mirror iPhone or iPad …"
     func mirrorFirstAvailable() {
         if let device = usb.devices.first(where: { !isMirroring(cableDevice: $0.id) }) ?? usb.devices.first {
             openCableDevice(device)
@@ -379,17 +379,17 @@ final class AppModel: ObservableObject {
         alert.runModal()
     }
 
-    // MARK: Fenster
+    // MARK: Windows
 
     func windowClosed(_ controller: MirrorWindowController) {
         controllers.removeValue(forKey: controller.session.id)
     }
 
-    // MARK: Bearbeiten / einrahmen
+    // MARK: Edit / frame
 
     private var editors: [UUID: EditorWindowController] = [:]
 
-    /// «Bearbeiten …»: ein Bild, zwei Bilder (Duo) oder ein Video im Editor; mehr Bilder werden direkt gerahmt
+    /// “Edit …”: one image, two images (Duo) or a video in the editor; more images are framed directly
     func openEditorPanel() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg, .heic, .movie]
@@ -422,11 +422,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// alter Menüpunkt: alles ohne Editor einrahmen
+    /// old menu item: frame everything without the editor
     func frameScreenshots() { openEditorPanel() }
 }
 
-/// Geräte, die Xcode kennt, über `xcrun devicectl` (falls Xcode da ist)
+/// Devices known to Xcode, via `xcrun devicectl` (if Xcode is installed)
 enum DeviceInfoLookup {
     struct Device {
         let name: String
@@ -435,12 +435,12 @@ enum DeviceInfoLookup {
         let developerModeEnabled: Bool
     }
 
-    /// Modellkennung eines per Kabel verbundenen Geräts
+    /// Model identifier of a cable-connected device
     static func productType(forDeviceNamed name: String) -> String? {
         devices().first { $0.name == name }?.productType
     }
 
-    /// Gerät gesperrt? (`devicectl device info lockState`, dauert einige Sekunden; unbekannt = nein)
+    /// Device locked? (`devicectl device info lockState`, takes a few seconds; unknown = no)
     static func isLocked(udid: String) -> Bool {
         run(["device", "info", "lockState", "--device", udid])?["passcodeRequired"] as? Bool == true
     }
@@ -457,7 +457,7 @@ enum DeviceInfoLookup {
         }
     }
 
-    /// `xcrun devicectl <arguments>` → "result" der JSON-Ausgabe
+    /// `xcrun devicectl <arguments>` → "result" of the JSON output
     private static func run(_ arguments: [String]) -> [String: Any]? {
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("mirroract-devices-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: output) }

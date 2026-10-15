@@ -2,9 +2,9 @@
 import CoreGraphics
 import Foundation
 
-/// Geometrie des Gehäuses rund um einen Bildschirm gegebener Grösse.
-/// Koordinaten: Ursprung oben links, y nach unten (wie eine geflippte NSView).
-/// Im Querformat liegt die Oberseite des Geräts (Notch) links.
+/// Geometry of the chassis around a screen of a given size.
+/// Coordinates: origin top left, y down (like a flipped NSView).
+/// In landscape, the top of the device (Notch) is on the left.
 struct FrameLayout {
     let profile: DeviceProfile
     let showFrame: Bool
@@ -68,7 +68,7 @@ struct FrameLayout {
         let rim = (isPad ? 0.010 : 0.014) * W
         let protrusion: CGFloat = isPad ? 0 : 0.012 * W
 
-        // Hochformat
+        // Portrait
         let body = CGRect(x: protrusion, y: 0, width: W + 2 * side, height: H + top + bottom)
         let screen = CGRect(x: body.minX + side, y: top, width: W, height: H)
         let bodyRadius: CGFloat = profile.homeButton ? (isPad ? 0.075 : 0.17) * W : screenRadius + side
@@ -76,7 +76,7 @@ struct FrameLayout {
 
         var buttons: [CGRect] = []
         if isAndroid {
-            // Lautstärke und Ein/Aus rechts
+            // Volume and power on the right
             for (y, h) in [(0.200, 0.105), (0.335, 0.055)] as [(CGFloat, CGFloat)] {
                 buttons.append(CGRect(x: body.maxX - rim, y: body.minY + y * body.height,
                                       width: protrusion + rim, height: h * body.height))
@@ -133,7 +133,7 @@ struct FrameLayout {
         let bezel = body.insetBy(dx: rim, dy: rim)
 
         if landscape {
-            // Oberseite nach links drehen: (x, y) → (y, Breite − x)
+            // Rotate the top to the left: (x, y) → (y, width − x)
             let t = CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: portraitTotal.width)
             func rotate(_ r: CGRect) -> CGRect { r.applying(t) }
             totalSize = CGSize(width: portraitTotal.height, height: portraitTotal.width)
@@ -161,13 +161,13 @@ struct FrameLayout {
         self.bezelRadius = max(0, bodyRadius - rim)
     }
 
-    /// Notch oben in der Bildschirmmitte, mit nach innen gewölbten Übergängen
+    /// Notch at the top center of the screen, with inward-curved transitions
     private static func notchPath(screen: CGRect, width: CGFloat, height: CGFloat) -> CGPath {
         let path = CGMutablePath()
         let x0 = screen.midX - width / 2, x1 = screen.midX + width / 2
         let top = screen.minY, bottom = screen.minY + height
-        let r = height * 0.58      // untere Ecken
-        let ear = height * 0.30    // Übergang zur Oberkante
+        let r = height * 0.58      // bottom corners
+        let ear = height * 0.30    // transition to the top edge
         path.move(to: CGPoint(x: x0 - ear, y: top))
         path.addQuadCurve(to: CGPoint(x: x0, y: top + ear), control: CGPoint(x: x0, y: top))
         path.addLine(to: CGPoint(x: x0, y: bottom - r))
@@ -180,13 +180,13 @@ struct FrameLayout {
         return path
     }
 
-    // MARK: Zeichnen (geflippter Kontext erwartet)
+    // MARK: Drawing (expects a flipped context)
 
     func drawChassis(in ctx: CGContext, color: BezelColor = .graphite) {
         guard showFrame else { return }
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
 
-        // Tasten
+        // Buttons
         for button in buttons {
             let radius = min(button.width, button.height) / 2
             ctx.addPath(CGPath(roundedRect: button, cornerWidth: radius, cornerHeight: radius, transform: nil))
@@ -194,7 +194,7 @@ struct FrameLayout {
             ctx.fillPath()
         }
 
-        // Metallrahmen
+        // Metal frame
         let body = CGPath(roundedRect: bodyRect, cornerWidth: bodyRadius, cornerHeight: bodyRadius, transform: nil)
         ctx.saveGState()
         ctx.addPath(body)
@@ -204,14 +204,14 @@ struct FrameLayout {
                                end: CGPoint(x: bodyRect.maxX, y: bodyRect.maxY), options: [])
         ctx.restoreGState()
 
-        // feine Lichtkante
+        // fine highlight edge
         ctx.addPath(CGPath(roundedRect: bodyRect.insetBy(dx: 0.5, dy: 0.5),
                            cornerWidth: max(0, bodyRadius - 0.5), cornerHeight: max(0, bodyRadius - 0.5), transform: nil))
         ctx.setStrokeColor(color.highlight)
         ctx.setLineWidth(1)
         ctx.strokePath()
 
-        // schwarze Front
+        // black front
         ctx.addPath(CGPath(roundedRect: bezelRect, cornerWidth: bezelRadius, cornerHeight: bezelRadius, transform: nil))
         ctx.setFillColor(CGColor(srgbRed: 0.03, green: 0.03, blue: 0.035, alpha: 1))
         ctx.fillPath()
@@ -245,7 +245,7 @@ struct FrameLayout {
         ctx.fillPath()
     }
 
-    /// Umriss für den Schatten (Gehäuse oder, ohne Rahmen, der Bildschirm)
+    /// Outline for the shadow (chassis or, without a frame, the screen)
     var silhouettePath: CGPath {
         showFrame
             ? CGPath(roundedRect: bodyRect, cornerWidth: bodyRadius, cornerHeight: bodyRadius, transform: nil)

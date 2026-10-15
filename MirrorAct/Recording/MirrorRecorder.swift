@@ -4,11 +4,11 @@ import CoreImage
 import CoreMedia
 import CoreVideo
 
-/// Nimmt das gespiegelte Bild (und den Ton) als .mov auf.
-/// - nur Bildschirm: H.264 in Bildschirmauflösung
-/// - mit Gestaltung (Rahmen, Hintergrund …): über SceneRenderer; transparent → HEVC mit Alpha, sonst H.264
-/// Zeitstempel sind Host-Zeit; das iPhone schickt nur bei Änderungen Bilder, darum
-/// variable Bildrate (das letzte Bild wird beim Stoppen bis zum Ende verlängert).
+/// Records the mirrored image (and audio) as .mov.
+/// - screen only: H.264 at screen resolution
+/// - with style (frame, background …): via SceneRenderer; transparent → HEVC with alpha, otherwise H.264
+/// Timestamps are host time; the iPhone only sends frames when something changes, hence
+/// a variable frame rate (on stop, the last frame is extended to the end).
 final class MirrorRecorder: @unchecked Sendable {
     enum RecorderError: LocalizedError {
         case cannotAddInput
@@ -16,7 +16,7 @@ final class MirrorRecorder: @unchecked Sendable {
     }
 
     let url: URL
-    /// nur der Bildschirm (ohne Gestaltung) – lässt sich später im Editor rahmen
+    /// just the screen (no style) – can be framed later in the editor
     let isPassthrough: Bool
     private let writer: AVAssetWriter
     private let videoInput: AVAssetWriterInput
@@ -45,7 +45,7 @@ final class MirrorRecorder: @unchecked Sendable {
         if passthrough {
             canvasSize = CGSize(width: SceneRenderer.even(frameSize.width), height: SceneRenderer.even(frameSize.height))
         } else {
-            // Leinwand aus dem ersten Bild; spätere Drehungen werden eingepasst
+            // canvas from the first frame; later rotations are fitted in
             canvasSize = Self.limited(SceneRenderer.naturalCanvas(style: style, profile: profile, showFrame: withFrame,
                                                                  screenSize: frameSize))
             scene = SceneRenderer(style: style, profile: profile, showFrame: withFrame, fixedCanvas: canvasSize)
@@ -104,7 +104,7 @@ final class MirrorRecorder: @unchecked Sendable {
 
     static var now: CMTime { CMClockGetTime(CMClockGetHostTimeClock()) }
 
-    /// höchstens 4K (längste Seite 3840, max. 3840×2160 Pixel), sonst lehnen die Encoder ab
+    /// at most 4K (longest side 3840, max. 3840×2160 pixels), otherwise the encoders refuse
     private static func limited(_ size: CGSize) -> CGSize {
         let maxSide: CGFloat = 3840, maxPixels: CGFloat = 3840 * 2160
         let factor = min(1, maxSide / max(size.width, size.height), (maxPixels / (size.width * size.height)).squareRoot())
@@ -140,7 +140,7 @@ final class MirrorRecorder: @unchecked Sendable {
 
         let size = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
         if scene == nil, size != canvasSize {
-            // z. B. gedreht: schwarz umrandet in die feste Leinwand einpassen
+            // e.g. rotated: fit into the fixed canvas with a black border
             scene = SceneRenderer(style: .letterbox, profile: profile, showFrame: false, fixedCanvas: canvasSize)
         }
         var output: CVPixelBuffer? = pixelBuffer
@@ -158,12 +158,12 @@ final class MirrorRecorder: @unchecked Sendable {
         }
     }
 
-    /// Beendet die Aufnahme; completion auf dem Main-Thread mit der Datei oder einem Fehler
+    /// Ends the recording; completion on the main thread with the file or an error
     func finish(completion: @escaping (Result<URL, Error>) -> Void) {
         let end = Self.now
         queue.async {
             guard !self.finished else { return }
-            // letztes Bild bis zum Stopp stehen lassen
+            // hold the last frame until stop
             if let frame = self.lastFrame, self.lastVideoTime.isValid,
                CMTimeSubtract(end, self.lastVideoTime).seconds > 0.02, self.videoInput.isReadyForMoreMediaData {
                 if self.adaptor.append(frame, withPresentationTime: end) { self.lastVideoTime = end }

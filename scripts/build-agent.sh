@@ -1,11 +1,11 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Baut den Agent für die Bedienung von iPhone und iPad: WebDriverAgent (Appium, BSD-Lizenz,
-# fester Commit) als UI-Test-Runner, signiert mit dem eigenen Team aus Config/Local.xcconfig.
-# Ergebnis: ~/Library/Application Support/MirrorAct/Agent (dort sucht MirrorAct danach).
-#   scripts/build-agent.sh                 für alle im Team registrierten Geräte
-#   scripts/build-agent.sh --device UDID   registriert dieses Gerät bei Bedarf im Team
+# Builds the agent for controlling iPhone and iPad: WebDriverAgent (Appium, BSD license,
+# pinned commit) as a UI test runner, signed with your own team from Config/Local.xcconfig.
+# Result: ~/Library/Application Support/MirrorAct/Agent (where MirrorAct looks for it).
+#   scripts/build-agent.sh                 for all devices registered in the team
+#   scripts/build-agent.sh --device UDID   registers this device in the team if needed
 set -euo pipefail
 
 ROOT=${0:A:h:h}
@@ -43,7 +43,7 @@ if [[ $(git -C $SRC rev-parse HEAD 2>/dev/null) != $WDA_COMMIT ]]; then
   git -C $SRC checkout -q --detach $WDA_COMMIT
 fi
 
-# MirrorActs Zusatzbefehle (schnelle Berührungen) mitkompilieren, ohne das Xcode-Projekt zu ändern
+# compile MirrorAct's extra commands (fast touches) along with it, without changing the Xcode project
 COMMANDS=$SRC/WebDriverAgentLib/Commands
 git -C $SRC checkout -q -- WebDriverAgentLib/Commands/FBCustomCommands.m
 cp $ROOT/Agent/MirrorActCommands.m $COMMANDS/MirrorActCommands.m
@@ -63,6 +63,6 @@ fi
 rm -rf $DEST
 mkdir -p $DEST
 cp -R $DERIVED/Build/Products/ $DEST/
-# neue Kennung je Bau: MirrorAct installiert den Agent nur neu, wenn sie sich geändert hat
+# new ID per build: MirrorAct only reinstalls the agent when it has changed
 uuidgen > $DEST/build-id
 echo "Agent gebaut ($BUNDLE_ID): $DEST"

@@ -10,8 +10,8 @@ private func string(_ pointer: UnsafePointer<CChar>?) -> String {
     pointer.map { String(cString: $0) } ?? ""
 }
 
-/// Kabelloser Empfang: AirPlay-Bildschirmsynchronisierung über die UxPlay-Bibliothek,
-/// Dekodierung mit VideoToolbox, Ton mit AVAudioEngine.
+/// Wireless receiving: AirPlay Screen Mirroring via the UxPlay library,
+/// decoding with VideoToolbox, audio with AVAudioEngine.
 final class AirPlayReceiver: @unchecked Sendable {
     struct Client: Equatable {
         let deviceID: String
@@ -30,7 +30,7 @@ final class AirPlayReceiver: @unchecked Sendable {
         var pin: Int32
     }
 
-    // Alle Callbacks kommen auf dem Main-Thread
+    // All callbacks arrive on the main thread
     var onClient: ((Client) -> Void)?
     var onConnectionLost: (() -> Void)?
     var onConnectionCount: ((Int) -> Void)?
@@ -50,7 +50,7 @@ final class AirPlayReceiver: @unchecked Sendable {
         decoder.onError = { message in Log.error("AirPlay-Video: \(message)") }
     }
 
-    /// Ziel für dekodierte Bilder (das Spiegelfenster)
+    /// Destination for decoded frames (the mirror window)
     var sink: FrameSink? {
         get { lock.lock(); defer { lock.unlock() }; return currentSink }
         set { lock.lock(); currentSink = newValue; lock.unlock() }

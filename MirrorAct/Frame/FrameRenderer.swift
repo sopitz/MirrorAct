@@ -4,9 +4,9 @@ import CoreVideo
 import UniformTypeIdentifiers
 import VideoToolbox
 
-/// Rendert Bildschirminhalte mit Gehäuse in ein Bild (Screenshots, "Screenshot einrahmen").
+/// Renders screen content with the chassis into an image (screenshots, "Frame Screenshot").
 enum FrameRenderer {
-    /// Bildschirminhalt mit Gestaltung (Rahmen, Hintergrund …) in Originalauflösung
+    /// Screen content with style (frame, background …) at original resolution
     static func render(screen: CGImage, profile: DeviceProfile, showFrame: Bool,
                        style: FrameStyle = AppSettings.shared.style) -> CGImage? {
         if SceneRenderer.isPassthrough(style: style, showFrame: showFrame) { return screen }
@@ -38,7 +38,7 @@ enum FrameRenderer {
         NSPasteboard.general.writeObjects([nsImage])
     }
 
-    /// "Screenshot einrahmen…": gerahmte Kopie neben der Originaldatei
+    /// "Frame Screenshot…": framed copy next to the original file
     static func frameScreenshotFiles(_ urls: [URL], showFrame: Bool = true,
                                      style: FrameStyle = AppSettings.shared.style) -> [URL] {
         var outputs: [URL] = []

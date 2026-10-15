@@ -11,8 +11,8 @@ settings:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     MACOSX_DEPLOYMENT_TARGET: "15.0"
-    MARKETING_VERSION: "0.2.2"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "0.2.3"
+    CURRENT_PROJECT_VERSION: "5"
     SWIFT_EMIT_LOC_STRINGS: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 
@@ -35,6 +35,8 @@ targets:
         excludes:
           - "**/*.md"
       - path: Resources/AppIcon.icns
+        buildPhase: resources
+      - path: Shared/DeviceProfiles.json
         buildPhase: resources
       - path: Vendor/scrcpy/scrcpy-server
         buildPhase: resources
@@ -95,7 +97,7 @@ targets:
         CLANG_WARN_DOCUMENTATION_COMMENTS: NO
         GCC_WARN_UNUSED_FUNCTION: NO
 
-  # Tests laufen in der App (scripts/test.sh)
+  # Tests run inside the app (scripts/test.sh)
   MirrorActTests:
     type: bundle.unit-test
     platform: macOS

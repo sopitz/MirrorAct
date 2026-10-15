@@ -1,13 +1,13 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Baut MirrorAct.app und installiert sie nach ~/Applications.
-#   scripts/build.sh            Release-Build + Installation
-#   scripts/build.sh --debug    Debug-Build
-#   scripts/build.sh --no-install   nur bauen
-#   scripts/build.sh NAME=WERT ...  Build-Einstellungen an xcodebuild weitergeben
-# Signatur: standardmässig ad-hoc; eigenes Zertifikat in Config/Local.xcconfig
-# (Vorlage: Config/Local.xcconfig.example). MIRRORACT_DERIVED ersetzt den Build-Ordner.
+# Builds MirrorAct.app and installs it to ~/Applications.
+#   scripts/build.sh            release build + install
+#   scripts/build.sh --debug    debug build
+#   scripts/build.sh --no-install   build only
+#   scripts/build.sh NAME=VALUE ... pass build settings on to xcodebuild
+# Signing: ad hoc by default; your own certificate in Config/Local.xcconfig
+# (template: Config/Local.xcconfig.example). MIRRORACT_DERIVED replaces the build folder.
 set -euo pipefail
 
 ROOT=${0:A:h:h}
@@ -23,12 +23,15 @@ for arg in "$@"; do
   esac
 done
 
-for tool in xcodegen xcodebuild cmake brew; do
+for tool in xcodegen xcodebuild cmake brew python3; do
   command -v $tool > /dev/null || { echo "Fehlt: $tool (siehe CONTRIBUTING.md)"; exit 1; }
 done
 BREW_PREFIX=$(brew --prefix)
 DERIVED=${MIRRORACT_DERIVED:-$HOME/Library/Caches/MirrorAct/DerivedData}
 APP_DEST=$HOME/Applications/MirrorAct.app
+
+# Foundation also reads malformed JSON; stricter parsers do not
+$ROOT/scripts/check-device-profiles.sh
 
 [[ -f $ROOT/Vendor/uxplay-build/lib/libairplay.a ]] || $ROOT/scripts/bootstrap-uxplay.sh
 $ROOT/scripts/bootstrap-scrcpy.sh

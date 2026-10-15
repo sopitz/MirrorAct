@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Erzeugt Resources/AppIcon.icns (eigenes Motiv: zwei Telefone, eines gespiegelt)
+// Generates Resources/AppIcon.icns (custom artwork: two phones, one mirrored)
 import AppKit
 
 let out = CommandLine.arguments[1]

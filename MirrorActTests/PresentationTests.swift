@@ -3,7 +3,7 @@ import AppKit
 import XCTest
 @testable import MirrorAct
 
-/// Präsentieren (⌃⌘F) muss sich ohne Tastenkürzel beenden lassen (Issue #14)
+/// Presenting (⌃⌘F) must be possible to end without a keyboard shortcut (issue #14)
 @MainActor
 final class PresentationTests: XCTestCase {
     private var controller: MirrorWindowController!
@@ -74,7 +74,7 @@ final class PresentationTests: XCTestCase {
         XCTAssertTrue(isShown(window.exitButton, in: window))
     }
 
-    /// mehrere Spiegelfenster: Menü und Tastenkürzel gelten dem präsentierten
+    /// several mirror windows: menu and keyboard shortcuts target the presenting one
     func testCommandsTargetThePresentingMirror() {
         let other = MirrorWindowController(session: MirrorSession(id: "other", kind: .cable, deviceName: "iPad",
                                                                   modelIdentifier: "iPad13,16", muted: true))
@@ -84,9 +84,9 @@ final class PresentationTests: XCTestCase {
         XCTAssertTrue(AppModel.keyMirror(among: [other, controller]) === controller)
     }
 
-    // MARK: Hilfen
+    // MARK: Helpers
 
-    /// im Fenster, nicht versteckt, nicht durchsichtig und innerhalb des Bildschirms
+    /// in the window, not hidden, not transparent and within the screen
     private func isShown(_ view: NSView, in window: NSWindow) -> Bool {
         guard view.window === window, !view.isHiddenOrHasHiddenAncestor,
               let content = window.contentView else { return false }
