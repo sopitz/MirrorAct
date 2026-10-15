@@ -27,9 +27,15 @@ final class IOSControl: @preconcurrency DeviceControl {
     private var liveObserver: AnyCancellable?
     private var endedObserver: NSObjectProtocol?
     /// Device whose agent this control started or uses
-    private var agentUDID: String?
+    private var agentUDID: String? {
+        didSet { if let agentUDID { lastAgentUDID = agentUDID } }
+    }
+    /// Device of the last agent; stays set after turning off, while the agent keeps running for a while
+    private var lastAgentUDID: String?
     /// Agent taken over (AgentRunners.acquire): when turning off, only release it; it keeps running for a while
     private var holdsAgent = false
+    /// set by end(): no automatic start until the device connects again
+    private var ended = false
 
     /// current touch
     private var touchPath: [TouchPoint] = []
@@ -56,8 +62,11 @@ final class IOSControl: @preconcurrency DeviceControl {
         }
         // start right away on connecting (first image), if set up that way
         liveObserver = session.$state.removeDuplicates().sink { [weak self] state in
-            guard state == .live else { return }
-            DispatchQueue.main.async { self?.startAutomatically() }
+            switch state {
+            case .connecting: DispatchQueue.main.async { self?.ended = false }
+            case .live: DispatchQueue.main.async { self?.startAutomatically() }
+            case .disconnected: break
+            }
         }
     }
 
@@ -87,7 +96,7 @@ final class IOSControl: @preconcurrency DeviceControl {
 
     /// Start on connecting; if that fails (agent missing, device locked …), the "Control" button stays
     private func startAutomatically() {
-        guard AppSettings.shared.autoStartControl, ControlWorker.agentTestRun() != nil else { return }
+        guard !ended, AppSettings.shared.autoStartControl, ControlWorker.agentTestRun() != nil else { return }
         switch state {
         case .off, .failed: begin(automatic: true)
         case .starting, .ready: break
@@ -131,6 +140,16 @@ final class IOSControl: @preconcurrency DeviceControl {
         touchPath = []
         scrollPath = []
         state = .off
+    }
+
+    /// Turn off and stop the agent right away instead of keeping it running: with the connection
+    /// gone, it would stay on the device with nothing on the Mac using it
+    func end() {
+        let udid = agentUDID ?? lastAgentUDID
+        ended = true
+        stop()
+        lastAgentUDID = nil
+        if let udid { AgentRunners.shared.shutdown(udid: udid) }
     }
 
     private func lost(_ message: String) {
@@ -392,7 +411,7 @@ private final class ControlWorker: @unchecked Sendable {
 
         // is the agent still running (after a window was closed or a crash)? Then connect right away.
         let knownHost = DispatchQueue.main.sync { MainActor.assumeIsolated { AgentRunners.shared.host(udid: udid) } }
-        if let running = routes(udid: udid, host: knownHost).lazy.map({ AgentConnection(route: $0) })
+        if let running = AgentConnection.routes(udid: udid, host: knownHost).lazy.map({ AgentConnection(route: $0) })
             .first(where: { $0.isAlive() }) {
             Log.info("Control: agent already running (\(running.route))")
             try openSession(running)
@@ -435,7 +454,7 @@ private final class ControlWorker: @unchecked Sendable {
 
         for attempt in 0..<20 {
             guard isCurrent(current) else { throw CancellationError() }
-            if let connection = routes(udid: udid, host: host).lazy.map({ AgentConnection(route: $0) })
+            if let connection = AgentConnection.routes(udid: udid, host: host).lazy.map({ AgentConnection(route: $0) })
                 .first(where: { $0.isAlive() }) {
                 try openSession(connection)
                 return udid
@@ -443,14 +462,6 @@ private final class ControlWorker: @unchecked Sendable {
             if attempt < 19 { Thread.sleep(forTimeInterval: 0.25) }
         }
         throw StartError(message: String(localized: "The agent started, but the Mac can’t reach it."))
-    }
-
-    /// usbmuxd (cable, otherwise Wi-Fi pairing), otherwise directly to the address the agent reports
-    private func routes(udid: String, host: String?) -> [AgentConnection.Route] {
-        var routes: [AgentConnection.Route] = []
-        if let mux = USBMux.device(udid: udid) { routes.append(.usbmux(mux)) }
-        if let host { routes.append(.network(host: host)) }
-        return routes
     }
 
     struct DeviceLocked: Error {}

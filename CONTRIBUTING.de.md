@@ -53,7 +53,7 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/USB` | Geräte finden und Bild abgreifen (`AVCaptureDevice`, `.muxed`) |
 | `MirrorAct/Frame` | Geräteprofile (`DeviceProfile` liest `Shared/DeviceProfiles.json`), Rahmengeometrie, `FrameStyle`, `SceneRenderer` (Core Image; gemeinsam für Screenshots, Aufnahmen und Editor) |
 | `MirrorAct/Mirror` | Spiegelfenster, Werkzeugleiste, Stil-Panel, Präsentieren, `DeviceControl` (Schnittstelle zum Bedienen eines Geräts) |
-| `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
+| `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten, beim Ende einer kabellosen Verbindung gestoppt), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, Host-Zeit, variable Bildrate) |
 | `MirrorAct/Editor` | Editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + Export) |
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |

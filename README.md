@@ -131,7 +131,8 @@ stays in the tool rail; clicking it (or Device → Control Device, ⌥⌘C) chec
 missing. To start control only when you want, turn off "Start control when a device connects" under
 MirrorAct → Settings → General. After you turn control off or close the window, the agent keeps
 running on the device for five minutes, so control is back at once; quitting MirrorAct stops it.
-Then:
+When a wireless connection ends (on the device, with **Disconnect** or by closing the window), the
+agent stops right away. Then:
 
 - click: tap, hold: long press, drag: swipe
 - trackpad or mouse wheel: scroll (iOS adds the momentum itself)
