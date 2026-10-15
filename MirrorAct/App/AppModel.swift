@@ -129,6 +129,8 @@ final class AppModel: ObservableObject {
 
     private func wirelessDisconnected() {
         activeWirelessClient = nil
+        // frames still in the decoder would mark the window live again; a new connection reattaches it
+        receiver.sink = nil
         guard let session = wirelessSession else { return }
         session.stopRecording()
         // nothing is connected anymore: turn control off and stop the agent on the iPhone

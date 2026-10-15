@@ -34,6 +34,8 @@ final class IOSControl: @preconcurrency DeviceControl {
     private var lastAgentUDID: String?
     /// Agent taken over (AgentRunners.acquire): when turning off, only release it; it keeps running for a while
     private var holdsAgent = false
+    /// set by end(): no automatic start until the device connects again
+    private var ended = false
 
     /// current touch
     private var touchPath: [TouchPoint] = []
@@ -60,8 +62,11 @@ final class IOSControl: @preconcurrency DeviceControl {
         }
         // start right away on connecting (first image), if set up that way
         liveObserver = session.$state.removeDuplicates().sink { [weak self] state in
-            guard state == .live else { return }
-            DispatchQueue.main.async { self?.startAutomatically() }
+            switch state {
+            case .connecting: DispatchQueue.main.async { self?.ended = false }
+            case .live: DispatchQueue.main.async { self?.startAutomatically() }
+            case .disconnected: break
+            }
         }
     }
 
@@ -91,7 +96,7 @@ final class IOSControl: @preconcurrency DeviceControl {
 
     /// Start on connecting; if that fails (agent missing, device locked …), the "Control" button stays
     private func startAutomatically() {
-        guard AppSettings.shared.autoStartControl, ControlWorker.agentTestRun() != nil else { return }
+        guard !ended, AppSettings.shared.autoStartControl, ControlWorker.agentTestRun() != nil else { return }
         switch state {
         case .off, .failed: begin(automatic: true)
         case .starting, .ready: break
@@ -141,6 +146,7 @@ final class IOSControl: @preconcurrency DeviceControl {
     /// gone, it would stay on the device with nothing on the Mac using it
     func end() {
         let udid = agentUDID ?? lastAgentUDID
+        ended = true
         stop()
         lastAgentUDID = nil
         if let udid { AgentRunners.shared.shutdown(udid: udid) }
