@@ -113,14 +113,22 @@ final class AgentRunners {
         entry?.idleTimer?.invalidate()
         let host = entry?.host, process = entry?.process
         DispatchQueue.global(qos: .utility).async {
+            var asked = false
             for route in AgentConnection.routes(udid: udid, host: host) {
                 do {
                     try AgentConnection(route: route).request("GET", "/wda/shutdown", timeout: 3, retry: false)
                     Log.info("Control: agent asked to quit (\(route))")
+                    asked = true
                     break
                 } catch {
                     continue
                 }
+            }
+            // once the agent quits, xcodebuild finishes the test run by itself; interrupting it
+            // right away cuts off its result bundle, so only do that if it doesn't exit in time
+            if asked, let process {
+                let deadline = Date().addingTimeInterval(10)
+                while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.2) }
             }
             if process?.isRunning == true { process?.interrupt() }
         }
