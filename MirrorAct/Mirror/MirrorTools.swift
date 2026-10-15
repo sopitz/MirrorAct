@@ -72,7 +72,10 @@ struct MirrorToolRail: View {
                 chrome.styleOpen.toggle()
             }
             .popover(isPresented: $chrome.styleOpen, arrowEdge: .trailing) {
+                // The rail's dark color scheme also reaches the popover's content; make the popover
+                // itself dark too, otherwise light mode shows light text on a light panel
                 StylePanel(session: session, actions: actions)
+                    .preferredColorScheme(.dark)
             }
             .railItem(visible)
             if let url = session.lastExport {
