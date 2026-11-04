@@ -21,9 +21,27 @@ final class VideoDisplayView: NSView {
 
     override var mouseDownCanMoveWindow: Bool { true }
 
+    /// Corner radius of the screen when all four corners are equal
     var cornerRadius: CGFloat {
         get { displayLayer.cornerRadius }
         set { displayLayer.cornerRadius = newValue }
+    }
+
+    /// Outline of the screen when its corners differ (e.g. at a hinge), as a mask, in this view's
+    /// coordinates (y down, like the frame); nil = rectangle with `cornerRadius`
+    var screenPath: CGPath? {
+        didSet {
+            guard let screenPath else { displayLayer.mask = nil; return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            let mask = displayLayer.mask as? CAShapeLayer ?? CAShapeLayer()
+            // the layer is not flipped: y up
+            var flip = CGAffineTransform(translationX: 0, y: bounds.height).scaledBy(x: 1, y: -1)
+            mask.frame = bounds
+            mask.path = screenPath.copy(using: &flip)
+            displayLayer.mask = mask
+            CATransaction.commit()
+        }
     }
 }
 

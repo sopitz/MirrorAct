@@ -61,6 +61,12 @@ Werkzeugleiste; ein Rechtsklick zeigt alle Funktionen.
 
 <img src="docs/framed.jpg" width="800" alt="Gerahmter iPhone-Screenshot auf blauem Verlauf">
 
+**iPhone Duo:** der Rahmen folgt dem Telefon, wenn es zu- oder aufgeklappt wird
+
+| Zugeklappt | Aufgeklappt |
+|---|---|
+| <img src="docs/iphone-duo-closed.jpg" alt="iPhone Duo zugeklappt, gerahmt auf blauem Verlauf, mit dem Scharnier links"> | <img src="docs/iphone-duo-open.jpg" alt="iPhone Duo aufgeklappt, gerahmt auf blauem Verlauf"> |
+
 Die Bilder zeigen die englische Oberfläche.
 
 ## Funktionen
@@ -69,7 +75,7 @@ Die Bilder zeigen die englische Oberfläche.
 - **Kabellos:** eigener AirPlay-Empfänger für die Bildschirmsynchronisierung. VideoToolbox dekodiert ohne Puffer, Ton inklusive. Neben dem WLAN bietet er sich auch über AWDL an (Apples Direktfunk), damit es auch klappt, wenn der Router Bonjour nicht weiterleitet.
 - **Android:** über USB-Debugging, per Kabel oder WLAN, mit dem Server von [scrcpy](https://github.com/Genymobile/scrcpy) auf dem Telefon: Video ohne Puffer dekodiert, Ton ab Android 11, Bedienen mit Maus, Trackpad und Tastatur, Zwischenablage in beide Richtungen; siehe [Android-Telefon bedienen](#android-telefon-bedienen).
 - **iPhone und iPad bedienen** (optional, für Entwickler): Maus, Trackpad und Tastatur über einen Test-Agent auf dem Gerät (WebDriverAgent), per Kabel oder kabellos; siehe [iPhone oder iPad bedienen](#iphone-oder-ipad-bedienen).
-- **Gerätrahmen** pro Modell gezeichnet: Notch, Dynamic Island, Home-Button, iPad, Android mit Kameraloch (Lage und Eckenradius liest MirrorAct vom Telefon), hoch und quer. Sieben Rahmenfarben.
+- **Gerätrahmen** pro Modell gezeichnet: Notch, Dynamic Island, Home-Button, iPad, iPhone Duo zu- und aufgeklappt, Android mit Kameraloch (Lage und Eckenradius liest MirrorAct vom Telefon), hoch und quer. Sieben Rahmenfarben.
 - **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Ton, Oben, Vollbild, Stil. Ein Rechtsklick zeigt alle Funktionen.
 - **Stil-Panel:** Grösse (lebensgross, pixelgenau, punktgenau, Bildschirm füllen), Rahmen an/aus, Rahmenfarbe, Hintergrund (transparent, Verläufe, Farbe, Bild), Abstand, Schatten, Format (1:1, 16:9, 9:16, 4:3).
 - **Screenshots und Aufnahmen** mit oder ohne Rahmen und Hintergrund. Mit transparentem Hintergrund entstehen PNG bzw. HEVC mit Alpha für Keynote und Schnittprogramme, sonst H.264. Screenshots lassen sich direkt aus dem Fenster ziehen.
@@ -136,7 +142,8 @@ der Knopf **Bedienen**; ein Klick darauf (oder Gerät → Gerät bedienen, ⌥�
 was fehlt. Wer die Bedienung nur bei Bedarf will, schaltet unter MirrorAct → Einstellungen →
 Allgemein «Bedienung beim Verbinden starten» aus. Nach dem Ausschalten oder Schliessen des Fensters
 läuft der Agent noch fünf Minuten auf dem Gerät weiter, damit die Bedienung sofort wieder da ist;
-beim Beenden von MirrorAct wird er gestoppt. Danach:
+beim Beenden von MirrorAct wird er gestoppt. Endet eine kabellose Verbindung (auf dem Gerät, mit
+**Trennen** oder durch Schliessen des Fensters), stoppt der Agent sofort. Danach:
 
 - Klick: Tippen, Halten: langes Drücken, Ziehen: Wischen
 - Trackpad oder Mausrad: Scrollen (den Schwung ergänzt iOS selbst)

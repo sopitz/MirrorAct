@@ -19,6 +19,8 @@ protocol DeviceControl: AnyObject {
     func start()
     /// when turning off and when closing the window
     func stop()
+    /// the connection to the device ended: stop, leaving nothing running on the device (default: `stop()`)
+    func end()
 
     func touch(_ phase: TouchPhase, at point: CGPoint)
     /// Mouse wheel or trackpad; values like NSEvent.scrollingDeltaX/Y (points for precise scrolling, otherwise lines)
@@ -40,6 +42,7 @@ extension DeviceControl {
     }
     func start() {}
     func stop() {}
+    func end() { stop() }
 }
 
 enum ControlState: Equatable {

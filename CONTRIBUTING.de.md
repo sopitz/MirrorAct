@@ -53,13 +53,13 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/USB` | Geräte finden und Bild abgreifen (`AVCaptureDevice`, `.muxed`) |
 | `MirrorAct/Frame` | Geräteprofile (`DeviceProfile` liest `Shared/DeviceProfiles.json`), Rahmengeometrie, `FrameStyle`, `SceneRenderer` (Core Image; gemeinsam für Screenshots, Aufnahmen und Editor) |
 | `MirrorAct/Mirror` | Spiegelfenster, Werkzeugleiste, Stil-Panel, Präsentieren, `DeviceControl` (Schnittstelle zum Bedienen eines Geräts) |
-| `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
+| `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten, beim Ende einer kabellosen Verbindung gestoppt), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, Host-Zeit, variable Bildrate) |
 | `MirrorAct/Editor` | Editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + Export) |
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
 | `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche Übersetzung), Info.plist und Siri-Phrasen |
-| `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Ecken, Punkte, ppi) für alle MirrorAct-Apps; als Ressource in die App gebündelt; ausserhalb der App kompilierte Swift-Werkzeuge (z. B. mit swiftc) können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen; andere MirrorAct-Apps lesen dieselbe Datei. `scripts/build.sh` prüft sie als striktes JSON (keine Kommas am Ende), und die App bricht beim Start bei unbekannten Schlüsseln oder widersprüchlichen Einträgen ab. Ein Name darin, der eine Übersetzung braucht, bekommt einen manuellen Eintrag in `MirrorAct/Localization/Localizable.xcstrings`, weil der Compiler ihn nicht extrahieren kann |
+| `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Kameraloch, Ecken, Rand, Tasten, Punkte, ppi; bei einem faltbaren Gerät auch der innere Bildschirm, unter `unfolded`) für alle MirrorAct-Apps; als Ressource in die App gebündelt; ausserhalb der App kompilierte Swift-Werkzeuge (z. B. mit swiftc) können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen; andere MirrorAct-Apps lesen dieselbe Datei. `scripts/build.sh` prüft sie als striktes JSON (keine Kommas am Ende), und die App bricht beim Start bei unbekannten Schlüsseln oder widersprüchlichen Einträgen ab. Ein Name darin, der eine Übersetzung braucht, bekommt einen manuellen Eintrag in `MirrorAct/Localization/Localizable.xcstrings`, weil der Compiler ihn nicht extrahieren kann |
 | `Agent` | MirrorActs Zusatzbefehle für WebDriverAgent (schnelle Berührungen), von `scripts/build-agent.sh` mitkompiliert |
 | `MirrorActTests` | Tests, laufen in einem Debug-Build der App (`scripts/test.sh`) |
 | `scripts` | Skripte für Build, Tests, Agent, Release, Symbol und die Prüfung der Geräteprofile |
@@ -72,13 +72,14 @@ Ohne Gerät lässt sich die Darstellung prüfen:
 ~/Applications/MirrorAct.app/Contents/MacOS/MirrorAct --render-test /tmp/mirroract-render
 ```
 
-Das schreibt Rahmen, Stile, Duo-Posen und Teile der Oberfläche als PNG, nimmt zwei kurze
-Testvideos auf (mit Drehung und mit AAC-ELD-Ton wie über AirPlay) und rahmt eines davon wie der
-Editor.
+Das schreibt Rahmen (auch das iPhone Duo zu- und aufgeklappt), Stile, Duo-Posen und Teile der
+Oberfläche als PNG, nimmt zwei kurze Testvideos auf (mit Drehung und mit AAC-ELD-Ton wie über
+AirPlay) und rahmt eines davon wie der Editor.
 
 Nach Änderungen an `Shared/DeviceProfiles.json` prüft `scripts/test-device-profiles.sh`, ob die
-Tabelle gültig ist und ob fehlerhafte Einträge (vertippte Schlüssel, falsche Pixelgrössen,
-unbekannte Aussparungen) mit einer klaren Meldung abgelehnt werden.
+Tabelle gültig ist, ob fehlerhafte Einträge (vertippte Schlüssel, falsche Pixelgrössen,
+unbekannte Aussparungen, Tasten neben ihrer Kante) mit einer klaren Meldung abgelehnt werden und
+ob beim iPhone Duo die Bildgrösse den zu- und den aufgeklappten Bildschirm unterscheidet.
 
 ## Tests
 
