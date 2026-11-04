@@ -14,9 +14,12 @@ struct FrameLayout {
     let bodyRect: CGRect
     let bezelRect: CGRect
     let screenRect: CGRect
-    let bodyRadius: CGFloat
-    let bezelRadius: CGFloat
-    let screenRadius: CGFloat
+    /// outlines; corners on the left (portrait) may differ from the right ones
+    let bodyPath: CGPath
+    let bezelPath: CGPath
+    let screenPath: CGPath
+    /// corner radius of the screen if all four corners are equal; nil if they differ (see `screenPath`)
+    let uniformScreenRadius: CGFloat?
     let buttons: [CGRect]
     let cutout: CGPath?
     let homeButton: CGRect?
@@ -26,12 +29,23 @@ struct FrameLayout {
     init(profile: DeviceProfile, screenSize: CGSize, showFrame: Bool) {
         self.profile = profile
         self.showFrame = showFrame
-        landscape = screenSize.width > screenSize.height
+        let isLandscape = screenSize.width > screenSize.height
+        landscape = isLandscape
 
         let W = min(screenSize.width, screenSize.height)
         let H = max(screenSize.width, screenSize.height)
         let screenRadius = profile.screenCornerRatio * W
-        self.screenRadius = screenRadius
+        let screenRadiusLeft = profile.leftCornerRatio.map { $0 * W } ?? screenRadius
+        uniformScreenRadius = screenRadiusLeft == screenRadius ? screenRadius : nil
+        // Landscape: rotate the top to the left, (x, y) → (y, portrait width − x)
+        func rotation(portraitWidth: CGFloat) -> CGAffineTransform {
+            CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: portraitWidth)
+        }
+        func oriented(_ path: CGPath, portraitWidth: CGFloat) -> CGPath {
+            guard isLandscape else { return path }
+            var t = rotation(portraitWidth: portraitWidth)
+            return path.copy(using: &t) ?? path
+        }
 
         guard showFrame else {
             let rect = CGRect(origin: .zero, size: screenSize)
@@ -39,8 +53,11 @@ struct FrameLayout {
             bodyRect = rect
             bezelRect = rect
             screenRect = rect
-            bodyRadius = screenRadius
-            bezelRadius = screenRadius
+            let path = oriented(Self.roundedRect(CGRect(x: 0, y: 0, width: W, height: H), radius: screenRadius,
+                                                 left: screenRadiusLeft), portraitWidth: W)
+            bodyPath = path
+            bezelPath = path
+            screenPath = path
             buttons = []
             cutout = nil
             homeButton = nil
@@ -61,45 +78,67 @@ struct FrameLayout {
             top = side
             bottom = 0.042 * W
         } else {
-            side = (isPad ? 0.045 : 0.052) * W
+            side = profile.bezelRatio.map { $0 * W } ?? (isPad ? 0.045 : 0.052) * W
             top = side
             bottom = side
         }
         let rim = (isPad ? 0.010 : 0.014) * W
         let protrusion: CGFloat = isPad ? 0 : 0.012 * W
 
-        // Portrait
-        let body = CGRect(x: protrusion, y: 0, width: W + 2 * side, height: H + top + bottom)
-        let screen = CGRect(x: body.minX + side, y: top, width: W, height: H)
-        let bodyRadius: CGFloat = profile.homeButton ? (isPad ? 0.075 : 0.17) * W : screenRadius + side
-        let portraitTotal = CGSize(width: body.width + 2 * protrusion, height: body.height)
-
-        var buttons: [CGRect] = []
-        if isAndroid {
+        typealias Button = DeviceProfile.Button
+        let buttonSpecs: [Button]
+        if let custom = profile.buttons {
+            buttonSpecs = custom
+        } else if isAndroid {
             // Volume and power on the right
-            for (y, h) in [(0.200, 0.105), (0.335, 0.055)] as [(CGFloat, CGFloat)] {
-                buttons.append(CGRect(x: body.maxX - rim, y: body.minY + y * body.height,
-                                      width: protrusion + rim, height: h * body.height))
-            }
-        } else if !isPad {
+            buttonSpecs = [Button(edge: .right, at: 0.200, length: 0.105), Button(edge: .right, at: 0.335, length: 0.055)]
+        } else if isPad {
+            buttonSpecs = []
+        } else {
             let left: [(CGFloat, CGFloat)] = profile.homeButton
                 ? [(0.120, 0.040), (0.190, 0.070), (0.280, 0.070)]
                 : [(0.165, 0.036), (0.235, 0.072), (0.330, 0.072)]
             let right: [(CGFloat, CGFloat)] = profile.homeButton ? [(0.190, 0.080)] : [(0.255, 0.110)]
-            for (y, h) in left {
-                buttons.append(CGRect(x: 0, y: body.minY + y * body.height,
-                                      width: protrusion + rim, height: h * body.height))
-            }
-            for (y, h) in right {
-                buttons.append(CGRect(x: body.maxX - rim, y: body.minY + y * body.height,
-                                      width: protrusion + rim, height: h * body.height))
+            buttonSpecs = left.map { Button(edge: .left, at: $0.0, length: $0.1) }
+                + right.map { Button(edge: .right, at: $0.0, length: $0.1) }
+        }
+        func depth(_ button: Button) -> CGFloat { button.depth.map { $0 * W } ?? protrusion }
+        // room for the buttons; left and right always as wide as a side button, as before
+        func margin(_ edge: Button.Edge) -> CGFloat {
+            let deepest = buttonSpecs.filter { $0.edge == edge }.map(depth).max() ?? 0
+            return edge == .left || edge == .right ? max(protrusion, deepest) : deepest
+        }
+
+        // Portrait
+        let body = CGRect(x: margin(.left), y: margin(.top), width: W + 2 * side, height: H + top + bottom)
+        let screen = CGRect(x: body.minX + side, y: body.minY + top, width: W, height: H)
+        let bodyRadius: CGFloat = profile.homeButton ? (isPad ? 0.075 : 0.17) * W : screenRadius + side
+        // a smaller corner on the left (hinge) leaves the chassis corner as round as the screen's
+        let bodyRadiusLeft = profile.leftCornerRatio == nil ? bodyRadius : screenRadiusLeft
+        let portraitTotal = CGSize(width: body.maxX + margin(.right), height: body.maxY + margin(.bottom))
+
+        let buttons: [CGRect] = buttonSpecs.map { button in
+            let d = depth(button)
+            switch button.edge {
+            case .left:
+                return CGRect(x: body.minX - d, y: body.minY + button.at * body.height,
+                              width: d + rim, height: button.length * body.height)
+            case .right:
+                return CGRect(x: body.maxX - rim, y: body.minY + button.at * body.height,
+                              width: d + rim, height: button.length * body.height)
+            case .top:
+                return CGRect(x: body.minX + button.at * body.width, y: body.minY - d,
+                              width: button.length * body.width, height: d + rim)
+            case .bottom:
+                return CGRect(x: body.minX + button.at * body.width, y: body.maxY - rim,
+                              width: button.length * body.width, height: d + rim)
             }
         }
 
         var cutout: CGPath?
         switch profile.cutout {
         case .none:
-            break
+            break  // also a camera under the display
         case let .notch(widthRatio, heightRatio):
             cutout = Self.notchPath(screen: screen, width: widthRatio * W, height: heightRatio * W)
         case let .island(widthRatio, heightRatio, topRatio):
@@ -118,23 +157,28 @@ struct FrameLayout {
             homeButton = CGRect(x: body.midX - d / 2, y: screen.maxY + (bottom - d) / 2, width: d, height: d)
             if !isPad {
                 let ew = 0.16 * W, eh = 0.022 * W
-                earpiece = CGRect(x: body.midX - ew / 2, y: (top - eh) / 2, width: ew, height: eh)
+                earpiece = CGRect(x: body.midX - ew / 2, y: body.minY + (top - eh) / 2, width: ew, height: eh)
                 let cd = 0.035 * W
-                camera = CGRect(x: body.midX - ew / 2 - cd * 2.2, y: (top - cd) / 2, width: cd, height: cd)
+                camera = CGRect(x: body.midX - ew / 2 - cd * 2.2, y: body.minY + (top - cd) / 2, width: cd, height: cd)
             } else {
                 let cd = 0.016 * W
-                camera = CGRect(x: body.midX - cd / 2, y: (top - cd) / 2, width: cd, height: cd)
+                camera = CGRect(x: body.midX - cd / 2, y: body.minY + (top - cd) / 2, width: cd, height: cd)
             }
         } else if isPad {
             let cd = 0.012 * W
-            camera = CGRect(x: body.midX - cd / 2, y: (top - cd) / 2, width: cd, height: cd)
+            camera = CGRect(x: body.midX - cd / 2, y: body.minY + (top - cd) / 2, width: cd, height: cd)
         }
 
         let bezel = body.insetBy(dx: rim, dy: rim)
+        bodyPath = oriented(Self.roundedRect(body, radius: bodyRadius, left: bodyRadiusLeft),
+                            portraitWidth: portraitTotal.width)
+        bezelPath = oriented(Self.roundedRect(bezel, radius: max(0, bodyRadius - rim), left: max(0, bodyRadiusLeft - rim)),
+                             portraitWidth: portraitTotal.width)
+        screenPath = oriented(Self.roundedRect(screen, radius: screenRadius, left: screenRadiusLeft),
+                              portraitWidth: portraitTotal.width)
 
         if landscape {
-            // Rotate the top to the left: (x, y) → (y, width − x)
-            let t = CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: portraitTotal.width)
+            let t = rotation(portraitWidth: portraitTotal.width)
             func rotate(_ r: CGRect) -> CGRect { r.applying(t) }
             totalSize = CGSize(width: portraitTotal.height, height: portraitTotal.width)
             bodyRect = rotate(body)
@@ -157,8 +201,21 @@ struct FrameLayout {
             self.earpiece = earpiece
             self.camera = camera
         }
-        self.bodyRadius = bodyRadius
-        self.bezelRadius = max(0, bodyRadius - rim)
+    }
+
+    /// Rounded rectangle; `left` is the radius of the two left corners
+    static func roundedRect(_ rect: CGRect, radius: CGFloat, left: CGFloat) -> CGPath {
+        let limit = min(rect.width, rect.height) / 2
+        let r = min(radius, limit), l = min(left, limit)
+        if r == l { return CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil) }
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: r)
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: rect.maxY), radius: r)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: rect.minY), radius: l)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.minY), radius: l)
+        path.closeSubpath()
+        return path
     }
 
     /// Notch at the top center of the screen, with inward-curved transitions
@@ -195,24 +252,26 @@ struct FrameLayout {
         }
 
         // Metal frame
-        let body = CGPath(roundedRect: bodyRect, cornerWidth: bodyRadius, cornerHeight: bodyRadius, transform: nil)
         ctx.saveGState()
-        ctx.addPath(body)
+        ctx.addPath(bodyPath)
         ctx.clip()
         let metal = CGGradient(colorsSpace: space, colors: color.metal as CFArray, locations: [0, 0.55, 1])!
         ctx.drawLinearGradient(metal, start: CGPoint(x: bodyRect.minX, y: bodyRect.minY),
                                end: CGPoint(x: bodyRect.maxX, y: bodyRect.maxY), options: [])
         ctx.restoreGState()
 
-        // fine highlight edge
-        ctx.addPath(CGPath(roundedRect: bodyRect.insetBy(dx: 0.5, dy: 0.5),
-                           cornerWidth: max(0, bodyRadius - 0.5), cornerHeight: max(0, bodyRadius - 0.5), transform: nil))
+        // fine highlight edge, inside the outline
+        ctx.saveGState()
+        ctx.addPath(bodyPath)
+        ctx.clip()
+        ctx.addPath(bodyPath)
         ctx.setStrokeColor(color.highlight)
-        ctx.setLineWidth(1)
+        ctx.setLineWidth(2)
         ctx.strokePath()
+        ctx.restoreGState()
 
         // black front
-        ctx.addPath(CGPath(roundedRect: bezelRect, cornerWidth: bezelRadius, cornerHeight: bezelRadius, transform: nil))
+        ctx.addPath(bezelPath)
         ctx.setFillColor(CGColor(srgbRed: 0.03, green: 0.03, blue: 0.035, alpha: 1))
         ctx.fillPath()
 
@@ -246,13 +305,5 @@ struct FrameLayout {
     }
 
     /// Outline for the shadow (chassis or, without a frame, the screen)
-    var silhouettePath: CGPath {
-        showFrame
-            ? CGPath(roundedRect: bodyRect, cornerWidth: bodyRadius, cornerHeight: bodyRadius, transform: nil)
-            : screenPath
-    }
-
-    var screenPath: CGPath {
-        CGPath(roundedRect: screenRect, cornerWidth: screenRadius, cornerHeight: screenRadius, transform: nil)
-    }
+    var silhouettePath: CGPath { bodyPath }
 }

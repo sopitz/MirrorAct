@@ -51,7 +51,7 @@ final class EditorDocument: ObservableObject, Identifiable {
     var isDuo: Bool { if case let .images(_, images) = content { return images.count == 2 } else { return false } }
 
     func profile(for size: CGSize) -> DeviceProfile {
-        if modelSelection != "auto", let selected = DeviceProfile.profile(forSelection: modelSelection) {
+        if modelSelection != "auto", let selected = DeviceProfile.profile(forSelection: modelSelection, screenSize: size) {
             return selected
         }
         return DeviceProfile.resolve(modelIdentifier: nil, screenPixels: size, frameSize: size)

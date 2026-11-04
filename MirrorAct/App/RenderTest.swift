@@ -14,6 +14,13 @@ enum RenderTest {
             ("iphone12", DeviceProfile.forModelIdentifier("iPhone13,2")!, CGSize(width: 1170, height: 2532)),
             ("iphonese", DeviceProfile.forModelIdentifier("iPhone14,6")!, CGSize(width: 750, height: 1334)),
             ("ipad", DeviceProfile.forScreenPixels(CGSize(width: 1640, height: 2360))!, CGSize(width: 1640, height: 2360)),
+            // iPhone Duo: the screen size picks the closed (outer) or open (inner) screen
+            ("iphoneduo-zu", DeviceProfile.forModelIdentifier("iPhone19,4", screenSize: CGSize(width: 1398, height: 2034))!,
+             CGSize(width: 1398, height: 2034)),
+            ("iphoneduo-zu-quer", DeviceProfile.forModelIdentifier("iPhone19,4", screenSize: CGSize(width: 2034, height: 1398))!,
+             CGSize(width: 2034, height: 1398)),
+            ("iphoneduo-auf", DeviceProfile.forModelIdentifier("iPhone19,4", screenSize: CGSize(width: 2670, height: 1878))!,
+             CGSize(width: 2670, height: 1878)),
             ("android", DeviceProfile.android(name: "Android", screenPixels: CGSize(width: 1080, height: 2340), densityDpi: 420,
                                               cutoutRect: CGRect(x: 498, y: 0, width: 84, height: 100), cornerRadius: 105),
              CGSize(width: 1080, height: 2340)),

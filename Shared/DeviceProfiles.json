@@ -1,5 +1,5 @@
 {
-  "comment": "Device shapes shared by all MirrorAct apps (macOS: MirrorAct/Frame/DeviceProfile.swift). Ratios are relative to the screen width in portrait. Cutout types: 'notch' (width, height), 'island' (width, height, top), 'hole' (centerX, centerY, diameter). 'points' is the screen in iOS points (portrait), 'pixels' the physical pixel width of an iPhone (default: points.width × 3 with a notch or island, × 2 with a home button; iPads always use points.width × 2 and take no 'pixels'), 'ppi' the pixel density. Unknown keys are errors. Names are English and localized by the apps; a name that needs a translation gets a manual entry in Localizable.xcstrings.",
+  "comment": "Device shapes shared by all MirrorAct apps (macOS: MirrorAct/Frame/DeviceProfile.swift). Ratios are relative to the screen width in portrait. Cutout types: 'notch' (width, height), 'island' (width, height, top), 'hole' (centerX, centerY, diameter), 'none' (camera under the display). Optional for iPhones with a cutout: 'cornerLeft' (left corners, e.g. at a hinge), 'bezel' (bezel width), 'buttons' (edge top/bottom/left/right, 'at' and 'length' as fractions of that chassis edge, optional 'depth' as a ratio; replaces the default buttons). 'points' is the screen in iOS points (portrait), 'pixels' the physical pixel width of an iPhone (default: points.width × 3 with a notch or island, × 2 with a home button; iPads always use points.width × 2 and take no 'pixels'), 'ppi' the pixel density. Unknown keys are errors. Names are English and localized by the apps; a name that needs a translation gets a manual entry in Localizable.xcstrings.",
   "version": 1,
   "cutouts": {
     "notch13": { "type": "notch", "width": 0.415, "height": 0.085 },
@@ -11,7 +11,9 @@
     "notch13Mini": { "type": "notch", "width": 0.450, "height": 0.092 },
     "notch13ProMax": { "type": "notch", "width": 0.379, "height": 0.077 },
     "notchMini": { "type": "notch", "width": 0.480, "height": 0.088 },
-    "island": { "type": "island", "width": 0.320, "height": 0.095, "top": 0.029 }
+    "island": { "type": "island", "width": 0.320, "height": 0.095, "top": 0.029 },
+    "holeDuo": { "type": "hole", "centerX": 0.897, "centerY": 0.102, "diameter": 0.077 },
+    "underDisplay": { "type": "none" }
   },
   "models": {
     "iPhone10,3": { "name": "iPhone X", "cutout": "notchX", "corner": 0.104, "points": [375, 812], "ppi": 458 },
@@ -45,7 +47,12 @@
     "iPhone17,4": { "name": "iPhone 16 Plus", "cutout": "island", "corner": 0.128, "points": [430, 932] },
     "iPhone17,1": { "name": "iPhone 16 Pro", "cutout": "island", "corner": 0.154, "points": [402, 874] },
     "iPhone17,2": { "name": "iPhone 16 Pro Max", "cutout": "island", "corner": 0.141, "points": [440, 956] },
-    "iPhone17,5": { "name": "iPhone 16e", "cutout": "notch13", "corner": 0.121, "points": [390, 844] }
+    "iPhone17,5": { "name": "iPhone 16e", "cutout": "notch13", "corner": 0.121, "points": [390, 844] },
+    "iPhone19,4": { "name": "iPhone Duo", "cutout": "holeDuo", "corner": 0.126, "cornerLeft": 0.017, "bezel": 0.034, "buttons": [{ "edge": "top", "at": 0.455, "length": 0.125 }, { "edge": "top", "at": 0.609, "length": 0.125 }, { "edge": "right", "at": 0.285, "length": 0.158 }, { "edge": "left", "at": 0.010, "length": 0.980, "depth": 0.026 }], "points": [466, 678] }
+  },
+  "unfolded": {
+    "comment": "Foldables: the inner screen; 'models' holds the outer one. The app picks the screen whose aspect ratio (from points) is closer to the stream. iPhone Duo open is held in landscape; its values are for portrait with the top turned to the left, so buttons on the right and bottom edge end up on top and on the right",
+    "iPhone19,4": { "name": "iPhone Duo", "cutout": "underDisplay", "corner": 0.081, "bezel": 0.031, "buttons": [{ "edge": "right", "at": 0.726, "length": 0.066 }, { "edge": "right", "at": 0.807, "length": 0.066 }, { "edge": "bottom", "at": 0.557, "length": 0.158 }], "points": [626, 890], "ppi": 430 }
   },
   "fallbacks": {
     "comment": "Unknown identifiers: 'android*' → android defaults, 'iPad*' → iPad without home button, 'iPhoneNN,x' with NN ≥ islandFromMajor → island phone without name",
@@ -68,6 +75,8 @@
     "1290x2796": { "cutout": "island", "corner": 0.128, "points": [430, 932] },
     "1206x2622": { "cutout": "island", "corner": 0.154, "points": [402, 874] },
     "1320x2868": { "cutout": "island", "corner": 0.141, "points": [440, 956] },
+    "1398x2034": { "name": "iPhone Duo", "cutout": "holeDuo", "corner": 0.126, "cornerLeft": 0.017, "bezel": 0.034, "buttons": [{ "edge": "top", "at": 0.455, "length": 0.125 }, { "edge": "top", "at": 0.609, "length": 0.125 }, { "edge": "right", "at": 0.285, "length": 0.158 }, { "edge": "left", "at": 0.010, "length": 0.980, "depth": 0.026 }], "points": [466, 678] },
+    "1878x2670": { "name": "iPhone Duo", "cutout": "underDisplay", "corner": 0.081, "bezel": 0.031, "buttons": [{ "edge": "right", "at": 0.726, "length": 0.066 }, { "edge": "right", "at": 0.807, "length": 0.066 }, { "edge": "bottom", "at": 0.557, "length": 0.158 }], "points": [626, 890], "ppi": 430 },
     "1260x2736": { "cutout": "island", "corner": 0.150, "points": [420, 912] },
     "750x1334": { "homeButton": true, "scale": 2 },
     "640x1136": { "homeButton": true, "scale": 2 },
@@ -99,7 +108,7 @@
   "selectable": {
     "comment": "Editor model picker, newest first; the two iPad entries are generic",
     "models": [
-      "iPhone17,2", "iPhone17,1", "iPhone17,4", "iPhone17,3", "iPhone17,5",
+      "iPhone19,4", "iPhone17,2", "iPhone17,1", "iPhone17,4", "iPhone17,3", "iPhone17,5",
       "iPhone16,2", "iPhone16,1", "iPhone15,5", "iPhone15,4", "iPhone15,3", "iPhone15,2",
       "iPhone14,8", "iPhone14,7", "iPhone14,3", "iPhone14,2", "iPhone14,5", "iPhone14,4",
       "iPhone13,4", "iPhone13,3", "iPhone13,2", "iPhone13,1",
