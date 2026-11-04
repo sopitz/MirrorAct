@@ -274,7 +274,7 @@ struct DeviceThumbnail: View {
     private static func render(modelIdentifier: String?, seed: String) -> CGImage? {
         let key = "\(modelIdentifier ?? "-")|\(seed)"
         if let cached = cache[key] { return cached }
-        let profile = modelIdentifier.flatMap(DeviceProfile.forModelIdentifier)
+        let profile = modelIdentifier.flatMap { DeviceProfile.forModelIdentifier($0) }
             ?? DeviceProfile.forScreenPixels(CGSize(width: 1170, height: 2532))!
         let size = profile.family == .iPad ? CGSize(width: 240, height: 330)
             : CGSize(width: 150, height: profile.family == .android ? 333 : 325)

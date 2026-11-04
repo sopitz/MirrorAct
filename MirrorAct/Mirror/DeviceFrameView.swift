@@ -69,7 +69,8 @@ final class DeviceFrameView: NSView, NSDraggingSource {
         super.layout()
         guard let model = layoutModel else { return }
         videoView.frame = model.screenRect
-        videoView.cornerRadius = model.screenRadius
+        var toVideo = CGAffineTransform(translationX: -model.screenRect.minX, y: -model.screenRect.minY)
+        videoView.screenPath = model.screenPath.copy(using: &toVideo)
         cutoutView.frame = bounds
         let inset = model.screenRect.insetBy(dx: 24, dy: 0)
         let height: CGFloat = 60

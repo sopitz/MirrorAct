@@ -16,11 +16,28 @@ struct DeviceProfile: Equatable {
         case hole(centerX: CGFloat, centerY: CGFloat, diameter: CGFloat)
     }
 
+    /// Button or other part standing out of the chassis. `at` and `length` are fractions of the
+    /// chassis edge (portrait, from the top or left), `depth` a ratio of the screen width
+    /// (nil = like the side buttons of an iPhone)
+    struct Button: Equatable {
+        enum Edge: String { case top, bottom, left, right }
+        var edge: Edge
+        var at: CGFloat
+        var length: CGFloat
+        var depth: CGFloat?
+    }
+
     var family: Family
     var marketingName: String?
     var homeButton: Bool
     var cutout: Cutout
     var screenCornerRatio: CGFloat
+    /// corners on the left (portrait) if they differ, e.g. at the hinge of iPhone Duo
+    var leftCornerRatio: CGFloat?
+    /// bezel around the screen, ratio of its width (nil = default of the family)
+    var bezelRatio: CGFloat?
+    /// buttons (nil = default of the family)
+    var buttons: [Button]?
     /// screen size in iOS points (portrait), for "Point-Perfect"
     var pointSize: CGSize?
     /// physical pixel width and pixel density of the display, for "Life-Size"
@@ -110,8 +127,12 @@ struct DeviceProfile: Equatable {
         if entry.homeButton {
             return homeButtonPhone(name, points: points, pixels: entry.pixels, ppi: entry.ppi)
         }
-        return phone(name, entry.cutout.map(cutout) ?? .none, corner: entry.corner, points: points,
-                     pixels: entry.pixels, ppi: entry.ppi)
+        var profile = phone(name, entry.cutout.map(cutout) ?? .none, corner: entry.corner, points: points,
+                            pixels: entry.pixels, ppi: entry.ppi)
+        profile.leftCornerRatio = entry.cornerLeft
+        profile.bezelRatio = entry.bezel
+        profile.buttons = entry.buttons?.map { Button(edge: $0.edge, at: $0.at, length: $0.length, depth: $0.depth) }
+        return profile
     }
 
     /// Android device from its own data (pixels, dpi bucket, cutout, corner radius)
@@ -140,9 +161,14 @@ struct DeviceProfile: Equatable {
                              ppi: ppi)
     }
 
-    /// Model identifier (e.g. "iPhone14,2") → profile
-    static func forModelIdentifier(_ identifier: String) -> DeviceProfile? {
+    /// Model identifier (e.g. "iPhone14,2") → profile; for a foldable, `screenSize` (any orientation)
+    /// picks the screen whose aspect ratio is closer, without it the outer screen
+    static func forModelIdentifier(_ identifier: String, screenSize: CGSize? = nil) -> DeviceProfile? {
         if let entry = table.models[identifier] {
+            if let inner = table.unfolded[identifier], let size = screenSize,
+               abs(aspect(size) - aspect(inner)) < abs(aspect(size) - aspect(entry)) {
+                return profile(inner)
+            }
             return profile(entry)
         }
         let fallbacks = table.fallbacks
@@ -158,6 +184,15 @@ struct DeviceProfile: Equatable {
             return phone(nil, cutout("island"), corner: fallbacks.islandCorner, points: nil)
         }
         return nil
+    }
+
+    /// long side / short side; entries with `unfolded` have points (checked while loading)
+    private static func aspect(_ size: CGSize) -> CGFloat {
+        max(size.width, size.height) / max(1, min(size.width, size.height))
+    }
+
+    private static func aspect(_ entry: DeviceProfileTable.Entry) -> CGFloat {
+        entry.points.map { aspect(CGSize(width: $0[0], height: $0[1])) } ?? 0
     }
 
     /// Screen resolution in pixels (any orientation) → profile
@@ -191,17 +226,17 @@ struct DeviceProfile: Equatable {
         return list
     }()
 
-    static func profile(forSelection id: String) -> DeviceProfile? {
+    static func profile(forSelection id: String, screenSize: CGSize? = nil) -> DeviceProfile? {
         if let generic = table.selectable.pads.first(where: { $0.id == id }) {
             return pad("iPad", homeButton: generic.homeButton, corner: generic.corner, points: nil)
         }
-        return forModelIdentifier(id)
+        return forModelIdentifier(id, screenSize: screenSize)
     }
 
     /// Best available profile
     static func resolve(modelIdentifier: String?, screenPixels: CGSize?, frameSize: CGSize) -> DeviceProfile {
         var profile: DeviceProfile?
-        if let id = modelIdentifier { profile = forModelIdentifier(id) }
+        if let id = modelIdentifier { profile = forModelIdentifier(id, screenSize: screenPixels ?? frameSize) }
         if profile == nil, let px = screenPixels { profile = forScreenPixels(px) }
         if profile == nil { profile = forScreenPixels(frameSize) }
         return profile ?? forAspect(frameSize)
