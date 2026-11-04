@@ -18,6 +18,8 @@ struct FrameLayout {
     let bodyPath: CGPath
     let bezelPath: CGPath
     let screenPath: CGPath
+    /// corner radius of the screen if all four corners are equal; nil if they differ (see `screenPath`)
+    let uniformScreenRadius: CGFloat?
     let buttons: [CGRect]
     let cutout: CGPath?
     let homeButton: CGRect?
@@ -34,6 +36,7 @@ struct FrameLayout {
         let H = max(screenSize.width, screenSize.height)
         let screenRadius = profile.screenCornerRatio * W
         let screenRadiusLeft = profile.leftCornerRatio.map { $0 * W } ?? screenRadius
+        uniformScreenRadius = screenRadiusLeft == screenRadius ? screenRadius : nil
         // Landscape: rotate the top to the left, (x, y) → (y, portrait width − x)
         func rotation(portraitWidth: CGFloat) -> CGAffineTransform {
             CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: portraitWidth)
