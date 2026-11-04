@@ -12,7 +12,7 @@ struct DeviceProfile: Equatable {
         case none
         case notch(width: CGFloat, height: CGFloat)
         case island(width: CGFloat, height: CGFloat, top: CGFloat)
-        /// round camera hole (Android), center from left/top
+        /// round camera hole (Android, closed iPhone Duo), center from left/top
         case hole(centerX: CGFloat, centerY: CGFloat, diameter: CGFloat)
     }
 
@@ -165,9 +165,11 @@ struct DeviceProfile: Equatable {
     /// picks the screen whose aspect ratio is closer, without it the outer screen
     static func forModelIdentifier(_ identifier: String, screenSize: CGSize? = nil) -> DeviceProfile? {
         if let entry = table.models[identifier] {
+            // entries in `unfolded` and their `models` entry have points (checked while loading)
             if let inner = table.unfolded[identifier], let size = screenSize,
-               abs(aspect(size) - aspect(inner)) < abs(aspect(size) - aspect(entry)) {
-                return profile(inner)
+               let innerAspect = inner.aspectRatio, let outerAspect = entry.aspectRatio {
+                let aspect = max(size.width, size.height) / max(1, min(size.width, size.height))
+                if abs(aspect - innerAspect) < abs(aspect - outerAspect) { return profile(inner) }
             }
             return profile(entry)
         }
@@ -184,15 +186,6 @@ struct DeviceProfile: Equatable {
             return phone(nil, cutout("island"), corner: fallbacks.islandCorner, points: nil)
         }
         return nil
-    }
-
-    /// long side / short side; entries with `unfolded` have points (checked while loading)
-    private static func aspect(_ size: CGSize) -> CGFloat {
-        max(size.width, size.height) / max(1, min(size.width, size.height))
-    }
-
-    private static func aspect(_ entry: DeviceProfileTable.Entry) -> CGFloat {
-        entry.points.map { aspect(CGSize(width: $0[0], height: $0[1])) } ?? 0
     }
 
     /// Screen resolution in pixels (any orientation) → profile

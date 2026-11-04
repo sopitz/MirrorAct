@@ -57,6 +57,10 @@ variant("button-off-edge", "models iPhone19,4 has a top button outside its edge"
         lambda t: t["models"]["iPhone19,4"]["buttons"][0].update(at=0.95))
 variant("button-edge-typo", "unknown edge rigth",
         lambda t: t["models"]["iPhone19,4"]["buttons"][0].update(edge="rigth"))
+variant("button-depth-zero", "models iPhone19,4 has a left button with a depth of 0 or less",
+        lambda t: t["models"]["iPhone19,4"]["buttons"][3].update(depth=0))
+variant("unfolded-same-aspect", "unfolded iPhone19,4 has nearly the aspect ratio of its models entry",
+        lambda t: t["unfolded"]["iPhone19,4"].update(points=[466, 678]))
 variant("hole-missing-value", "cutout hole1 has type hole with missing values: diameter",
         lambda t: t["cutouts"].update(hole1={"type": "hole", "centerX": 0.5, "centerY": 0.04}))
 
@@ -86,6 +90,10 @@ duo() { MIRRORACT_DEVICE_PROFILES=$ROOT/Shared/DeviceProfiles.json $WORK/bin/pro
 [[ $(duo 972x1440) == "iPhone Duo hole(centerX: 0.897, centerY: 0.102, diameter: 0.077) corner=0.126" ]] \
   || fail "iPhone Duo closed: $(duo 972x1440)"
 [[ $(duo 2048x1440) == "iPhone Duo none corner=0.081" ]] || fail "iPhone Duo open: $(duo 2048x1440)"
+# cable: the panels' own pixel sizes, either orientation
+[[ $(duo 1398x2034) == "iPhone Duo hole("* ]] || fail "iPhone Duo closed by cable: $(duo 1398x2034)"
+[[ $(duo 1878x2670) == "iPhone Duo none corner=0.081" ]] || fail "iPhone Duo open by cable: $(duo 1878x2670)"
+[[ $(duo 2670x1878) == "iPhone Duo none corner=0.081" ]] || fail "iPhone Duo open by cable, landscape: $(duo 2670x1878)"
 
 # Syntax
 if $ROOT/scripts/check-device-profiles.sh $WORK/cases/trailing-comma.json 2> /dev/null; then

@@ -229,8 +229,12 @@ struct DeviceProfileTable: Decodable {
         for (id, entry) in unfolded.entries.sorted(by: { $0.key < $1.key }) {
             if let problem = entry.problem(in: self) { return "unfolded \(id) \(problem)" }
             guard let outer = models[id] else { return "unfolded \(id) has no entry in models" }
-            if entry.points == nil || outer.points == nil {
+            guard let innerAspect = entry.aspectRatio, let outerAspect = outer.aspectRatio else {
                 return "unfolded \(id) needs points here and in models (they tell the screens apart)"
+            }
+            // the stream's aspect ratio picks the screen, so the two must differ noticeably
+            if abs(innerAspect - outerAspect) < 0.01 {
+                return "unfolded \(id) has nearly the aspect ratio of its models entry (the screens can't be told apart)"
             }
         }
         for id in selectable.models where models[id]?.name == nil {
@@ -272,8 +276,13 @@ extension DeviceProfileTable.Entry {
         for value in [cornerLeft, bezel].compactMap({ $0 }) where value < 0 {
             return "needs cornerLeft and bezel of 0 or more"
         }
-        for button in buttons ?? [] where button.at < 0 || button.length <= 0 || button.at + button.length > 1 {
-            return "has a \(button.edge.rawValue) button outside its edge (at ≥ 0, length > 0, at + length ≤ 1)"
+        for button in buttons ?? [] {
+            if button.at < 0 || button.length <= 0 || button.at + button.length > 1 {
+                return "has a \(button.edge.rawValue) button outside its edge (at ≥ 0, length > 0, at + length ≤ 1)"
+            }
+            if let depth = button.depth, depth <= 0 {
+                return "has a \(button.edge.rawValue) button with a depth of 0 or less"
+            }
         }
         if family == .iPad {
             if pixels != nil { return "is an iPad; pixels applies to iPhones only (iPads use points × 2)" }
@@ -281,9 +290,15 @@ extension DeviceProfileTable.Entry {
         } else if homeButton {
             if cutout != nil { return "has a home button and therefore no cutout" }
         } else if cutout == nil {
-            return "needs a cutout (iPhones without a home button have a notch or an island)"
+            return "needs a cutout (iPhones without a home button have a notch, an island, a hole or type none)"
         }
         return nil
+    }
+
+    /// Long side / short side of `points`; nil without points
+    var aspectRatio: CGFloat? {
+        guard let points, points.count == 2 else { return nil }
+        return max(points[0], points[1]) / max(1, min(points[0], points[1]))
     }
 }
 
