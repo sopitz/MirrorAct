@@ -99,7 +99,10 @@ final class SceneRenderer: @unchecked Sendable {
         let current = scene
         lock.unlock()
         guard let scene = current else { return screen }
-        let placed = screen.transformed(by: scene.screenTransform)
+        // The screen lands at a fractional position. Without the clamp, its outermost pixel row
+        // would mix with the transparent area beyond the image and let the background through as
+        // a hairline; the mask limits the screen to its outline anyway.
+        let placed = screen.clampedToExtent().transformed(by: scene.screenTransform)
         var result = placed.applyingFilter("CIBlendWithMask", parameters: [
             kCIInputBackgroundImageKey: scene.under,
             kCIInputMaskImageKey: scene.mask,
