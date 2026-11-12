@@ -366,9 +366,21 @@ final class TranslationCompositorTests: XCTestCase {
         // a word too long even for the smallest font is still drawn, broken where it has to be
         let endless = try XCTUnwrap(BlockTextMask(text: "Donaudampfschifffahrtsgesellschaftskapitänsmütze",
                                                   width: 120, height: 40, lineCount: 1))
-        XCTAssertEqual(endless.fontSize, BlockTextMask.smallestFontShare * 40, accuracy: 0.001)
+        XCTAssertTrue(endless.fits)
+        XCTAssertGreaterThanOrEqual(endless.fontSize, BlockTextMask.smallestFontShare * 40 - 0.001)
         XCTAssertGreaterThan(endless.lineCount, 1)
         XCTAssertGreaterThan(endless.pixels.filter { $0 > 127 }.count, 100)
+        // Such a word is broken at any size, so it gets the largest size at which its lines fit
+        // the block, not the smallest one.
+        for (text, width, height, lineCount) in [("Benachrichtigungseinstellungen", 120, 40, 1),
+                                                 ("Kraftfahrzeughaftpflichtversicherung", 150, 88, 2)] {
+            let mask = try XCTUnwrap(BlockTextMask(text: text, width: width, height: height, lineCount: lineCount))
+            XCTAssertTrue(mask.fits, text)
+            XCTAssertGreaterThan(mask.lineCount, 1, text)
+            XCTAssertEqual(mask.lines.joined(), text)
+            let smallest = BlockTextMask.smallestFontShare * CGFloat(height) / CGFloat(lineCount)
+            XCTAssertGreaterThan(mask.fontSize, smallest + 2, text)
+        }
     }
 
     /// Japanese, Chinese and Korean may be broken between any two characters, also before ー

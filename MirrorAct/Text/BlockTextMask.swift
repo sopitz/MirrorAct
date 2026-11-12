@@ -52,26 +52,19 @@ struct BlockTextMask {
 
         // The largest font that fits: usually the first one tried. Otherwise halve the range
         // between a size that fits and one that does not until they are half a pixel apart.
-        // A word broken between two letters does not count as fitting; only the smallest font
-        // may break one, when nothing else is left.
-        var layout = Layout(text, fontSize: largest, in: box, lineHeight: lineHeight, units: units, language: language)
+        // A word broken between two letters does not count as fitting. When even the smallest
+        // font has to break one, the word is broken at any size: then the largest size at
+        // which the lines fit the block is taken, so that it is no smaller than it has to be.
+        func set(_ fontSize: CGFloat) -> Layout {
+            Layout(text, fontSize: fontSize, in: box, lineHeight: lineHeight, units: units, language: language)
+        }
+        var layout = set(largest)
         if !layout.fits, smallest < largest {
-            layout = Layout(text, fontSize: smallest, in: box, lineHeight: lineHeight, units: units, language: language)
+            layout = set(smallest)
             if layout.fits {
-                var fitting = smallest, tooLarge = largest
-                var steps = 0
-                while tooLarge - fitting > 0.5, steps < 6 {
-                    let middle = (fitting + tooLarge) / 2
-                    let candidate = Layout(text, fontSize: middle, in: box, lineHeight: lineHeight, units: units,
-                                           language: language)
-                    if candidate.fits {
-                        fitting = middle
-                        layout = candidate
-                    } else {
-                        tooLarge = middle
-                    }
-                    steps += 1
-                }
+                layout = BlockTextMask.largest(from: layout, below: largest, set, fitting: \.fits)
+            } else if layout.fitsBox {
+                layout = BlockTextMask.largest(from: layout, below: largest, set, fitting: \.fitsBox)
             }
         }
 
@@ -84,6 +77,24 @@ struct BlockTextMask {
         self.lineCount = picture.lines.count
         lines = picture.lines
         fits = layout.fitsBox
+    }
+
+    /// Halves the range between `fitting`, whose layout passes `test`, and `tooLarge` until
+    /// they are half a pixel apart (six steps at most), and returns the largest layout that passed
+    private static func largest(from fitting: Layout, below tooLarge: CGFloat, _ layout: (CGFloat) -> Layout,
+                                fitting test: (Layout) -> Bool) -> Layout {
+        var best = fitting, tooLarge = tooLarge
+        var steps = 0
+        while tooLarge - best.fontSize > 0.5, steps < 6 {
+            let candidate = layout((best.fontSize + tooLarge) / 2)
+            if test(candidate) {
+                best = candidate
+            } else {
+                tooLarge = candidate.fontSize
+            }
+            steps += 1
+        }
+        return best
     }
 
     /// The text set in one font size
