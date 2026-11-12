@@ -6,8 +6,9 @@ import Translation
 /// (this Mac, or a language model service with the user's own API key).
 ///
 /// The API key goes straight into the keychain (`KeychainStore`); the field is emptied after
-/// saving and the key is never shown again. A typed key is saved with Save, on Return, and when
-/// the service or the page changes, so that one Test worked with is not lost.
+/// saving and the key is never shown again. A typed key is saved with Save and on Return. When the
+/// service or the page changes it is saved too, but only for a service that has no key yet: a key
+/// that is stored is never replaced without the user's doing.
 struct TextSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
@@ -192,6 +193,9 @@ struct TextSettingsView: View {
                 if let keyProblem = page.keyProblem {
                     Text(verbatim: keyProblem)
                         .foregroundStyle(.red)
+                } else if page.typedKeyIsPending {
+                    Text("Not saved yet: Save or Return replaces the stored key.")
+                        .foregroundStyle(.secondary)
                 } else if page.hasStoredKey {
                     Text("A key is stored in the keychain.")
                         .foregroundStyle(.secondary)
@@ -351,7 +355,7 @@ extension TextSettingsView {
 
         func disappear() {
             commitDrafts()
-            storeEnteredKey()
+            keepTypedKey()
             stopWork()
         }
 
@@ -360,7 +364,7 @@ extension TextSettingsView {
             guard id != provider.id else { return }
             stopWork()
             commitDrafts()
-            storeEnteredKey()
+            keepTypedKey()
             settings.llmProvider = id
             loadDrafts()
             enteredKey = ""
@@ -432,9 +436,17 @@ extension TextSettingsView {
             refreshKeyState()
         }
 
-        /// Saves a key that was typed and not saved yet, for the service shown
-        private func storeEnteredKey() {
-            guard !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        /// A key is typed while one is stored: it replaces that one only on Save or Return
+        var typedKeyIsPending: Bool {
+            hasStoredKey && !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        /// When the page or the service changes, a key typed for a service without one is saved,
+        /// so that it is not lost. A key that is stored stays: the typed one may have been pasted
+        /// while the wrong service was shown, and the stored one may exist nowhere else.
+        private func keepTypedKey() {
+            guard !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !keys.hasKey(provider.id) else { return }
             storeKey(enteredKey)
         }
 

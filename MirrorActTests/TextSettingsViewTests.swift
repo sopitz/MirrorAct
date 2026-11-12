@@ -13,8 +13,14 @@ final class TextSettingsViewTests: XCTestCase {
     private var changes = 0
     private var subscription: AnyCancellable?
     private var window: NSWindow?
+    /// the model of the page shown, whose buttons the tests press
+    private var page: TextSettingsView.Page!
     /// what the page stored as keys, by service; nil = removed
     private var storedKeys: [(key: String?, provider: String)] = []
+    /// the services the page's key store says have a key, and what it hands out for them
+    private var keysThere: [String: String?] = [:]
+    /// what the service answers Test and Load the list; nil = the request fails
+    private var serviceAnswer: LLMHTTPReply?
 
     override func setUp() {
         super.setUp()
@@ -25,6 +31,8 @@ final class TextSettingsViewTests: XCTestCase {
         settings.llmBaseURLs = [:]
         changes = 0
         storedKeys = []
+        keysThere = [:]
+        serviceAnswer = nil
         subscription = settings.translationSettingsChanged.sink { [weak self] in self?.changes += 1 }
     }
 
@@ -33,6 +41,7 @@ final class TextSettingsViewTests: XCTestCase {
         window?.contentView = nil
         window?.close()
         window = nil
+        page = nil
         settings.translationEngine = saved.engine
         settings.llmProvider = saved.provider
         settings.llmModels = saved.models
@@ -129,16 +138,72 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertTrue(storedKeys.isEmpty)
     }
 
+    /// A key typed for a service that has none yet is kept when the user picks another one
+    func testATypedKeyIsStoredWhenTheServiceChangesAndNoneIsStoredYet() throws {
+        settings.llmProvider = LLMProvider.custom.id
+        let view = try showPage()
+        type("sk-new", into: try field(at: 2, in: view))
+        page.selectProvider(LLMProvider.openAI.id)
+        XCTAssertEqual(settings.llmProvider, LLMProvider.openAI.id)
+        XCTAssertEqual(storedKeys.map(\.key), ["sk-new"])
+        XCTAssertEqual(storedKeys.map(\.provider), [LLMProvider.custom.id])
+    }
+
+    /// A stored key is replaced only by Save, Return, or a Test or list that worked with the
+    /// typed one: a key pasted while the wrong service was shown must not overwrite it
+    func testATypedKeyDoesNotReplaceAStoredKeyWhenTheServiceChanges() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        keysThere = [LLMProvider.openAI.id: "sk-working"]
+        let view = try showPage()
+        type("sk-other", into: try field(at: 1, in: view))
+        // the page says that the typed key is not stored, so that dropping it is no surprise
+        XCTAssertTrue(page.typedKeyIsPending)
+        page.selectProvider(LLMProvider.anthropic.id)
+        XCTAssertEqual(settings.llmProvider, LLMProvider.anthropic.id)
+        XCTAssertTrue(storedKeys.isEmpty, "\(storedKeys)")
+        XCTAssertEqual(page.enteredKey, "")
+    }
+
+    func testATypedKeyDoesNotReplaceAStoredKeyWhenThePageCloses() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        keysThere = [LLMProvider.openAI.id: "sk-working"]
+        let view = try showPage()
+        type("sk-other", into: try field(at: 1, in: view))
+        closePage()
+        XCTAssertTrue(storedKeys.isEmpty, "\(storedKeys)")
+    }
+
+    /// Return still replaces a stored key: the user asked for it
+    func testReturnReplacesAStoredKey() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        keysThere = [LLMProvider.openAI.id: "sk-working"]
+        let view = try showPage()
+        let key = try field(at: 1, in: view)
+        type("sk-other", into: key)
+        pressReturn(in: key)
+        XCTAssertTrue(waitUntil { !self.storedKeys.isEmpty })
+        XCTAssertEqual(storedKeys.map(\.key), ["sk-other"])
+        XCTAssertFalse(page.typedKeyIsPending)
+    }
+
     // MARK: Helpers
 
     private func showPage() throws -> NSView {
-        let keys = TextSettingsView.KeyStore(hasKey: { _ in false },
-                                             key: { _ in nil },
+        let keys = TextSettingsView.KeyStore(hasKey: { [weak self] in self?.keysThere[$0] != nil },
+                                             key: { [weak self] in self?.keysThere[$0] ?? nil },
                                              set: { [weak self] key, provider in
                                                  self?.storedKeys.append((key, provider))
+                                                 self?.keysThere[provider] = key.map { .some($0) }
                                                  return true
                                              })
-        let host = NSHostingView(rootView: TextSettingsView(keys: keys).frame(width: SettingsView.width, height: 700))
+        let answer = serviceAnswer
+        let transport = ScriptedService { _ in
+            guard let answer else { throw URLError(.notConnectedToInternet) }
+            return answer
+        }
+        let page = TextSettingsView.Page(keys: keys, transport: transport)
+        self.page = page
+        let host = NSHostingView(rootView: TextSettingsView(page: page).frame(width: SettingsView.width, height: 700))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: SettingsView.width, height: 700),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -147,6 +212,15 @@ final class TextSettingsViewTests: XCTestCase {
         window.makeKeyAndOrderFront(nil)
         XCTAssertTrue(waitUntil { self.textFields(in: host).count >= 2 }, "the fields of the page did not appear")
         return host
+    }
+
+    /// A reply of an OpenAI-style service whose model answers `content`
+    private static func chatReply(_ content: String) -> LLMHTTPReply {
+        let body: [String: Any] = ["choices": [["index": 0,
+                                                "message": ["role": "assistant", "content": TranslationPrompt.user([content])],
+                                                "finish_reason": "stop"]]]
+        return (200, [LLMHeader("Content-Type", "application/json")],
+                (try? JSONSerialization.data(withJSONObject: body)) ?? Data())
     }
 
     private func closePage() {
@@ -204,6 +278,15 @@ final class TextSettingsViewTests: XCTestCase {
             spin(0.05)
         }
         return true
+    }
+}
+
+/// Answers the page's requests instead of the network
+private struct ScriptedService: LLMTransport {
+    let answer: (LLMHTTPRequest) throws -> LLMHTTPReply
+
+    func send(_ request: LLMHTTPRequest) async throws -> LLMHTTPReply {
+        try answer(request)
     }
 }
 
