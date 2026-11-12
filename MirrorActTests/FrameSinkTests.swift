@@ -107,4 +107,130 @@ final class FrameSinkTests: XCTestCase {
         let last = try XCTUnwrap(recording.kept.last?.time)
         XCTAssertLessThan(abs(CMTimeSubtract(MirrorRecorder.now, last).seconds), 0.5)
     }
+
+    // MARK: Processor
+
+    /// Returns a copy of its own for every frame and notes what it was given
+    private final class MarkingProcessor: FrameProcessor {
+        private(set) var inputs: [CVPixelBuffer] = []
+        private(set) var outputs: [CVPixelBuffer] = []
+
+        func process(_ pixelBuffer: CVPixelBuffer, time: CMTime) -> CVPixelBuffer {
+            let copy = (try? TestFrames.blank(width: CVPixelBufferGetWidth(pixelBuffer),
+                                              height: CVPixelBufferGetHeight(pixelBuffer),
+                                              format: CVPixelBufferGetPixelFormatType(pixelBuffer), gray: 0))
+                ?? pixelBuffer
+            inputs.append(pixelBuffer)
+            outputs.append(copy)
+            return copy
+        }
+    }
+
+    /// Display, screenshots and recordings get what the processor made; Text and the text
+    /// recognition get the frame as the device sent it.
+    func testProcessedFrameIsShownAndRecordedAndTheSourceIsKept() throws {
+        let sink = FrameSink()
+        let recording = RecordingStandIn()
+        sink.recording = recording
+        let processor = MarkingProcessor()
+        sink.processor = processor
+        let source = try frame()
+        sink.push(source)
+
+        XCTAssertEqual(processor.inputs.count, 1)
+        XCTAssertTrue(processor.inputs.first === source)
+        XCTAssertTrue(sink.latestSource === source, "the frame of the device must be kept as it is")
+        XCTAssertTrue(sink.latest === processor.outputs.first, "the processed frame must be shown")
+        XCTAssertFalse(sink.latest === sink.latestSource)
+        XCTAssertTrue(recording.kept.last?.buffer === processor.outputs.first, "the processed frame must be recorded")
+
+        // shown again: the frame of the device goes through the processor once more
+        sink.redisplay()
+        XCTAssertEqual(processor.inputs.count, 2)
+        XCTAssertTrue(processor.inputs.last === source)
+        XCTAssertTrue(sink.latestSource === source)
+        XCTAssertTrue(sink.latest === processor.outputs.last)
+        XCTAssertTrue(recording.kept.last?.buffer === processor.outputs.last)
+    }
+
+    func testWithoutAProcessorTheFrameIsShownAsItArrives() throws {
+        let sink = FrameSink()
+        let processor = MarkingProcessor()
+        sink.processor = processor
+        sink.push(try frame())
+        sink.processor = nil
+
+        let next = try frame()
+        sink.push(next)
+        XCTAssertTrue(sink.latest === next)
+        XCTAssertTrue(sink.latestSource === next)
+        XCTAssertEqual(processor.inputs.count, 1)
+
+        // a processor that was removed leaves the picture as the device sent it when shown again
+        sink.redisplay()
+        XCTAssertTrue(sink.latest === next)
+        XCTAssertEqual(processor.inputs.count, 1)
+    }
+
+    func testShowingAgainBeforeTheFirstFrameDoesNothing() {
+        let sink = FrameSink()
+        let processor = MarkingProcessor()
+        sink.processor = processor
+        sink.redisplay()
+        XCTAssertNil(sink.latest)
+        XCTAssertTrue(processor.inputs.isEmpty)
+    }
+
+    func testClearingForgetsBothFrames() throws {
+        let sink = FrameSink()
+        sink.processor = MarkingProcessor()
+        sink.push(try frame())
+        sink.clear()
+        XCTAssertNil(sink.latest)
+        XCTAssertNil(sink.latestSource)
+    }
+
+    // MARK: Thumbnails
+
+    /// The thumbnail the tracker gets of every frame is the same with padded rows as without
+    func testThumbnailOfPaddedFramesMatchesTheUnpaddedPicture() throws {
+        let width = 1170, height = 400
+        // a pattern that shows a row read with the wrong length
+        var gray = [UInt8](repeating: 0, count: width * height)
+        for y in 0..<height {
+            for x in 0..<width { gray[y * width + x] = UInt8((x * 7 + y * 13) % 200 + 20) }
+        }
+        let scale = LumaImage.scale(forFrameWidth: width, height: height)
+        let expected = gray.withUnsafeBytes { bytes in
+            LumaImage.downsampled(from: bytes.baseAddress!, width: width, height: height, bytesPerRow: width,
+                                  format: .luma8, scale: scale)
+        }
+        for format in [kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVPixelFormatType_32BGRA] {
+            let frame = try TestFrames.frame(from: gray, width: width, height: height, format: format)
+            if format == kCVPixelFormatType_32BGRA {
+                XCTAssertGreaterThan(CVPixelBufferGetBytesPerRow(frame), width * 4, "rows must be padded")
+            } else {
+                XCTAssertGreaterThan(CVPixelBufferGetBytesPerRowOfPlane(frame, 0), width, "rows must be padded")
+            }
+            let thumbnail = try XCTUnwrap(FramePixels.thumbnail(of: frame))
+            XCTAssertEqual(thumbnail.scale, scale)
+            XCTAssertEqual(thumbnail.image, expected, "pixel format \(format)")
+        }
+        // video range: the same picture, its values squeezed into 16…235
+        let video = try TestFrames.frame(from: gray, width: width, height: height,
+                                         format: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+        let thumbnail = try XCTUnwrap(FramePixels.thumbnail(of: video))
+        XCTAssertEqual(thumbnail.image.width, expected.width)
+        XCTAssertEqual(thumbnail.image.height, expected.height)
+        for index in expected.pixels.indices {
+            let squeezed = 16 + (Int(expected.pixels[index]) * 219 + 127) / 255
+            XCTAssertLessThanOrEqual(abs(Int(thumbnail.image.pixels[index]) - squeezed), 1)
+        }
+    }
+
+    func testOtherPixelFormatsGiveNoThumbnail() throws {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, 64, 64, kCVPixelFormatType_32ARGB, nil, &buffer)
+        XCTAssertNil(FramePixels.thumbnail(of: try XCTUnwrap(buffer)))
+    }
 }
