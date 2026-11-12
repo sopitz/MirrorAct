@@ -33,6 +33,9 @@ struct TranslationFailure: LocalizedError, Equatable {
     let message: String
     /// trying again soon is pointless (wrong key, unknown model, declined download …)
     var isPermanent = false
+    /// Seconds before asking again is worth it (the service asked for a pause, or failed several
+    /// times in a row); nil = the caller's usual pause
+    var retryAfter: TimeInterval? = nil
 
     var errorDescription: String? { message }
 }

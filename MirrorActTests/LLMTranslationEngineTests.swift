@@ -385,6 +385,70 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, 1)
     }
 
+    func testALongWaitTheServiceAsksForIsKeptWithoutARequest() async throws {
+        let transport = ScriptedTransport { request, number in
+            if number == 0 { return reply(429, rateLimited, headers: [LLMHeader("Retry-After", "60")]) }
+            return openAIReply(translated(request))
+        }
+        let engine = makeEngine(transport: transport)
+        var clock: TimeInterval = 1000
+        engine.now = { clock }
+        let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+        // the caller is told when to come back
+        XCTAssertEqual(failure?.retryAfter, 60)
+
+        // asked again before then: "not now", and the service hears nothing of it
+        clock += 30
+        let early = try await engine.translate(["Settings"], into: german)
+        XCTAssertEqual(early, [nil])
+        XCTAssertEqual(transport.requests.count, 1)
+
+        clock += 31
+        let later = try await engine.translate(["Settings"], into: german)
+        XCTAssertEqual(later, ["de:Settings"])
+        XCTAssertEqual(transport.requests.count, 2)
+    }
+
+    func testAServiceThatKeepsFailingIsAskedLessAndLessOften() async throws {
+        var failing = true
+        let transport = ScriptedTransport { request, _ in
+            failing ? reply(500, #"{"error":{"message":"Internal server error","type":"server_error"}}"#)
+                : openAIReply(translated(request))
+        }
+        let engine = makeEngine(transport: transport)
+        var clock: TimeInterval = 1000
+        engine.now = { clock }
+        var waits: [TimeInterval?] = []
+        for _ in 0..<7 {
+            let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+            waits.append(failure?.retryAfter)
+            clock += failure?.retryAfter ?? 0
+        }
+        XCTAssertEqual(waits, [5, 10, 20, 40, 80, 120, 120])
+        // each time the one short retry of the engine itself, and nothing in between
+        XCTAssertEqual(transport.requests.count, 14)
+
+        // an answer ends the series: the next failure waits as briefly as the first
+        failing = false
+        _ = try await engine.translate(["Settings"], into: german)
+        failing = true
+        let failure = await failure { try await engine.translate(["General"], into: self.german) }
+        XCTAssertEqual(failure?.retryAfter, 5)
+    }
+
+    func testAnAddressThatLeadsToNoServiceEndsTranslating() async {
+        // the address without "/v1": the server answers with a page of its own
+        let transport = ScriptedTransport { _, _ in
+            reply(404, "<!DOCTYPE html><html><head><title>404 Not Found</title></head><body>Not Found</body></html>")
+        }
+        let engine = makeEngine(.custom, baseURL: "https://llm.example.com", model: "m", transport: transport)
+        let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+        XCTAssertEqual(failure?.isPermanent, true)
+        XCTAssertEqual(failure?.message, "llm.example.com: "
+                       + String(localized: "the address \("https://llm.example.com") cannot be used – check it in the settings"))
+        XCTAssertEqual(transport.requests.count, 1)
+    }
+
     func testAFailureAfterTheFirstPortionKeepsWhatWasTranslated() async throws {
         let texts = (1...45).map { "Text \($0)" }
         let transport = ScriptedTransport { request, number in

@@ -310,13 +310,14 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             if failure?.isPermanent == true { stop() }
         }
         guard failure?.isPermanent != true else { return }
-        wakeTranslationLater(turn: turn)
+        wakeTranslationLater(turn: turn, after: failure?.retryAfter)
     }
 
     /// Texts whose translation failed or was postponed are offered again by the tracker after
     /// `retryDelay`; nothing else would wake the loop on a still picture.
-    private func wakeTranslationLater(turn: Int) {
-        let retry = OverlayTracker.Configuration().retryDelay
+    /// - Parameter seconds: a longer wait the engine asked for (it sends nothing before then)
+    private func wakeTranslationLater(turn: Int, after seconds: TimeInterval? = nil) {
+        let retry = max(OverlayTracker.Configuration().retryDelay, seconds ?? 0)
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64((retry + 0.2) * 1_000_000_000))
             guard let self else { return }

@@ -60,6 +60,8 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     var pause: (TimeInterval) async throws -> Void = { seconds in
         try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
     }
+    /// Seconds of a steady clock. The tests replace it, so that they need not wait.
+    var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 
     /// Seconds a request to a service waits for its answer. A request gets no byte before the
     /// whole answer is there, so this is the time the model may take.
@@ -72,6 +74,13 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     static let longestRetryWait: TimeInterval = 5
     /// seconds before a request is sent again when the service names no time
     static let retryWait: TimeInterval = 1
+    /// Seconds until the next request after a request that failed; doubled with every further
+    /// failure in a row up to `longestBackOff`, so that a service that is down or an address
+    /// that leads nowhere is not asked every few seconds for as long as translating is on
+    static let firstBackOff: TimeInterval = 5
+    static let longestBackOff: TimeInterval = 120
+    /// longest wait a service may ask for (Retry-After); a day's quota is not sat out
+    static let longestServiceWait: TimeInterval = 900
     /// Answers that could not be used after which a model that has never given a usable one is
     /// given up. Finding the one text a model stumbles over among forty takes seven of them.
     static let patience = 12
@@ -91,6 +100,12 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     private var options: LLMRequestOptions?
     private var hadUsableAnswer = false
     private var unusableAnswers = 0
+    /// requests in a row whose texts all stayed untranslated
+    private var failuresInARow = 0
+    /// no request before this time (`now`)
+    private var notBefore: TimeInterval = 0
+    /// the wait the service asked for in its last reply that failed
+    private var serviceWait: TimeInterval?
     /// notices shown already
     private var noticed: Set<String> = []
 
@@ -167,16 +182,20 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
 
     func translate(_ texts: [String], into target: Locale.Language) async throws -> [String?] {
         guard !texts.isEmpty else { return [] }
+        // a failure a moment ago, or the service asked for a pause: "not now", without a request
+        if locked({ now() < notBefore }) { return [String?](repeating: nil, count: texts.count) }
         let system = Self.instruction(for: target)
         var results: [String?] = []
         for batch in TranslationPrompt.batches(texts) {
             do {
                 let translations = try await translate(batch, system: system)
                 results += translations.map { Optional($0) }
+                locked { failuresInARow = 0 }
             } catch {
                 // translating was turned off meanwhile: "not now" for what is left
                 if isCancellation(error) { break }
-                let failure = self.failure(for: error)
+                var failure = self.failure(for: error)
+                if !failure.isPermanent { failure.retryAfter = backOff() }
                 // the request as a whole failed only if nothing came of it
                 guard !results.isEmpty else { throw failure }
                 note(failure.message)
@@ -184,6 +203,20 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             }
         }
         return results + [String?](repeating: nil, count: texts.count - results.count)
+    }
+
+    /// Seconds until the next request is worth it after one that failed, from now on: what the
+    /// service asked for, but at least a pause that grows with every failure in a row
+    private func backOff() -> TimeInterval {
+        locked {
+            failuresInARow += 1
+            let steps = Double(min(failuresInARow - 1, 16))
+            var wait = min(Self.firstBackOff * pow(2, steps), Self.longestBackOff)
+            if let asked = serviceWait { wait = max(wait, min(asked, Self.longestServiceWait)) }
+            serviceWait = nil
+            notBefore = now() + wait
+            return wait
+        }
     }
 
     /// Translates one text and takes no answer but a usable one: for "Test" in the settings,
@@ -318,14 +351,16 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
                     options = withoutRejectedExtras(options)
                     continue
                 }
-                if error.isRetryable, !hasWaited {
+                if error.isRetryable {
                     let wait = Self.wait(before: error, headers: reply.headers)
-                    if wait <= Self.longestRetryWait {
+                    if wait <= Self.longestRetryWait && !hasWaited {
                         hasWaited = true
                         Log.info("Translation: \(name): trying again in \(wait) s (\(Self.kind(of: error)))")
                         try await pause(wait)
                         continue
                     }
+                    // the next turn of the caller is not to come sooner than that
+                    locked { serviceWait = wait }
                 }
                 throw error
             }
@@ -479,6 +514,13 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     private func failure(for error: Error) -> TranslationFailure {
         if let failure = error as? TranslationFailure { return failure }
         if let error = error as? LLMError {
+            // A page that is not there, and no word about a model: the address the user entered
+            // leads to a server, but not to the service ("/v1" missing …). Nothing changes by itself.
+            if case .server(status: 404, _) = error, connection.provider.baseURLRule != .fixed {
+                return TranslationFailure(message: name + ": "
+                                          + String(localized: "the address \(connection.baseURL) cannot be used – check it in the settings"),
+                                          isPermanent: true)
+            }
             return TranslationFailure(message: name + ": " + Self.words(for: error, model: connection.model),
                                       isPermanent: error.isPermanent)
         }
