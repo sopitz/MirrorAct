@@ -55,8 +55,8 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
 | `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes, stopped when a wireless connection ends), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
-| `MirrorAct/Text` | text on the screen: `TextRecognizer` (Vision), `ScreenTranslator` (a `FrameProcessor` in the `FrameSink`: reads, translates and draws beside the frames), `TranslationCompositor` (draws the translations into a copy of the frame, in its own pixel format), `AppleTranslationEngine` (Apple's Translation framework; its sessions live in a hidden host window), `LLMTranslationEngine` (language model services with the user's key from `KeychainStore`) |
-| `MirrorAct/Text/Core` | the part without Apple frameworks (Foundation only), shared 1:1 with the Windows app: `TextLayout`, `LumaImage` (thumbnails), `OverlayTracker` with `MotionEstimator` (keeps translations on their text while the content scrolls and decides what to read), `LLMProvider`/`LLMWire`/`TranslationPrompt`, `LanguageMatching`. Its tests in `MirrorActTests/TextCore` (with a simulator of scrolling phone screens, `Tracking*.swift`) also build and run on Linux with SwiftPM |
+| `MirrorAct/Text` | text on the screen: `TextRecognizer` (Vision), `FramePixels` (thumbnails and colors straight from the frame), `ScreenTranslator` (a `FrameProcessor` in the `FrameSink`: reads, translates and draws beside the frames), `TranslationCompositor` with `BlockPlacement`, `BlockTextMask` and `ChromaPlane` (draws the translations into a copy of the frame, in its own pixel format), `TranslationEngines` (picks the engine the settings name), `AppleTranslationEngine` (Apple's Translation framework; its sessions live in a hidden host window), `LLMTranslationEngine` (language model services with the user's key from `KeychainStore`) |
+| `MirrorAct/Text/Core` | the part without Apple frameworks: `TextLayout`, `TextTracking`, `LumaImage` (thumbnails), `OverlayTracker` with `MotionEstimator`, `ReadingPlan` and `BlockPatch` (keeps translations on their text while the content scrolls and decides what to read), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt`, `LanguageMatching`. Other MirrorAct apps build the same code for other platforms, so it uses Foundation only and no API that exists only on Apple platforms; they compare their results with it through `TrackingParityTests`. Its tests are in `MirrorActTests/TextCore` (with a simulator of scrolling phone screens and a bench, `Tracking*.swift`) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |
 | `MirrorAct/Launcher` | start window, settings |
@@ -90,8 +90,16 @@ scripts/test.sh
 ```
 
 Runs `MirrorActTests` in a debug build of the app; `scripts/test.sh PresentationTests` runs a single
-class. The app starts without the AirPlay receiver, USB and adb. The tests briefly open real windows,
-including the full-screen presentation.
+class. The app starts without the AirPlay receiver, USB and adb, keeps its settings apart from
+yours (domain `io.github.sopitz.MirrorAct.tests`) and logs only to the system log. The tests
+briefly open real windows, including the full-screen presentation.
+
+A debug build plays the tracking bench (`TrackingBenchTests`) fifty to a hundred times slower than
+a release build, so a normal run skips most of it on purpose and the skipped tests say so.
+`TRACKING_ALL=1 scripts/test.sh TrackingBenchTests` runs all its scenarios and self-tests, which takes well over half an hour;
+`TRACKING_SEEDS=1,2,3 scripts/test.sh TrackingBenchTests/testReport` adds the report over those
+seeds. `scripts/test.sh` passes every `TRACKING_*` variable on to the tests; the others are
+described at the top of `TrackingBenchTests.swift`.
 
 ## Screenshots
 

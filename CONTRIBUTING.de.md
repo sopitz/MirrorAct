@@ -55,8 +55,8 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Mirror` | Spiegelfenster, Werkzeugleiste, Stil-Panel, Präsentieren, `DeviceControl` (Schnittstelle zum Bedienen eines Geräts) |
 | `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten, beim Ende einer kabellosen Verbindung gestoppt), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, Host-Zeit, variable Bildrate) |
-| `MirrorAct/Text` | Text auf dem Bildschirm: `TextRecognizer` (Vision), `ScreenTranslator` (ein `FrameProcessor` im `FrameSink`: liest, übersetzt und zeichnet neben den Bildern her), `TranslationCompositor` (zeichnet die Übersetzungen in eine Kopie des Bildes, in dessen eigenem Pixelformat), `AppleTranslationEngine` (Apples Translation-Framework; die Sitzungen leben in einem unsichtbaren Hilfsfenster), `LLMTranslationEngine` (Sprachmodell-Dienste mit dem Schlüssel des Nutzers aus `KeychainStore`) |
-| `MirrorAct/Text/Core` | der Teil ohne Apple-Frameworks (nur Foundation), 1:1 mit der Windows-App geteilt: `TextLayout`, `LumaImage` (Vorschaubilder), `OverlayTracker` mit `MotionEstimator` (hält Übersetzungen beim Scrollen auf ihrem Text und entscheidet, was gelesen wird), `LLMProvider`/`LLMWire`/`TranslationPrompt`, `LanguageMatching`. Die Tests in `MirrorActTests/TextCore` (mit einem Simulator scrollender Telefonbildschirme, `Tracking*.swift`) bauen und laufen mit SwiftPM auch unter Linux |
+| `MirrorAct/Text` | Text auf dem Bildschirm: `TextRecognizer` (Vision), `FramePixels` (Vorschaubilder und Farben direkt aus dem Bild), `ScreenTranslator` (ein `FrameProcessor` im `FrameSink`: liest, übersetzt und zeichnet neben den Bildern her), `TranslationCompositor` mit `BlockPlacement`, `BlockTextMask` und `ChromaPlane` (zeichnet die Übersetzungen in eine Kopie des Bildes, in dessen eigenem Pixelformat), `TranslationEngines` (wählt, was laut Einstellungen übersetzt), `AppleTranslationEngine` (Apples Translation-Framework; die Sitzungen leben in einem unsichtbaren Hilfsfenster), `LLMTranslationEngine` (Sprachmodell-Dienste mit dem Schlüssel des Nutzers aus `KeychainStore`) |
+| `MirrorAct/Text/Core` | der Teil ohne Apple-Frameworks: `TextLayout`, `TextTracking`, `LumaImage` (Vorschaubilder), `OverlayTracker` mit `MotionEstimator`, `ReadingPlan` und `BlockPatch` (hält Übersetzungen beim Scrollen auf ihrem Text und entscheidet, was gelesen wird), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt`, `LanguageMatching`. Andere MirrorAct-Apps bauen denselben Code für andere Plattformen; er verwendet deshalb nur Foundation und keine Schnittstelle, die es nur auf Apple-Plattformen gibt. Sie vergleichen ihre Ergebnisse über `TrackingParityTests` mit ihm. Die Tests liegen in `MirrorActTests/TextCore` (mit einem Simulator scrollender Telefonbildschirme und einem Prüfstand, `Tracking*.swift`) |
 | `MirrorAct/Editor` | Editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + Export) |
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
@@ -90,8 +90,17 @@ scripts/test.sh
 ```
 
 Führt `MirrorActTests` in einem Debug-Build der App aus; `scripts/test.sh PresentationTests` nur
-eine Klasse. Die App startet dabei ohne AirPlay-Empfänger, USB und adb. Die Tests öffnen kurz echte
-Fenster, auch das Präsentieren im Vollbild.
+eine Klasse. Die App startet dabei ohne AirPlay-Empfänger, USB und adb, hält ihre Einstellungen von
+den eigenen getrennt (Domain `io.github.sopitz.MirrorAct.tests`) und schreibt nur ins Systemlog. Die
+Tests öffnen kurz echte Fenster, auch das Präsentieren im Vollbild.
+
+Ein Debug-Build spielt den Prüfstand für das Nachführen (`TrackingBenchTests`) fünfzig- bis
+hundertmal langsamer als ein Release-Build; ein normaler Lauf überspringt deshalb absichtlich den
+grössten Teil davon, und die übersprungenen Tests sagen das. `TRACKING_ALL=1 scripts/test.sh
+TrackingBenchTests` führt alle Szenarien und Selbsttests aus und dauert weit über eine halbe Stunde; `TRACKING_SEEDS=1,2,3 scripts/test.sh
+TrackingBenchTests/testReport` liefert zusätzlich den Bericht über diese Seeds. `scripts/test.sh`
+gibt jede `TRACKING_*`-Variable an die Tests weiter; die übrigen sind oben in
+`TrackingBenchTests.swift` beschrieben.
 
 ## Screenshots
 
