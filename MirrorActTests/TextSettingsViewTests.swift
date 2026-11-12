@@ -245,3 +245,24 @@ final class TextSettingsLanguageMenuTests: XCTestCase {
         XCTAssertEqual(labels, labels.sorted { $0.compare($1, locale: locale) == .orderedAscending })
     }
 }
+
+/// What the page says about where the text goes
+final class TextSettingsServiceNoticeTests: XCTestCase {
+    private func notice(_ provider: LLMProvider, address: String? = nil) -> TextSettingsView.ServiceNotice {
+        TextSettingsView.serviceNotice(for: LLMConnection(provider: provider, baseURL: address, model: nil))
+    }
+
+    /// Without an address there is no server to name: "sent to Custom" says nothing
+    func testACustomServerWithoutAnAddressIsNotNamedAfterTheService() {
+        XCTAssertEqual(notice(.custom), .serverToEnter)
+        XCTAssertEqual(notice(.custom, address: "  "), .serverToEnter)
+    }
+
+    func testOtherServicesAreNamed() {
+        XCTAssertEqual(notice(.custom, address: "https://llm.example.com/v1"), .remote("llm.example.com"))
+        XCTAssertEqual(notice(.openAI), .remote(LLMProvider.openAI.localizedName))
+        XCTAssertEqual(notice(.azure), .remote(LLMProvider.azure.localizedName))
+        XCTAssertEqual(notice(.ollama), .local)
+        XCTAssertEqual(notice(.custom, address: "http://192.168.1.25:8080"), .local)
+    }
+}

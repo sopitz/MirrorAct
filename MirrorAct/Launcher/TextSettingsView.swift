@@ -130,7 +130,7 @@ struct TextSettingsView: View {
     private var serviceSection: some View {
         let provider = self.provider
         let connection = shownConnection
-        let service = LLMTranslationEngine.name(for: connection)
+        let notice = Self.serviceNotice(for: connection)
         Section("Language model service") {
             Picker("Service", selection: providerSelection) {
                 ForEach(LLMProvider.all) { provider in
@@ -138,9 +138,12 @@ struct TextSettingsView: View {
                 }
             }
             Group {
-                if connection.isLocal {
+                switch notice {
+                case .local:
                     Text("Runs on this Mac or in your network; nothing is sent to the internet.")
-                } else {
+                case .serverToEnter:
+                    Text("The text recognized on the screen is sent to the server you enter here to be translated. Nothing is sent while translating is off.")
+                case .remote(let service):
                     Text("The text recognized on the screen is sent to \(service) to be translated. Nothing is sent while translating is off.")
                 }
             }
@@ -244,6 +247,26 @@ struct TextSettingsView: View {
             Button("Save") { storeKey(enteredKey) }
                 .disabled(enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
+    }
+
+    /// Where the page says the recognized text goes
+    enum ServiceNotice: Equatable {
+        /// to this Mac or the user's network
+        case local
+        /// to a server of the user's own whose address is not entered yet
+        case serverToEnter
+        /// to the service or host named
+        case remote(String)
+    }
+
+    static func serviceNotice(for connection: LLMConnection) -> ServiceNotice {
+        if connection.isLocal { return .local }
+        // a server of one's own is named by its host; before there is one, "Custom" would be
+        // the name, which tells nothing about where the text goes
+        if connection.provider.id == LLMProvider.custom.id, LLMConnection.host(of: connection.baseURL).isEmpty {
+            return .serverToEnter
+        }
+        return .remote(LLMTranslationEngine.name(for: connection))
     }
 
     // MARK: Bindings
