@@ -27,4 +27,21 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(suite.string(forKey: "pin"), settings.pin)
         XCTAssertEqual(suite.string(forKey: "receiverDeviceID"), settings.receiverDeviceID)
     }
+
+    /// What the test host runs when the test run ends: nothing the tests stored stays behind,
+    /// the code and the device ID least of all
+    func testTheTestsSettingsAreEmptiedAtTheEnd() throws {
+        // the settings are made, and with them the code and the device ID
+        _ = AppSettings.shared
+        let suiteName = try XCTUnwrap(AppSettings.testSuiteName)
+        let suite = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let stored = try XCTUnwrap(suite.persistentDomain(forName: suiteName))
+        defer { suite.setPersistentDomain(stored, forName: suiteName) }
+        XCTAssertNotNil(suite.string(forKey: "pin"))
+
+        AppSettings.emptyTestDomain()
+        XCTAssertTrue((suite.persistentDomain(forName: suiteName) ?? [:]).isEmpty)
+        XCTAssertNil(suite.string(forKey: "pin"))
+        XCTAssertNil(suite.string(forKey: "receiverDeviceID"))
+    }
 }

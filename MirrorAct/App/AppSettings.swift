@@ -22,7 +22,17 @@ final class AppSettings: ObservableObject {
     private static func makeDefaults() -> UserDefaults {
         guard let name = testSuiteName, let suite = UserDefaults(suiteName: name) else { return .standard }
         suite.removePersistentDomain(forName: name)
+        // emptied again when the test run ends, so that the code, the device ID and what the
+        // tests set do not stay on the Mac; XCTest ends the test host with exit()
+        atexit { AppSettings.emptyTestDomain() }
         return suite
+    }
+
+    /// Empties the tests' settings. cfprefsd keeps the file of the domain, empty: it writes it
+    /// again when it is deleted while the app runs.
+    static func emptyTestDomain() {
+        guard let name = testSuiteName else { return }
+        UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
     }
 
     @Published var receiverName: String { didSet { defaults.set(receiverName, forKey: "receiverName") } }
