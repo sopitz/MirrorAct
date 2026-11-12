@@ -11,7 +11,12 @@ enum TranslationEngines {
         // concern this turn of translating only
         guard settings.translationEngine == "llm" else { return AppleTranslationClient(engine: .shared) }
         let connection = llmConnection(for: settings)
-        if let missing = connection.missing { throw failure(for: missing, in: connection) }
+        if let missing = connection.missing {
+            // a key that is there, but that the keychain did not hand out (the user said no to
+            // the question of macOS): "enter the key" would contradict the settings
+            let keyIsStored = missing == .apiKey && KeychainStore.hasKey(for: connection.provider.id)
+            throw failure(for: missing, in: connection, keyIsStored: keyIsStored)
+        }
         return LLMTranslationEngine(connection: connection)
     }
 
@@ -34,7 +39,9 @@ enum TranslationEngines {
 
     /// What the user has to do before `connection` can be used, in words for a notice.
     /// Trying again is pointless until then.
-    static func failure(for missing: LLMMissingSetting, in connection: LLMConnection) -> TranslationFailure {
+    /// - Parameter keyIsStored: the keychain has a key for the service, but did not hand it out
+    static func failure(for missing: LLMMissingSetting, in connection: LLMConnection,
+                        keyIsStored: Bool = false) -> TranslationFailure {
         let service = LLMTranslationEngine.name(for: connection)
         let message: String
         switch missing {
@@ -44,6 +51,8 @@ enum TranslationEngines {
             } else {
                 message = String(localized: "The address \(connection.shownAddress) cannot be used – check it in the settings")
             }
+        case .apiKey where keyIsStored:
+            message = String(localized: "macOS did not hand out the API key for \(service) – store it again in the settings")
         case .apiKey:
             message = String(localized: "Enter the API key for \(service) in the settings first")
         case .model:

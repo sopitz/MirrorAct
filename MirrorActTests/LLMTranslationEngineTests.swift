@@ -847,6 +847,10 @@ final class LLMTranslationEngineTests: XCTestCase {
         let key = TranslationEngines.failure(for: .apiKey, in: noKey)
         XCTAssertTrue(key.isPermanent)
         XCTAssertEqual(key.message, String(localized: "Enter the API key for \("OpenAI") in the settings first"))
+        // the settings say that a key is stored: the keychain did not hand it out
+        let refused = TranslationEngines.failure(for: .apiKey, in: noKey, keyIsStored: true)
+        XCTAssertTrue(refused.isPermanent)
+        XCTAssertEqual(refused.message, String(localized: "macOS did not hand out the API key for \("OpenAI") – store it again in the settings"))
 
         let noModel = LLMConnection(provider: .ollama)
         XCTAssertEqual(noModel.missing, .model)
