@@ -3067,22 +3067,22 @@
         }
       }
     },
+    "No video to copy text from yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch kein Bild, aus dem sich Text kopieren lässt"
+          }
+        }
+      }
+    },
     "Translation into %@ isn’t available on this Mac" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen ist auf diesem Mac nicht verfügbar (Zielsprache: %@)"
-          }
-        }
-      }
-    },
-    "Translation failed" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung fehlgeschlagen"
           }
         }
       }
@@ -3203,6 +3203,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ist unter %@ nicht erreichbar – läuft der Server?"
+          }
+        }
+      }
+    },
+    "cannot be reached at %@ – allow MirrorAct under System Settings > Privacy & Security > Local Network" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ist unter %@ nicht erreichbar – MirrorAct unter Systemeinstellungen > Datenschutz & Sicherheit > Lokales Netzwerk erlauben"
+          }
+        }
+      }
+    },
+    "the service forwards the request to %@, which MirrorAct does not follow – check the address in the settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "der Dienst leitet die Anfrage an %@ weiter, und dem folgt MirrorAct nicht – die Adresse in den Einstellungen prüfen"
+          }
+        }
+      }
+    },
+    "plain HTTP to %@ is not allowed – use localhost or 127.0.0.1 instead" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unverschlüsseltes HTTP zu %@ ist nicht erlaubt – stattdessen localhost oder 127.0.0.1 verwenden"
+          }
+        }
+      }
+    },
+    "plain HTTP to %@ is not allowed – use a private IP address, a .local name or https" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unverschlüsseltes HTTP zu %@ ist nicht erlaubt – eine private IP-Adresse, einen .local-Namen oder https verwenden"
+          }
+        }
+      }
+    },
+    "no secure connection to %@ – for a server without https, enter its address with http:// and a private IP address or a .local name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "keine sichere Verbindung zu %@ – für einen Server ohne https die Adresse mit http:// und einer privaten IP-Adresse oder einem .local-Namen eingeben"
+          }
+        }
+      }
+    },
+    "the address %@ cannot be used – check it in the settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "die Adresse %@ ist nicht verwendbar – in den Einstellungen prüfen"
           }
         }
       }
@@ -3347,6 +3407,16 @@
         }
       }
     },
+    "macOS did not hand out the API key for %@ – store it again in the settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS hat den API-Schlüssel für %@ nicht herausgegeben – in den Einstellungen erneut sichern"
+          }
+        }
+      }
+    },
     "Choose a model for %@ in the settings first" : {
       "localizations" : {
         "de" : {
@@ -3423,6 +3493,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der auf dem Bildschirm erkannte Text wird zum Übersetzen an %@ gesendet. Solange das Übersetzen aus ist, wird nichts gesendet."
+          }
+        }
+      }
+    },
+    "The text recognized on the screen is sent to the server you enter here to be translated. Nothing is sent while translating is off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der auf dem Bildschirm erkannte Text wird zum Übersetzen an den hier eingetragenen Server gesendet. Solange das Übersetzen aus ist, wird nichts gesendet."
+          }
+        }
+      }
+    },
+    "The service may charge your account for each request: the more new text comes into view, the more it costs." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Dienst kann jede Anfrage in Rechnung stellen: Je mehr neuer Text ins Bild kommt, desto mehr kostet es."
           }
         }
       }
