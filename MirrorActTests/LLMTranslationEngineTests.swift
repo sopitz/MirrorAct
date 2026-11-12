@@ -593,7 +593,7 @@ final class LLMTranslationEngineTests: XCTestCase {
 
     func testPlainHTTPThatTheSystemDoesNotAllowSaysWhatWorks() async {
         let transport = ScriptedTransport { _, _ in throw URLError(.appTransportSecurityRequiresSecureConnection) }
-        let lan = makeEngine(.ollama, baseURL: "gpu-box.lan:11434", model: "gemma4", transport: transport)
+        let lan = makeEngine(.ollama, baseURL: "http://gpu-box.lan:11434", model: "gemma4", transport: transport)
         let failure = await failure { try await lan.translate(["Settings"], into: self.german) }
         // nothing changes by itself: asking again every few seconds would be no use
         XCTAssertEqual(failure?.isPermanent, true)

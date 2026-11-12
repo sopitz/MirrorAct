@@ -113,10 +113,10 @@ struct LLMConnection: Equatable, CustomStringConvertible {
         if tidied.isEmpty { return tidy(provider.defaultBaseURL) }
         var (address, query) = splitOffQuery(tidied)
         if address.range(of: "://") == nil {
-            // Plain HTTP is what local servers speak. Ollama and LM Studio speak nothing else,
-            // also on another computer that is reached by a name such as "gpu-box.lan".
-            let plain = provider.isLocal || isLocalHost(host(of: address))
-            address = (plain ? "http://" : "https://") + address
+            // Plain HTTP is what local servers speak. Any other name gets https, also for Ollama
+            // and LM Studio: the system refuses plain HTTP to such a name anyway, and a server
+            // under a name of its own ("ollama.example.com") is mostly behind a proxy with TLS.
+            address = (isLocalHost(host(of: address)) ? "http://" : "https://") + address
         }
         if !provider.pathWhenMissing.isEmpty && !hasPath(address) {
             address += provider.pathWhenMissing
