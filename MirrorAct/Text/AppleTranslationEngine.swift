@@ -454,14 +454,23 @@ final class AppleTranslationEngine: ObservableObject {
                 setLoading(false, for: host)
                 return false
             }
-            defer { passOnTurnToLoad(from: host) }
             // the pair before may have brought these languages along
             status = await availability.status(host.source, host.target)
-            if status == .supported, !isEnding(host) {
+            let asks = status == .supported && !isEnding(host)
+            var failure: Error?
+            if asks {
                 Log.info("Translation: asking macOS to load the languages for \(host.pair)")
                 do {
                     try await prepare()
                 } catch {
+                    failure = error
+                }
+            }
+            // The turn is for the question, which is gone once prepareTranslation returns: the
+            // next pair may ask while these languages are still on their way.
+            passOnTurnToLoad(from: host)
+            if asks {
+                if let error = failure {
                     setLoading(false, for: host)
                     // translating was turned off meanwhile: what became of the question no longer matters
                     if isEnding(host) { return false }

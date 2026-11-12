@@ -203,6 +203,34 @@ final class AppleTranslationEngineTests: XCTestCase {
         client.cancel()
     }
 
+    /// The turn is for the question only: once the user has answered it, the next pair is asked
+    /// for while the languages of the first are still on their way (or never come)
+    func testTheNextPairIsAskedForWhileTheFirstOneDownloads() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let request = Task { try await client.translate([Self.english, Self.french], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 2 }
+        var served: [Task<Void, Never>] = []
+        for host in engine.hosts {
+            served.append(Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) })
+        }
+        _ = try await request.value
+        try await waitUntil { engine.hostsWaitingToLoad == 1 }
+        let first = try XCTUnwrap(macOS.preparing.first)
+        // prepareTranslation returns, the languages are not there yet: the first pair keeps waiting
+        macOS.finish(first, installing: false)
+        try await waitUntil { macOS.asked.count == 2 }
+        XCTAssertEqual(engine.hostsWaitingToLoad, 0)
+        XCTAssertTrue(engine.hosts.contains { $0.id == first })
+        let second = try XCTUnwrap(macOS.preparing.first)
+        XCTAssertNotEqual(second, first)
+        client.cancel()
+        macOS.finish(second, installing: false)
+        for task in served { await task.value }
+        XCTAssertTrue(engine.hosts.isEmpty)
+    }
+
     /// The languages the first pair loaded may be all the second one needed: it is not asked for
     func testAPairWhoseLanguagesCameMeanwhileIsNotAskedFor() async throws {
         let macOS = FakeMacOS(supported: ["de", "en", "fr"])
