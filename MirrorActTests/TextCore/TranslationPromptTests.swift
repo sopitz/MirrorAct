@@ -205,6 +205,38 @@ final class TranslationPromptTests: XCTestCase {
         XCTAssertTrue(cut.hasSuffix("…"))
         XCTAssertTrue(page.hasPrefix(String(cut.dropLast())))
         XCTAssertEqual(TranslationPrompt.longestTranslation(of: "Sign in"), 4 * 7 + 60)
+        XCTAssertEqual(TranslationPrompt.longestTranslation(of: "设置"), 16 * 2 + 60)
+        XCTAssertEqual(TranslationPrompt.longestTranslation(of: "付款失败，请重试。"), 16 * 7 + 4 * 2 + 60)
+    }
+
+    /// Real translations of interface texts from a dense script into German and English, from
+    /// one-word labels to paragraphs: none of them is cut. The densest prose measured takes
+    /// about seven German characters per Chinese one, an idiom almost thirteen.
+    /// The limit only has to catch an answer that runs away.
+    func testHonestTranslationsFromDenseScriptsAreNotCut() {
+        let pairs = [
+            ("付款失败，请重试。", "Die Zahlung ist fehlgeschlagen, bitte versuchen Sie es erneut."),  // 6.9x
+            ("请输入您的电子邮件地址以重置密码。", "Bitte geben Sie Ihre E-Mail-Adresse ein, um Ihr Passwort zurückzusetzen."),
+            ("网络连接失败", "Die Netzwerkverbindung ist fehlgeschlagen"),  // 6.8x
+            ("网络连接失败", "Network connection failed"),
+            ("一言难尽", "Das lässt sich nicht mit wenigen Worten beschreiben"),  // 12.8x
+            ("设置", "Einstellungen"),
+            ("确定", "Bestätigen"),
+            ("通知をオフにする", "Benachrichtigungen ausschalten"),
+            ("パスワードを忘れた場合", "Wenn Sie Ihr Passwort vergessen haben"),
+            ("비밀번호를 잊으셨나요?", "Haben Sie Ihr Passwort vergessen?"),
+            ("저장", "Speichern"),
+        ]
+        let labels = [("OK", "Einverstanden"), ("Settings", "Einstellungen"), ("FAQ", "Häufig gestellte Fragen")]
+        for (text, translation) in pairs + labels {
+            XCTAssertEqual(TranslationPrompt.usable([translation], for: [text]), [translation], text)
+        }
+        // the same as paragraphs of twenty sentences
+        for (text, translation) in pairs {
+            let paragraph = String(repeating: text, count: 20)
+            let translated = Array(repeating: translation, count: 20).joined(separator: " ")
+            XCTAssertEqual(TranslationPrompt.usable([translated], for: [paragraph]), [translated], text)
+        }
     }
 
     // MARK: Portions

@@ -176,11 +176,39 @@ enum TranslationPrompt {
         return result
     }
 
-    /// Characters (grapheme clusters) a translation of `text` may have: four times as many as the
-    /// text, which leaves room for a language that writes in few characters what another
-    /// writes in many ("設定", "Einstellungen"), and some more for a short label
+    /// Characters (grapheme clusters) a translation of `text` may have. The limit is only there
+    /// to catch an answer that runs away, never an honest translation: sixteen for every
+    /// character of Chinese, Japanese or Korean (Chinese interface prose takes up to seven German
+    /// characters per character, an idiom up to thirteen), four for every other character, and
+    /// sixty more for a short label ("OK", "Einverstanden").
     static func longestTranslation(of text: String) -> Int {
-        4 * text.count + 60
+        var limit = 60
+        for character in text {
+            limit += isDense(character) ? 16 : 4
+        }
+        return limit
+    }
+
+    /// Han, Hiragana, Katakana or Hangul, by the first code point of the character. Ranges
+    /// instead of Unicode properties, so that every implementation counts the same.
+    private static func isDense(_ character: Character) -> Bool {
+        guard let scalar = character.unicodeScalars.first?.value else { return false }
+        switch scalar {
+        case 0x1100...0x11FF,    // Hangul Jamo
+             0x2E80...0x2FDF,    // CJK and Kangxi radicals
+             0x3040...0x30FF,    // Hiragana, Katakana
+             0x3130...0x318F,    // Hangul compatibility Jamo
+             0x31F0...0x31FF,    // Katakana phonetic extensions
+             0x3400...0x4DBF,    // CJK extension A
+             0x4E00...0x9FFF,    // CJK unified ideographs
+             0xAC00...0xD7AF,    // Hangul syllables
+             0xF900...0xFAFF,    // CJK compatibility ideographs
+             0xFF66...0xFF9F,    // half-width Katakana
+             0x20000...0x3FFFF:  // CJK extensions B and later
+            return true
+        default:
+            return false
+        }
     }
 
     /// The texts in portions for one request each, in their order: at most `maxItems` texts and
