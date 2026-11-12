@@ -10,6 +10,22 @@ import Translation
 struct TextSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
+    /// Where the page keeps the API keys: the keychain; the tests give it one of their own, so
+    /// that they never touch the user's keys
+    struct KeyStore {
+        var hasKey: (_ providerID: String) -> Bool
+        var set: (_ key: String?, _ providerID: String) -> Bool
+
+        static let keychain = KeyStore(hasKey: { KeychainStore.hasKey(for: $0) },
+                                       set: { KeychainStore.set($0, for: $1) })
+    }
+
+    private let keys: KeyStore
+
+    init(keys: KeyStore = .keychain) {
+        self.keys = keys
+    }
+
     /// languages the Mac can translate into (loaded when the page appears)
     @State private var translationLanguages: [Locale.Language] = []
 
@@ -22,6 +38,17 @@ struct TextSettingsView: View {
     @State private var loadedModels: [String] = []
     @State private var modelsProblem: String?
     @State private var isLoadingModels = false
+
+    /// What is typed into Address and Model. It goes into the settings on Return, when the
+    /// field is left and when the page goes away: every change there makes a running translation
+    /// start over, and a half-typed address would get the screen's text and the key.
+    @State private var addressDraft = ""
+    @State private var modelDraft = ""
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case address, model
+    }
 
     @State private var testOutcome: Outcome?
     @State private var isTesting = false
@@ -46,8 +73,7 @@ struct TextSettingsView: View {
     /// The service as it is set up, without asking the keychain (that may make macOS ask the
     /// user); for what the page shows
     private var shownConnection: LLMConnection {
-        LLMConnection(provider: provider, baseURL: settings.llmBaseURLs[provider.id],
-                      model: settings.llmModels[provider.id])
+        LLMConnection(provider: provider, baseURL: addressDraft, model: modelDraft)
     }
 
     var body: some View {
@@ -86,8 +112,15 @@ struct TextSettingsView: View {
                 Self.name(of: $0).localizedCompare(Self.name(of: $1)) == .orderedAscending
             }
         }
-        .onAppear { refreshKeyState() }
-        .onDisappear { stopWork() }
+        .onAppear {
+            loadDrafts()
+            refreshKeyState()
+        }
+        .onDisappear {
+            commitDrafts()
+            stopWork()
+        }
+        .onChange(of: focusedField) { commitDrafts() }
     }
 
     // MARK: The service
@@ -114,13 +147,17 @@ struct TextSettingsView: View {
             .foregroundStyle(.secondary)
 
             if provider.baseURLRule != .fixed {
-                TextField("Address", text: addressText, prompt: Text(verbatim: provider.baseURLExample))
+                TextField("Address", text: $addressDraft, prompt: Text(verbatim: provider.baseURLExample))
+                    .focused($focusedField, equals: .address)
+                    .onSubmit { commitDrafts() }
             }
 
             LabeledContent("Model") {
                 HStack {
-                    TextField("Model", text: modelText, prompt: Text(verbatim: provider.defaultModel))
+                    TextField("Model", text: $modelDraft, prompt: Text(verbatim: provider.defaultModel))
                         .labelsHidden()
+                        .focused($focusedField, equals: .model)
+                        .onSubmit { commitDrafts() }
                     Menu("Models") {
                         ForEach(modelChoices, id: \.self) { model in
                             Button(model) { setModel(model) }
@@ -219,7 +256,9 @@ struct TextSettingsView: View {
         Binding(get: { provider.id }, set: { id in
             guard id != provider.id else { return }
             stopWork()
+            commitDrafts()
             settings.llmProvider = id
+            loadDrafts()
             enteredKey = ""
             keyProblem = nil
             loadedModels = []
@@ -229,20 +268,36 @@ struct TextSettingsView: View {
         })
     }
 
-    private var addressText: Binding<String> {
-        Binding(get: { settings.llmBaseURLs[provider.id] ?? "" }, set: { value in
-            let id = provider.id
-            settings.llmBaseURLs[id] = value.isEmpty ? nil : value
-        })
-    }
-
-    private var modelText: Binding<String> {
-        Binding(get: { settings.llmModels[provider.id] ?? "" }, set: { setModel($0) })
-    }
-
+    /// A model picked from the menu counts at once
     private func setModel(_ model: String) {
+        modelDraft = model
+        commitDrafts()
+    }
+
+    /// The address and model of the service as they are set up
+    private func loadDrafts() {
+        addressDraft = settings.llmBaseURLs[provider.id] ?? ""
+        modelDraft = settings.llmModels[provider.id] ?? ""
+    }
+
+    /// Puts what is typed into the settings; a value that is already there is not written again,
+    /// so that leaving a field unchanged does not make translating start over
+    private func commitDrafts() {
         let id = provider.id
-        settings.llmModels[id] = model.isEmpty ? nil : model
+        let address = Self.stored(addressDraft), model = Self.stored(modelDraft)
+        // assigned only on a change: each assignment publishes, even of the same value
+        if provider.baseURLRule != .fixed, settings.llmBaseURLs[id] != address {
+            settings.llmBaseURLs[id] = address
+        }
+        if settings.llmModels[id] != model {
+            settings.llmModels[id] = model
+        }
+    }
+
+    /// what a field's text is stored as; nil for an empty field
+    private static func stored(_ text: String) -> String? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     /// The models the app suggests, then those the service listed
@@ -254,11 +309,11 @@ struct TextSettingsView: View {
     // MARK: Actions
 
     private func refreshKeyState() {
-        hasStoredKey = KeychainStore.hasKey(for: provider.id)
+        hasStoredKey = keys.hasKey(provider.id)
     }
 
     private func storeKey(_ key: String?) {
-        let stored = KeychainStore.set(key, for: provider.id)
+        let stored = keys.set(key, provider.id)
         if stored {
             keyProblem = nil
         } else if key == nil {
@@ -285,6 +340,7 @@ struct TextSettingsView: View {
 
     private func loadModels() {
         stopWork()
+        commitDrafts()
         modelsProblem = nil
         let connection = enteredConnection()
         // the list needs no model; the address and the key it does need
@@ -313,6 +369,7 @@ struct TextSettingsView: View {
 
     private func runTest() {
         stopWork()
+        commitDrafts()
         testOutcome = nil
         let connection = enteredConnection()
         if let missing = connection.missing {
