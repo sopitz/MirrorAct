@@ -305,6 +305,35 @@ final class TranslationCompositorTests: XCTestCase {
                    colors: darkOnLight, smallPrint: true)
     }
 
+    /// German compounds are often wider than their block at the size of the original. Core Text
+    /// then breaks them between two letters, without a hyphen; a smaller font that keeps the
+    /// word whole reads better.
+    func testLongWordsAreNotBrokenBetweenTwoLetters() throws {
+        func lines(_ text: String, _ width: Int, _ height: Int, _ lineCount: Int) throws -> [String] {
+            let mask = try XCTUnwrap(BlockTextMask(text: text, width: width, height: height, lineCount: lineCount))
+            XCTAssertTrue(mask.fits, text)
+            XCTAssertEqual(mask.lineCount, mask.lines.count)
+            return mask.lines.map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        XCTAssertEqual(try lines("Benachrichtigungseinstellungen", 222, 40, 1), ["Benachrichtigungseinstellungen"])
+        XCTAssertEqual(try lines("Mobilfunkdatennutzung", 180, 44, 1), ["Mobilfunkdatennutzung"])
+        XCTAssertEqual(try lines("Datenschutzeinstellungen verwalten", 260, 80, 2), ["Datenschutzeinstellungen", "verwalten"])
+        // a hyphen is a place to break
+        XCTAssertEqual(try lines("E-Mail-Adressen", 120, 60, 2).first?.last, "-")
+
+        // Chinese is broken between any two characters, as everywhere: that is no reason to set it smaller
+        let chinese = try XCTUnwrap(BlockTextMask(text: "设置与隐私：翻译后的文字", width: 300, height: 120, lineCount: 2))
+        XCTAssertEqual(chinese.lineCount, 2)
+        XCTAssertEqual(chinese.fontSize, 0.82 * 60, accuracy: 0.001)
+
+        // a word too long even for the smallest font is still drawn, broken where it has to be
+        let endless = try XCTUnwrap(BlockTextMask(text: "Donaudampfschifffahrtsgesellschaftskapitänsmütze",
+                                                  width: 120, height: 40, lineCount: 1))
+        XCTAssertEqual(endless.fontSize, BlockTextMask.smallestFontShare * 40, accuracy: 0.001)
+        XCTAssertGreaterThan(endless.lineCount, 1)
+        XCTAssertGreaterThan(endless.pixels.filter { $0 > 127 }.count, 100)
+    }
+
     func testTextThatCannotFitIsCutOffNotLeftOut() throws {
         let endless = String(repeating: "word ", count: 80)
         let mask = try XCTUnwrap(BlockTextMask(text: endless, width: 120, height: 24, lineCount: 1))

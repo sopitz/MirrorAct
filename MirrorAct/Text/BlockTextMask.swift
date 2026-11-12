@@ -22,6 +22,8 @@ struct BlockTextMask {
     let fontSize: CGFloat
     /// lines the text was broken into
     let lineCount: Int
+    /// the text of each drawn line, from the top (with the spaces it ends with)
+    let lines: [String]
     /// false: too long for the block even in the smallest font; the end is cut off
     let fits: Bool
 
@@ -44,18 +46,21 @@ struct BlockTextMask {
         let box = CGSize(width: CGFloat(width), height: CGFloat(height))
         let largest = max(1, lineHeight * BlockTextMask.largestFontShare)
         let smallest = min(largest, max(lineHeight * BlockTextMask.smallestFontShare, BlockTextMask.smallestFontSize))
+        let breaks = BlockTextMask.breakOpportunities(in: text)
 
         // The largest font that fits: usually the first one tried. Otherwise halve the range
         // between a size that fits and one that does not until they are half a pixel apart.
-        var layout = Layout(text, fontSize: largest, in: box, lineHeight: lineHeight)
+        // A word broken between two letters does not count as fitting; only the smallest font
+        // may break one, when nothing else is left.
+        var layout = Layout(text, fontSize: largest, in: box, lineHeight: lineHeight, breaks: breaks)
         if !layout.fits, smallest < largest {
-            layout = Layout(text, fontSize: smallest, in: box, lineHeight: lineHeight)
+            layout = Layout(text, fontSize: smallest, in: box, lineHeight: lineHeight, breaks: breaks)
             if layout.fits {
                 var fitting = smallest, tooLarge = largest
                 var steps = 0
                 while tooLarge - fitting > 0.5, steps < 6 {
                     let middle = (fitting + tooLarge) / 2
-                    let candidate = Layout(text, fontSize: middle, in: box, lineHeight: lineHeight)
+                    let candidate = Layout(text, fontSize: middle, in: box, lineHeight: lineHeight, breaks: breaks)
                     if candidate.fits {
                         fitting = middle
                         layout = candidate
@@ -73,19 +78,25 @@ struct BlockTextMask {
         pixels = picture.pixels
         image = picture.image
         fontSize = layout.fontSize
-        self.lineCount = picture.lines
-        fits = layout.fits
+        self.lineCount = picture.lines.count
+        lines = picture.lines
+        fits = layout.fitsBox
     }
 
     /// The text set in one font size
     private struct Layout {
+        let text: String
         let fontSize: CGFloat
         let framesetter: CTFramesetter
         /// what the text needs when it is broken into lines of the width of the block
         let size: CGSize
+        /// all lines fit into the block
+        let fitsBox: Bool
+        /// and no word had to be broken between two letters for that
         let fits: Bool
 
-        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat) {
+        /// `breaks`: where the text may be broken (see `breakOpportunities`)
+        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat, breaks: Set<Int>) {
             let font = CTFontCreateUIFontForLanguage(.system, fontSize, nil)
                 ?? CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
             // White, because the picture is a mask. No paragraph style: the defaults are what
@@ -103,16 +114,50 @@ struct BlockTextMask {
             // the block by that little still shows all of its letters: they do not reach the
             // upper and lower edge of their line.
             let slack = max(1, lineHeight * 0.04)
+            self.text = text
             self.fontSize = fontSize
             self.framesetter = framesetter
             self.size = size
-            fits = size.height <= box.height + slack && size.width <= box.width + 0.5
+            fitsBox = size.height <= box.height + slack && size.width <= box.width + 0.5
+            // A word wider than the block is broken by Core Text between two letters, without
+            // a hyphen, and the size above still fits. A line has to end where the rules of
+            // line breaking allow it (after a space, a hyphen, between two Chinese characters …).
+            var keepsWords = true
+            if fitsBox {
+                let path = CGPath(rect: CGRect(x: 0, y: 0, width: box.width, height: size.height + box.height + 100),
+                                  transform: nil)
+                let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+                let lines = CTFrameGetLines(frame) as? [CTLine] ?? []
+                for line in lines.dropLast() {
+                    let range = CTLineGetStringRange(line)
+                    if !breaks.contains(range.location + range.length) {
+                        keepsWords = false
+                        break
+                    }
+                }
+            }
+            fits = fitsBox && keepsWords
         }
+    }
+
+    /// Where the rules of line breaking (Unicode's) allow a line to end, as offsets in UTF-16
+    /// units like the string ranges of Core Text
+    private static func breakOpportunities(in text: String) -> Set<Int> {
+        let string = text as CFString
+        let length = CFStringGetLength(string)
+        guard let tokenizer = CFStringTokenizerCreate(nil, string, CFRange(location: 0, length: length),
+                                                      kCFStringTokenizerUnitLineBreak, nil) else { return [] }
+        var breaks: Set<Int> = [length]
+        while CFStringTokenizerAdvanceToNextToken(tokenizer) != [] {
+            let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+            breaks.insert(range.location + range.length)
+        }
+        return breaks
     }
 
     /// Draws the text white on black, one byte per pixel
     private static func draw(_ layout: Layout, width: Int, height: Int,
-                             lineHeight: CGFloat) -> (pixels: [UInt8], image: CGImage, lines: Int)? {
+                             lineHeight: CGFloat) -> (pixels: [UInt8], image: CGImage, lines: [String])? {
         // The first row in memory is the top row of the picture, as in a frame. Core Graphics
         // and Core Text count y from the bottom row upwards, and nothing is flipped here: text
         // drawn the ordinary way stands upright in the picture, with its first line in the
@@ -138,10 +183,10 @@ struct BlockTextMask {
         // when the measured height was a fraction too small.
         let boxHeight = CGFloat(height)
         let used = layout.size.height.rounded(.up)
-        let top = layout.fits ? ((boxHeight + used) / 2).rounded() : boxHeight
+        let top = layout.fitsBox ? ((boxHeight + used) / 2).rounded() : boxHeight
         let below = -(lineHeight + 16)
-        var frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: layout.fits ? below : 0)
-        if !layout.fits, CFArrayGetCount(CTFrameGetLines(frame)) == 0 {
+        var frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: layout.fitsBox ? below : 0)
+        if !layout.fitsBox, CFArrayGetCount(CTFrameGetLines(frame)) == 0 {
             // Too long: only the lines that fit as a whole are drawn. Here not even one does;
             // then rather a line that is cut off than an empty box over the original.
             frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: below)
@@ -150,7 +195,12 @@ struct BlockTextMask {
         // the picture is copied out of the memory here, which is released on return
         guard let image = context.makeImage() else { return nil }
         let pixels = Array(UnsafeBufferPointer(start: memory, count: count))
-        return (pixels, image, CFArrayGetCount(CTFrameGetLines(frame)))
+        let text = layout.text as NSString
+        let lines = (CTFrameGetLines(frame) as? [CTLine] ?? []).map { line -> String in
+            let range = CTLineGetStringRange(line)
+            return text.substring(with: NSRange(location: range.location, length: range.length))
+        }
+        return (pixels, image, lines)
     }
 
     /// A frame as wide as the block between two heights (y counted upwards from the bottom of the picture)
