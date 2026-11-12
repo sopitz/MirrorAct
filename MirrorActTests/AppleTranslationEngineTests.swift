@@ -285,22 +285,28 @@ final class AppleTranslationEngineTests: XCTestCase {
     }
 
     /// Translating turned off and on again while macOS still asks about a pair: the question
-    /// stays, and no second one is queued behind it for the same pair
+    /// stays, and no second one is queued behind it for the same pair. The new turn is told,
+    /// as the first one was, that the languages are loading.
     func testAPairWhoseQuestionIsStillUpIsNotAskedForAgain() async throws {
         let macOS = FakeMacOS(supported: ["de", "en"])
         let engine = engine(answeredBy: macOS)
         // a job no view takes is not waited for long
         engine.pickUpLimit = 3
         let first = AppleTranslationClient(engine: engine)
+        let firstNotices = Box<[String]>([])
+        first.notify = { message in MainActor.assumeIsolated { firstNotices.value.append(message) } }
         let request = Task { try await first.translate([Self.english], into: self.language("de")) }
         try await waitUntil { engine.hosts.count == 1 }
         let host = engine.hosts[0]
         let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
         _ = try await request.value
         try await waitUntil { macOS.preparing.count == 1 }
+        XCTAssertEqual(firstNotices.value.count, 1)
         first.cancel()
 
         let second = AppleTranslationClient(engine: engine)
+        let secondNotices = Box<[String]>([])
+        second.notify = { message in MainActor.assumeIsolated { secondNotices.value.append(message) } }
         let answered = Box<Bool>(false)
         let again = Task {
             defer { answered.value = true }
@@ -312,6 +318,10 @@ final class AppleTranslationEngineTests: XCTestCase {
         let translations = try await again.value
         XCTAssertEqual(translations, [nil])
         XCTAssertEqual(engine.hosts.map(\.id), [host.id])
+        // the same notice ("Loading English for translating …"), once
+        XCTAssertEqual(secondNotices.value, firstNotices.value)
+        _ = try await second.translate([Self.english], into: language("de"))
+        XCTAssertEqual(secondNotices.value, firstNotices.value)
 
         macOS.finish(host, installing: false)
         await served.value

@@ -138,7 +138,12 @@ final class AppleTranslationEngine: ObservableObject {
                 continue
             }
             // turned off meanwhile, or the languages are not on this Mac (yet): nil, the caller asks again
-            if Task.isCancelled || client.isCancelled || isPostponed(pair) { continue }
+            if Task.isCancelled || client.isCancelled { continue }
+            if isPostponed(pair) {
+                // a client that asks only after the loading began is told as well
+                if isLoading(pair) { noteLoading(group.source, of: pair, to: [client]) }
+                continue
+            }
             let job = AppleTranslationJob(client: client, pair: pair, source: group.source, target: target,
                                           texts: groupTexts)
             pending.append((group: group, answer: Task { try await self.answer(to: job) }))
@@ -254,7 +259,12 @@ final class AppleTranslationEngine: ObservableObject {
         }
         // also while a host that ends waits for the answer to its question: a new host would only
         // ask a second time, and macOS would show the second question after the first
-        return hosts.contains { $0.pair == pair && loading.contains($0.id) }
+        return isLoading(pair)
+    }
+
+    /// A host of the pair waits for macOS to load its languages
+    private func isLoading(_ pair: String) -> Bool {
+        hosts.contains { $0.pair == pair && loading.contains($0.id) }
     }
 
     // MARK: Jobs
@@ -448,8 +458,7 @@ final class AppleTranslationEngine: ObservableObject {
             // loading takes minutes: those who wait for this pair ask again later
             finishWaitingJobs(of: host.pair) { $0.postponed }
             let language = LanguageMatching.name(of: host.source, in: Self.noticeLocale)
-            note("loading " + host.pair, String(localized: "Loading \(language) for translating …"),
-                 to: clients(using: host.pair))
+            noteLoading(host.source, of: host.pair, to: clients(using: host.pair))
             guard await waitForTurnToLoad(host) else {
                 setLoading(false, for: host)
                 return false
@@ -624,6 +633,11 @@ final class AppleTranslationEngine: ObservableObject {
     /// Without this the user would see nothing at all when the framework does not answer.
     private func noteNoAnswer(to client: AppleTranslationClient) {
         note("no answer", String(localized: "Translation on this Mac is not responding"), to: [client])
+    }
+
+    private func noteLoading(_ source: Locale.Language, of pair: String, to receivers: [AppleTranslationClient]) {
+        let language = LanguageMatching.name(of: source, in: Self.noticeLocale)
+        note("loading " + pair, String(localized: "Loading \(language) for translating …"), to: receivers)
     }
 
     private func noteUntranslatable(_ language: Locale.Language, to receivers: [AppleTranslationClient]) {
