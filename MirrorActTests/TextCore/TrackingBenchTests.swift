@@ -7,11 +7,13 @@ import XCTest
 /// regression test per scenario and a report over several seeds.
 ///
 /// A debug build is fifty to a hundred times slower at this than a release build, the tracker
-/// included. There the tests therefore play only the scenarios of `quickScenarios`, leave out
-/// the self-tests of the bench that take long and the report, unless the environment asks for
-/// more. Everything: `swift test -c release -Xswiftc -enable-testing --filter TrackingBenchTests`.
+/// included. `scripts/test.sh` tests a debug build, so by default the tests play only the
+/// scenarios of `quickScenarios` and leave out the self-tests of the bench that take long and
+/// the report, unless the environment asks for more. Everything, which takes several minutes:
+/// `TRACKING_ALL=1 TRACKING_SEEDS=1 scripts/test.sh TrackingBenchTests`.
 ///
-/// Environment (`tracking-bench.sh` passes these into the container the tests run in):
+/// Environment (`scripts/test.sh` passes every `TRACKING_*` variable on to the tests; give paths
+/// as absolute paths):
 /// - `TRACKING_ALL=1`      all scenarios and self-tests also in a debug build
 /// - `TRACKING_SEEDS`      seeds of `testReport`, default "1,2,3" (in a debug build the report
 ///                         only runs when this is set)
@@ -100,11 +102,10 @@ final class TrackingBenchTests: XCTestCase {
     ]
 
     /// What a debug build plays: a still screen, a screen replaced by another one and an alert
-    /// over the page. These suites also run in the app's test bundle on the Mac, by default in a
-    /// debug build, so they are kept to a few seconds there: a scenario that scrolls takes 10 to
-    /// 30 s in a debug build (swipeBack 12 s, textReplaced 4 s on the Linux box). The tracker's
-    /// own tests (OverlayTracker*Tests) scroll in every build; all scenarios run in a release
-    /// build or with `TRACKING_ALL=1`.
+    /// over the page. `scripts/test.sh` runs these suites in a debug build of the app, so they are
+    /// kept to a few seconds there: a scenario that scrolls takes 10 to 30 s in a debug build. The
+    /// tracker's own tests (OverlayTracker*Tests) scroll in every build; all scenarios run with
+    /// `TRACKING_ALL=1` or in a release build.
     private static let quickScenarios: Set<String> = ["stillScreen", "newScreen", "alert"]
     /// A scenario with layers over each other whose truth a debug build also checks against its
     /// pictures (a few of them only)
@@ -515,7 +516,7 @@ final class TrackingBenchTests: XCTestCase {
     /// in a debug build; they say nothing about the tracker and run in release builds
     private func skipBenchScoringInQuickRun() throws {
         if TrackingBenchTests.isQuickRun {
-            throw XCTSkip("debug build: a test of the bench's scoring; set TRACKING_ALL=1 or use a release build")
+            throw XCTSkip("debug build: a test of the bench's scoring; to run it: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
         }
     }
 
@@ -911,7 +912,7 @@ final class TrackingBenchTests: XCTestCase {
 
     private func check(_ name: String, file: StaticString = #filePath, line: UInt = #line) throws {
         if TrackingBenchTests.isQuickRun, !TrackingBenchTests.quickScenarios.contains(name) {
-            throw XCTSkip("debug build: only the quick scenarios run; set TRACKING_ALL=1 or use a release build")
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
         }
         let seed = TrackingBenchTests.regressionSeed
         let scenario = try scenario(name, seed: seed)
@@ -1010,7 +1011,7 @@ final class TrackingBenchTests: XCTestCase {
     func testReport() throws {
         let environment = TrackingBenchTests.environment
         if TrackingBenchTests.isDebugBuild, environment["TRACKING_SEEDS"] == nil {
-            throw XCTSkip("debug build: the report takes long; set TRACKING_SEEDS or use a release build")
+            throw XCTSkip("debug build: the report takes long; to run it: TRACKING_SEEDS=1,2,3 scripts/test.sh TrackingBenchTests/testReport")
         }
         let seeds = (environment["TRACKING_SEEDS"] ?? "1,2,3").split(separator: ",").compactMap { UInt64($0) }
         let subject = environment["TRACKING_SUBJECT"] ?? "tracker"

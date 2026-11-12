@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// How the replies of the language model services are read (Foundation only: also runs on Linux).
+/// How the replies of the language model services are read (Foundation only, like the core).
 /// The replies are written out the way the services document them.
 final class LLMReplyTests: XCTestCase {
     private func openAI(_ body: String, status: Int = 200) throws -> String {

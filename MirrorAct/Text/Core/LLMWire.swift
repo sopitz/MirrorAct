@@ -3,7 +3,7 @@ import Foundation
 
 // Translating with a language model service, without the network: what is sent to a service and
 // how its replies are read. Values and pure functions only, so that the same code (and the same
-// tests) describes the Mac app and the Windows app.
+// tests) describes every MirrorAct app that translates this way.
 //
 // A translation is one round trip: `LLMWire.chatRequest` for an `LLMConnection` with the texts
 // of `TranslationPrompt`, then `LLMWire.reply` for whatever came back, then

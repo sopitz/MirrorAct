@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// The catalogue of language model services (Foundation only: also runs on Linux)
+/// The catalogue of language model services (Foundation only, like the core)
 final class LLMProviderTests: XCTestCase {
     func testTheServicesInTheOrderTheyAreOffered() {
         XCTAssertEqual(LLMProvider.all.map(\.id),

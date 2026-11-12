@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// What a language model is asked and how its answer is read (Foundation only: also runs on Linux)
+/// What a language model is asked and how its answer is read (Foundation only, like the core)
 final class TranslationPromptTests: XCTestCase {
     private func parse(_ reply: String, _ count: Int) throws -> [String] {
         try TranslationPrompt.parse(reply, count: count)
@@ -45,8 +45,8 @@ final class TranslationPromptTests: XCTestCase {
     func testTheInstructionIsTheSameEveryTimeAndOnEveryPlatform() {
         let prompt = TranslationPrompt.system(targetName: "German", targetCode: "de")
         XCTAssertEqual(prompt, TranslationPrompt.system(targetName: " German ", targetCode: "de\n"))
-        // Length and checksum of the text: whoever changes the instruction changes it for the Mac
-        // app and the Windows app alike, and changes these numbers in both.
+        // Length and checksum of the text: whoever changes the instruction changes it for every
+        // MirrorAct app alike, and changes these numbers in all of them.
         XCTAssertEqual(prompt.utf8.count, 1400)
         XCTAssertEqual(checksum(prompt), 4_204_843_110)
     }

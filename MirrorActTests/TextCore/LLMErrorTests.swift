@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// What the failures of the language model services mean (Foundation only: also runs on Linux).
+/// What the failures of the language model services mean (Foundation only, like the core).
 /// Bodies marked "as received" are what the services answered to a made-up key in November 2026
 /// (line breaks added); the others follow the services' documentation.
 final class LLMErrorTests: XCTestCase {

@@ -3,8 +3,8 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// Which models a service offers and what an Anthropic model can do (Foundation only: also runs
-/// on Linux). The lists have the shapes the services document; the ids are those of November 2026.
+/// Which models a service offers and what an Anthropic model can do (Foundation only, like the
+/// core). The lists have the shapes the services document; the ids are those of November 2026.
 final class LLMModelListTests: XCTestCase {
     private func models(_ provider: LLMProvider, _ body: String, status: Int = 200) throws -> [String] {
         try LLMWire.modelIDs(provider: provider, status: status, body: Data(body.utf8))

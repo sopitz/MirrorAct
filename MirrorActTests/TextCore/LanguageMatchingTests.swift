@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// Languages of a translator that knows a fixed set of them (Foundation only: also runs on Linux)
+/// Languages of a translator that knows a fixed set of them (Foundation only, like the core)
 final class LanguageMatchingTests: XCTestCase {
     private func language(_ identifier: String) -> Locale.Language {
         Locale.Language(identifier: identifier)

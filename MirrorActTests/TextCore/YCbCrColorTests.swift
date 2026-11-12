@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// Colors of text blocks on their way from the frame and back (Foundation only: also runs on Linux)
+/// Colors of text blocks on their way from the frame and back (Foundation only, like the core)
 final class YCbCrColorTests: XCTestCase {
     func testWhiteBlackAndGrayOfVideo() {
         XCTAssertEqual(YCbCrColor(.white, fullRange: false), YCbCrColor(y: 235, cb: 128, cr: 128))

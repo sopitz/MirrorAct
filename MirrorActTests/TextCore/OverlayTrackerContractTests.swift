@@ -4,7 +4,7 @@ import XCTest
 @testable import MirrorAct
 
 /// What every implementation of `OverlayTracker` must do, whatever it does to follow moving
-/// content (Foundation only: also runs on Linux)
+/// content (Foundation only, like the core)
 final class OverlayTrackerContractTests: XCTestCase {
     private let scale = 2
     private let width = 200, height = 400     // thumbnail; frames are 400 × 800

@@ -914,8 +914,8 @@ final class SimScenario {
     }
     /// how often, in percent, a line that was read before is read slightly differently
     var misreadingPercent = 8
-    /// The recognizer says how sure it is (Vision does; the recognizer of Windows does not, and
-    /// then every block comes with `confidence` nil). Even where it does, a line that is cut
+    /// The recognizer says how sure it is (Vision does; recognizers on other platforms may not,
+    /// and then every block comes with `confidence` nil). Even where it does, a line that is cut
     /// off is not reliably marked as uncertain, and some complete lines are.
     var reportsConfidence = true
     /// the passes (counted from 1) in which the recognition fails: `abandonRecognition`

@@ -24,7 +24,7 @@ import Foundation
 //   off by a pixel or two, and now and then a line that was read before is read with one letter
 //   changed. The confidence does not tell a cut line from a whole one: a cut line gets 0.3, 0.5
 //   or 1, and one whole line in eight is always reported with 0.5 or 0.3. Scenarios with
-//   `reportsConfidence` false deliver nil, as the recognizer of Windows does.
+//   `reportsConfidence` false deliver nil, as recognizers on other platforms may.
 // - A pass that fails (`SimScenario.failingPasses`) ends with `abandonRecognition`; the loop
 //   then pauses for half a second.
 // - After every pass the translator is asked for work (`textsAwaitingTranslation`, at most 40

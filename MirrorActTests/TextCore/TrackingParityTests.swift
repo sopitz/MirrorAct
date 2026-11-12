@@ -3,8 +3,8 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// Writes what the tracker did in a few scenarios, for comparing it with the port of the Windows
-/// app, which writes the same lines (TrackingParityTests.cs): when `TRACKING_PARITY` names a file,
+/// Writes what the tracker did in a few scenarios, for comparing it with other MirrorAct apps,
+/// which write the same lines from the same core: when `TRACKING_PARITY` names a file,
 /// for every display frame of the scenarios (`TRACKING_SCENARIOS`, default below) and seed 1 (or
 /// the first of `TRACKING_SEEDS`) a checksum over the placed rectangles, and per scenario the
 /// metrics of the run and a checksum over all its frames. Doubles are written as their bits.
@@ -50,7 +50,7 @@ final class TrackingParityTests: XCTestCase {
         return text
     }
 
-    /// Every measured value (not the times and events), in the order of TrackingResult.Metrics() in C#
+    /// Every measured value (not the times and events), in an order other implementations repeat
     static func metrics(_ result: TrackingResult) -> String {
         var parts: [String] = []
         func number(_ name: String, _ value: Int) { parts.append("\(name)=\(value)") }

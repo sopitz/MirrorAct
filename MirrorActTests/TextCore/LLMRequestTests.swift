@@ -17,7 +17,7 @@ func llmCanonicalJSON(_ text: String) -> String {
     llmCanonicalJSON(Data(text.utf8))
 }
 
-/// What is sent to the language model services (Foundation only: also runs on Linux)
+/// What is sent to the language model services (Foundation only, like the core)
 final class LLMRequestTests: XCTestCase {
     private let system = "Translate into German (de)."
     private let user = #"["Settings","Wi-Fi \"Home\""]"#

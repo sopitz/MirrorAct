@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import MirrorAct
 
-/// Order of the recognized lines and paragraphs (Foundation only: also runs on Linux)
+/// Order of the recognized lines and paragraphs (Foundation only, like the core)
 final class TextLayoutTests: XCTestCase {
     private let size = CGSize(width: 1170, height: 2532)
 
