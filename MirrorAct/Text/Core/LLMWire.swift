@@ -106,9 +106,12 @@ struct LLMConnection: Equatable, CustomStringConvertible {
     /// The address requests go to: what the user entered where the service allows that, otherwise
     /// the service's own. Tolerates what people type: spaces, a slash at the end, the address of
     /// the chat endpoint instead of its base, no "http://", no path.
+    /// A query ("?api-version=…", which older Azure addresses need) stays at the end, behind
+    /// every path that is added.
     static func address(for provider: LLMProvider, entered: String) -> String {
-        var address = provider.baseURLRule == .fixed ? "" : tidy(entered)
-        if address.isEmpty { return tidy(provider.defaultBaseURL) }
+        let tidied = provider.baseURLRule == .fixed ? "" : tidy(entered)
+        if tidied.isEmpty { return tidy(provider.defaultBaseURL) }
+        var (address, query) = splitOffQuery(tidied)
         if address.range(of: "://") == nil {
             // Plain HTTP is what local servers speak. Ollama and LM Studio speak nothing else,
             // also on another computer that is reached by a name such as "gpu-box.lan".
@@ -118,16 +121,31 @@ struct LLMConnection: Equatable, CustomStringConvertible {
         if !provider.pathWhenMissing.isEmpty && !hasPath(address) {
             address += provider.pathWhenMissing
         }
-        return address
+        return address + query
+    }
+
+    /// The address of `path` ("/chat/completions", "/models?limit=1000") at this connection:
+    /// in front of the query of the address, if it has one
+    func url(_ path: String) -> String {
+        let (address, query) = LLMConnection.splitOffQuery(baseURL)
+        guard !query.isEmpty else { return baseURL + path }
+        return address + path + (path.contains("?") ? "&" + query.dropFirst() : query)
+    }
+
+    /// The address without its query, and the query with its "?" ("" when there is none)
+    private static func splitOffQuery(_ address: String) -> (address: String, query: String) {
+        guard let mark = address.firstIndex(of: "?") else { return (address, "") }
+        return (String(address[..<mark]), String(address[mark...]))
     }
 
     private static func tidy(_ entered: String) -> String {
-        var address = withoutSlashesAtTheEnd(entered.trimmingCharacters(in: .whitespacesAndNewlines))
+        let (path, query) = splitOffQuery(entered.trimmingCharacters(in: .whitespacesAndNewlines))
+        var address = withoutSlashesAtTheEnd(path)
         if let endpoint = address.range(of: "/chat/completions", options: [.caseInsensitive, .backwards, .anchored]) {
             address.removeSubrange(endpoint)
             address = withoutSlashesAtTheEnd(address)
         }
-        return address
+        return address + query
     }
 
     private static func withoutSlashesAtTheEnd(_ text: String) -> String {
@@ -499,7 +517,7 @@ enum LLMWire {
                 headers.append(LLMHeader("anthropic-beta", anthropicFallbackBeta))
                 body["fallbacks"] = "default"
             }
-            return LLMHTTPRequest(method: "POST", url: connection.baseURL + "/messages", headers: headers,
+            return LLMHTTPRequest(method: "POST", url: connection.url("/messages"), headers: headers,
                                   body: LLMJSON.data(body))
         case .openAICompatible:
             var headers = keyHeaders(connection)
@@ -511,7 +529,7 @@ enum LLMWire {
             if options.reasoningEffortLow {
                 body["reasoning_effort"] = "low"
             }
-            return LLMHTTPRequest(method: "POST", url: connection.baseURL + "/chat/completions", headers: headers,
+            return LLMHTTPRequest(method: "POST", url: connection.url("/chat/completions"), headers: headers,
                                   body: LLMJSON.data(body))
         }
     }
@@ -626,7 +644,7 @@ enum LLMWire {
     static func modelsRequest(_ connection: LLMConnection) -> LLMHTTPRequest {
         // Anthropic sends 20 models unless asked for more
         let path = connection.provider.format == .anthropic ? "/models?limit=1000" : "/models"
-        return LLMHTTPRequest(method: "GET", url: connection.baseURL + path, headers: keyHeaders(connection), body: nil)
+        return LLMHTTPRequest(method: "GET", url: connection.url(path), headers: keyHeaders(connection), body: nil)
     }
 
     /// The ids of the models in the reply to `modelsRequest` that can be used to translate: the
@@ -726,7 +744,7 @@ enum LLMWire {
         if fallbackBeta && connection.provider.format == .anthropic {
             headers.append(LLMHeader("anthropic-beta", anthropicFallbackBeta))
         }
-        return LLMHTTPRequest(method: "GET", url: connection.baseURL + "/models/" + pathEscaped(connection.model),
+        return LLMHTTPRequest(method: "GET", url: connection.url("/models/" + pathEscaped(connection.model)),
                               headers: headers, body: nil)
     }
 

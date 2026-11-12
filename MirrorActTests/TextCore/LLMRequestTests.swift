@@ -174,6 +174,30 @@ final class LLMRequestTests: XCTestCase {
         XCTAssertEqual(closed.headers.first, LLMHeader("Authorization", "Bearer secret"))
     }
 
+    func testAQueryInTheAddressStaysBehindThePath() {
+        // an older Azure address, pasted with the version it needs
+        let chatRequest = chat(.custom, baseURL: "https://x.openai.azure.com/openai/deployments/d/chat/completions?api-version=2024-10-21",
+                               model: "d", apiKey: nil)
+        XCTAssertEqual(chatRequest.url, "https://x.openai.azure.com/openai/deployments/d/chat/completions?api-version=2024-10-21")
+
+        let connection = LLMConnection(provider: .azure, baseURL: "x.openai.azure.com?api-version=preview", model: "d", apiKey: "k")
+        XCTAssertEqual(connection.baseURL, "https://x.openai.azure.com/openai/v1?api-version=preview")
+        XCTAssertEqual(LLMWire.chatRequest(connection, system: "S", user: "U").url,
+                       "https://x.openai.azure.com/openai/v1/chat/completions?api-version=preview")
+        XCTAssertEqual(LLMWire.modelsRequest(connection).url, "https://x.openai.azure.com/openai/v1/models?api-version=preview")
+        XCTAssertEqual(LLMWire.capabilitiesRequest(connection).url, "https://x.openai.azure.com/openai/v1/models/d?api-version=preview")
+
+        // a path that has a query of its own gets the one of the address added to it
+        let anthropic = LLMConnection(provider: .anthropic, apiKey: "k")
+        XCTAssertEqual(LLMWire.modelsRequest(anthropic).url, "https://api.anthropic.com/v1/models?limit=1000")
+        XCTAssertEqual(LLMConnection(provider: .custom, baseURL: "https://llm.example.com/v1/?key=a").baseURL,
+                       "https://llm.example.com/v1?key=a")
+        XCTAssertEqual(LLMConnection(provider: .custom, baseURL: "https://llm.example.com/v1?key=a").url("/models?limit=5"),
+                       "https://llm.example.com/v1/models?limit=5&key=a")
+        XCTAssertEqual(LLMConnection(provider: .custom, baseURL: "https://llm.example.com/v1").url("/models"),
+                       "https://llm.example.com/v1/models")
+    }
+
     func testTheBodyIsTheSameTextEveryTime() {
         let connection = LLMConnection(provider: .openAI, model: "m", apiKey: "k")
         let first = LLMWire.chatRequest(connection, system: "S", user: "U")
