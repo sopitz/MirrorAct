@@ -79,6 +79,16 @@ enum AppleTranslationHostWindow {
         if window.frame.origin != origin { window.setFrameOrigin(origin) }
     }
 
+    /// above the mirror windows, which float while "Keep on top" is on
+    static let questionLevel = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+
+    /// The question of macOS is a sheet of the window and takes its level: while it may be up the
+    /// window lies above the mirror windows, or one of them could hide the question.
+    static func raise(_ window: NSWindow, _ isRaised: Bool) {
+        let level = isRaised ? questionLevel : .normal
+        if window.level != level { window.level = level }
+    }
+
     /// to the left of and below every screen
     private static var restingPlace: NSPoint {
         let frames = NSScreen.screens.map(\.frame)

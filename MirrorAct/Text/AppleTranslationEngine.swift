@@ -379,9 +379,10 @@ final class AppleTranslationEngine: ObservableObject {
             loading.remove(host.id)
         }
         // macOS may attach its question about loading languages to the window that asks: it has
-        // to be on a screen for that long
-        if wasLoading != !loading.isEmpty, !keepsWindowOnScreen, let window {
-            AppleTranslationHostWindow.place(window, onScreen: !loading.isEmpty)
+        // to be on a screen for that long, and above mirror windows that are kept on top
+        if wasLoading != !loading.isEmpty, let window {
+            if !keepsWindowOnScreen { AppleTranslationHostWindow.place(window, onScreen: !loading.isEmpty) }
+            AppleTranslationHostWindow.raise(window, !loading.isEmpty)
         }
     }
 

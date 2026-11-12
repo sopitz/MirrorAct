@@ -108,6 +108,45 @@ final class AppleTranslationEngineTests: XCTestCase {
         XCTAssertFalse(NSScreen.screens.contains { $0.frame.intersects(window.frame) })
     }
 
+    /// The question of macOS takes the level of the window it is attached to: while it may be up,
+    /// the window lies above mirror windows that are kept on top (`.floating`)
+    func testTheWindowIsAboveMirrorWindowsKeptOnTopWhileMacOSMayAsk() throws {
+        try XCTSkipIf(NSScreen.screens.isEmpty, "no screen")
+        let window = AppleTranslationHostWindow.make(for: AppleTranslationEngine())
+        defer { window.close() }
+        XCTAssertEqual(window.level, .normal)
+        AppleTranslationHostWindow.raise(window, true)
+        XCTAssertGreaterThan(window.level.rawValue, NSWindow.Level.floating.rawValue)
+        AppleTranslationHostWindow.raise(window, false)
+        XCTAssertEqual(window.level, .normal)
+    }
+
+    /// The engine raises its window for as long as a host waits for languages, and only then
+    func testTheEngineRaisesItsWindowWhileLanguagesLoad() async throws {
+        try XCTSkipIf(NSScreen.screens.isEmpty, "no screen")
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        let engine = engine(answeredBy: macOS)
+        // a window without the views, so that no session is asked for
+        let window = NSWindow(contentRect: NSRect(x: -400, y: -400, width: 1, height: 1), styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        engine.makeWindow = { _ in window }
+        let client = AppleTranslationClient(engine: engine)
+        let request = Task { try await client.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        XCTAssertEqual(window.level, .normal)
+        let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+        try await waitUntil { macOS.preparing.count == 1 }
+        XCTAssertGreaterThan(window.level.rawValue, NSWindow.Level.floating.rawValue)
+        macOS.finish(host, installing: true)
+        await served.value
+        XCTAssertEqual(window.level, .normal)
+        _ = try await request.value
+        client.cancel()
+    }
+
     // MARK: Loading languages (macOS answered by FakeMacOS: no session, no download)
 
     private static let english = "This is an ordinary English sentence about the weather today and tomorrow."
