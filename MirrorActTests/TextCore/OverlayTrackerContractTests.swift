@@ -149,6 +149,27 @@ final class OverlayTrackerContractTests: XCTestCase {
         XCTAssertEqual(tracker.blocks.map(\.text), ["WLAN"])
     }
 
+    func testResetForgetsHowTheEarlierScreenLooked() throws {
+        let tracker = OverlayTracker()
+        // a turn on a light page, with frames the estimator compares
+        _ = tracker.advance(page(), scale: scale, time: 0)
+        tracker.finishRecognition(try readPage(tracker, at: 1), blocks: [], time: 1)
+        _ = tracker.advance(page(bars: [40, 120]), scale: scale, time: 2)
+        _ = tracker.advance(page(bars: [40]), scale: scale, time: 3)
+        tracker.reset()
+
+        // the next turn, on a dark screen that is read completely and then only flickers by a
+        // grey level (link noise)
+        let dark = LumaImage(width: width, height: height, fill: 20)
+        _ = tracker.advance(dark, scale: scale, time: 10)
+        tracker.finishRecognition(try readPage(tracker, at: 11), blocks: [], time: 11)
+        var flicker = dark
+        flicker[5, 5] = 21
+        let update = tracker.advance(flicker, scale: scale, time: 12)
+        XCTAssertEqual(update.change, .unchanged, "the screen of the earlier turn is no reference for this one")
+        XCTAssertNil(update.recognitionDue, "a picture that was read and did not change is not read again")
+    }
+
     func testThumbnailsAreBoxAverages() {
         let luma: [UInt8] = [0, 10, 20, 30, 99,
                              40, 50, 60, 70, 99,

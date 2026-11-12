@@ -1532,6 +1532,7 @@ final class OverlayTracker {
     func reset() {
         forgetPicture()
         running = nil
+        estimator.reset()
         previous = nil
         translations = [:]
         requested = []

@@ -199,6 +199,16 @@ final class MotionEstimator {
         return true
     }
 
+    /// Forgets the pictures compared so far. What it keeps from one comparison to the next (how
+    /// every tile was accepted, how much there is to see in it) describes a screen that may be
+    /// long gone after a pause; the next comparison measures every tile anew.
+    func reset() {
+        for index in acceptedMean.indices {
+            acceptedMean[index] = -1
+        }
+        needsFullStructure = true
+    }
+
     private func prepare(width newWidth: Int, height newHeight: Int) {
         guard newWidth != width || newHeight != height || kinds.isEmpty else { return }
         width = newWidth
