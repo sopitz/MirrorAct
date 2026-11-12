@@ -134,26 +134,37 @@ final class ScreenTranslatorTests: XCTestCase {
         XCTAssertTrue(engine.wasCancelled)
     }
 
-    /// A translation still on its way when Translate is turned off is not drawn
+    /// A translation still on its way when Translate is turned off is not drawn, also not into
+    /// the turn that is on by the time it arrives, which reads the same text
     func testTranslationArrivingAfterStopIsNotDrawn() async throws {
-        let engine = StandInEngine(holding: true)
-        translator.makeEngine = { _ in engine }
+        let stale = StandInEngine(holding: true)
+        translator.makeEngine = { _ in stale }
         let (still, _) = try TestFrames.text(lines, width: width, height: height, format: kCVPixelFormatType_32BGRA)
         sink.push(still)
         translator.start()
-        let asked = await waitFor { engine.waiting > 0 ? true : nil }
+        let asked = await waitFor { stale.waiting > 0 ? true : nil }
         XCTAssertNotNil(asked, "the engine was not asked")
-
         translator.stop()
-        engine.release()
-        let answered = await waitFor { engine.answers > 0 ? true : nil }
+
+        // the next turn has read the same text and waits for its own engine
+        let fresh = StandInEngine(holding: true)
+        translator.makeEngine = { _ in fresh }
+        translator.start()
+        let askedAgain = await waitFor { fresh.waiting > 0 ? true : nil }
+        XCTAssertNotNil(askedAgain, "the second turn did not ask its engine")
+
+        stale.release()
+        let answered = await waitFor { stale.answers > 0 ? true : nil }
         XCTAssertNotNil(answered)
         // what would be drawn would be shown again right after the answer
         sink.push(still)
         let drawnLater = await waitFor(timeout: 1) { self.drawnArea() }
         XCTAssertNil(drawnLater, "a translation of a turn that was turned off was drawn")
-        XCTAssertTrue(sink.latest === still)
-        XCTAssertNil(sink.processor)
+
+        // the turn that is on draws its own translations
+        fresh.release()
+        let drawn = await waitFor { self.drawnArea() }
+        XCTAssertNotNil(drawn, "the second turn drew nothing")
     }
 
     /// Off and on again: the second turn translates by itself, with its own engine
