@@ -79,7 +79,7 @@ Die Bilder zeigen die englische Oberfläche.
 - **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Text, Übersetzen, Ton, Oben, Vollbild, Stil. Ein Rechtsklick zeigt alle Funktionen.
 - **Stil-Panel:** Grösse (lebensgross, pixelgenau, punktgenau, Bildschirm füllen), Rahmen an/aus, Rahmenfarbe, Hintergrund (transparent, Verläufe, Farbe, Bild), Abstand, Schatten, Format (1:1, 16:9, 9:16, 4:3).
 - **Screenshots und Aufnahmen** mit oder ohne Rahmen und Hintergrund. Mit transparentem Hintergrund entstehen PNG bzw. HEVC mit Alpha für Keynote und Schnittprogramme, sonst H.264. Screenshots lassen sich direkt aus dem Fenster ziehen.
-- **Text auf dem Bildschirm:** «Text» kopiert alles, was auf dem Gerätebildschirm steht, in die Zwischenablage (Texterkennung mit Apples Vision, auf dem Mac). «Übersetzen» zeigt die Übersetzung an der Stelle des Textes: Sie wird ins Bild gezeichnet, bleibt beim Scrollen auf ihrem Text, neue Bereiche werden übersetzt, sobald sie ins Bild kommen, und Screenshots, Aufnahmen und die Präsentation zeigen sie ebenfalls. Mehrere Sprachen auf einem Bildschirm funktionieren; Text, der schon in der eigenen Sprache ist, bleibt stehen. Unter Einstellungen → Text wählt man die Sprache und was übersetzt: der Mac (Apples Translation-Framework; macOS fragt einmal, bevor es eine Sprache lädt) oder ein Sprachmodell-Dienst mit eigenem API-Schlüssel (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, ein lokaler Server wie Ollama oder LM Studio oder jede OpenAI-kompatible Adresse). Der Schlüssel liegt im Schlüsselbund.
+- **Text auf dem Bildschirm:** «Text» kopiert alles, was auf dem Gerätebildschirm steht, in die Zwischenablage (Texterkennung mit Apples Vision, auf dem Mac). «Übersetzen» zeigt die Übersetzung an der Stelle des Textes: Sie wird ins Bild gezeichnet, bleibt beim Scrollen auf ihrem Text, neue Bereiche werden übersetzt, sobald sie ins Bild kommen, und Screenshots, Aufnahmen und die Präsentation zeigen sie ebenfalls. Mehrere Sprachen auf einem Bildschirm funktionieren; Text, der schon in der eigenen Sprache ist, bleibt stehen. Unter Einstellungen → Text wählt man die Sprache und was übersetzt: der Mac (Apples Translation-Framework; macOS fragt einmal, bevor es eine Sprache lädt) oder ein Sprachmodell-Dienst mit eigenem API-Schlüssel (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, ein lokaler Server wie Ollama oder LM Studio oder jede OpenAI-kompatible Adresse). Der Schlüssel liegt im Schlüsselbund; siehe [Text kopieren und übersetzen](#text-kopieren-und-übersetzen).
 - **Präsentieren:** Gerät mittig auf dem Hintergrund, im Vollbild ohne Dock; die Menüleiste erscheint am oberen Rand. Beenden mit Esc, ⌃⌘F oder «Präsentation beenden» oben links.
 - **Editor:** vorhandene Screenshots und Bildschirmaufnahmen nachträglich rahmen, Videos kürzen, zwei Screenshots als **Duo** (nebeneinander, versetzt, gekippt, perspektivisch).
 - **Kurzbefehle:** «Screenshot einrahmen» (auch als Finder-Schnellaktion), «Screenshot vom iPhone», «Aufnahme starten oder beenden».
@@ -92,6 +92,34 @@ Die Oberfläche gibt es auf Englisch und Deutsch; die Sprache lässt sich unter 
 ⌘K Stil-Panel, ⌃⌘F Präsentieren, ⌘T immer im Vordergrund, ⌘1 lebensgross, ⌘2 pixelgenau, ⌘0 punktgenau, ⌘E Editor.
 
 Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/MirrorAct.log`.
+
+## Text kopieren und übersetzen
+
+«Text» (⌥⌘T) kopiert den Text auf dem Gerätebildschirm, «Übersetzen» (⇧⌘T) zeichnet die
+Übersetzung darüber, bis man es wieder ausschaltet. Unter Einstellungen → Text:
+
+- **Übersetzen nach:** die Systemsprache oder eine andere aus der Liste. Gibt es eine Sprache in
+  mehreren Formen, steht die Region dabei, etwa «Deutsch (Schweiz)» oder «Englisch (Vereinigtes
+  Königreich)». Eine Region, die macOS nicht übersetzt, bekommt die übliche Form ihrer Sprache
+  (Englisch für Deutschland ergibt amerikanisches Englisch).
+- **Dieser Mac:** Apples Translation-Framework. Bevor ein Sprachpaar übersetzt werden kann, fragt
+  macOS, ob es von Apple geladen werden soll, ein Paar nach dem anderen.
+- **Ein Sprachmodell-Dienst:** Der Dienst kann jede Anfrage in Rechnung stellen, und je mehr neuer
+  Text ins Bild kommt, solange «Übersetzen» an ist, desto mehr kostet es. Adresse und Modell gelten,
+  sobald man Return drückt oder das Feld verlässt, auf «Testen» oder «Liste laden» klickt, den
+  Dienst wechselt oder die Seite verlässt, nicht schon beim Tippen; ein unter «Modelle» gewähltes
+  Modell gilt sofort. Ein eingetippter API-Schlüssel wird mit Return oder «Sichern» im
+  Schlüsselbund gesichert, ebenso beim Wechsel des Dienstes und beim Verlassen der Seite.
+- **Ein eigener Server** (Ollama, LM Studio oder Benutzerdefiniert): Einfaches `http://` geht für
+  diesen Mac (`localhost`, `127.0.0.1`), für private IP-Adressen (`192.168.…`, `10.…`, `172.16.…`
+  bis `172.31.…`), `.local`-Namen und Namen ohne Punkt; jede andere Adresse braucht `https://`.
+  Weiterleitungen folgt MirrorAct nicht, einzutragen ist also die Adresse, unter der der Server
+  antwortet. Für einen Server auf einem anderen Computer MirrorAct unter Systemeinstellungen →
+  Datenschutz & Sicherheit → Lokales Netzwerk erlauben.
+
+Text über einem laufenden Video, etwa Untertitel oder Beschriftungen auf einem Clip, wird nicht
+übersetzt, solange das Video läuft. Trennt sich das Gerät oder verbindet es sich neu, geht
+«Übersetzen» aus und muss wieder eingeschaltet werden.
 
 ## Android-Telefon bedienen
 
@@ -162,7 +190,7 @@ MirrorAct arbeitet lokal, sendet keine Daten und hat keine Telemetrie. Netzwerkz
 für den AirPlay-Empfänger im lokalen Netz und über AWDL, für adb zu Android-Telefonen (per Kabel
 oder, bei WLAN, im lokalen Netz) sowie, während ein iPhone oder iPad bedient wird, zum Agent auf
 diesem Gerät. Die Texterkennung läuft auf dem Mac. Auch das Übersetzen läuft standardmässig auf dem
-Mac; die Sprachen lädt macOS dann nach Zustimmung von Apple. Nur wer unter Einstellungen → Text einen
+Mac; die Sprachen lädt macOS dann von Apple, sobald man zustimmt. Nur wer unter Einstellungen → Text einen
 Sprachmodell-Dienst wählt, sendet den auf dem Bildschirm erkannten Text an diesen Dienst, mit dem
 eigenen API-Schlüssel und nur, solange «Übersetzen» an ist; ein lokaler Server (Ollama, LM Studio)
 behält ihn auf dem Mac oder im eigenen Netz.

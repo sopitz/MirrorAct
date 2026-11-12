@@ -77,7 +77,7 @@ appears next to it; right-click shows every function.
 - **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: record, screenshot, text, translate, sound, keep on top, full screen, style. Right-click shows every function.
 - **Style panel:** size (life-size, pixel-perfect, point-perfect, fit), frame on/off, frame color, background (transparent, gradients, color, image), padding, shadow, aspect ratio (1:1, 16:9, 9:16, 4:3).
 - **Screenshots and recordings** with or without frame and background. Transparent backgrounds produce PNG or HEVC with alpha for Keynote and video editors, otherwise H.264. Drag screenshots straight out of the window.
-- **Text on the screen:** "Text" copies everything written on the device screen to the clipboard (text recognition with Apple's Vision, on your Mac). "Translate" shows the translation in place of the text: it is drawn into the picture, stays on its text while you scroll, new parts are translated as they come into view, and screenshots, recordings and the presentation show it too. Several languages on one screen work; text that already is in your language stays as it is. Under Settings → Text you choose the language and what translates: your Mac (Apple's Translation framework; macOS asks once before it downloads a language) or a language model service with your own API key (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, a local server such as Ollama or LM Studio, or any OpenAI-compatible address). The key is kept in your keychain.
+- **Text on the screen:** "Text" copies everything written on the device screen to the clipboard (text recognition with Apple's Vision, on your Mac). "Translate" shows the translation in place of the text: it is drawn into the picture, stays on its text while you scroll, new parts are translated as they come into view, and screenshots, recordings and the presentation show it too. Several languages on one screen work; text that already is in your language stays as it is. Under Settings → Text you choose the language and what translates: your Mac (Apple's Translation framework; macOS asks once before it downloads a language) or a language model service with your own API key (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, a local server such as Ollama or LM Studio, or any OpenAI-compatible address). The key is kept in your keychain; see [Copying and translating text](#copying-and-translating-text).
 - **Presentation mode:** device centered on your background, full screen, without Dock; the menu bar slides in at the top edge. End it with Esc, ⌃⌘F or "Exit Presentation" at the top left.
 - **Editor:** frame existing screenshots and screen recordings afterwards, trim videos, two screenshots as a **duo** (side by side, staggered, tilted, perspective).
 - **Shortcuts:** "Frame screenshot" (usable as a Finder Quick Action), "Screenshot from iPhone", "Start or stop recording".
@@ -90,6 +90,32 @@ The user interface is available in English and German; choose the language under
 ⌃⌘F present, ⌘T keep on top, ⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor.
 
 Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct.log`.
+
+## Copying and translating text
+
+"Text" (⌥⌘T) copies the text on the device screen; "Translate" (⇧⌘T) draws the translation over
+it until you turn it off. Under Settings → Text:
+
+- **Translate into:** the system language or another one from the list. Where a language comes in
+  several forms, the region is named, such as "German (Switzerland)" or "English (United Kingdom)".
+  A region macOS does not translate gets the usual form of its language (English for Germany gives
+  US English).
+- **This Mac:** Apple's Translation framework. Before a language pair can be translated, macOS asks
+  whether to download it from Apple, one pair at a time.
+- **A language model service:** the service may charge your account for each request, and the more
+  new text comes into view while "Translate" is on, the more it costs. Address and Model take
+  effect when you press Return or leave the field, click Test or Load the list, change the service
+  or leave the page, not while you type; a model chosen from Models takes effect at once. A typed
+  API key is stored in the keychain on Return or Save, and also when you change the service or
+  leave the page.
+- **A server of your own** (Ollama, LM Studio or Custom): plain `http://` works for this Mac
+  (`localhost`, `127.0.0.1`), for private IP addresses (`192.168.…`, `10.…`, `172.16.…` to
+  `172.31.…`), `.local` names and names without a dot; any other address needs `https://`.
+  MirrorAct does not follow redirects, so enter the address the server answers at. For a server on
+  another computer, allow MirrorAct under System Settings → Privacy & Security → Local Network.
+
+Text over a playing video, such as subtitles or captions on a clip, is not translated while the
+video plays. When the device disconnects or reconnects, "Translate" turns off; turn it on again.
 
 ## Controlling an Android phone
 
