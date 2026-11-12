@@ -91,6 +91,8 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             return
         }
         let target = settings.translationTarget
+        // Han characters have other forms in Japanese than in Chinese: draw them as the target's
+        compositor.language = target.maximalIdentifier
         self.engine = engine
         engine.notify = { [weak self] message in
             DispatchQueue.main.async { self?.onMessage?(message) }
