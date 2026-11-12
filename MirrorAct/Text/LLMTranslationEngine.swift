@@ -18,6 +18,17 @@ extension URLSession: LLMTransport {
     }
 }
 
+/// Keeps every request of the engine at the address it was sent to. URLSession would follow a
+/// redirect on its own and drop only the Authorization header on the way: the keys that travel
+/// in "x-api-key" (Anthropic) and "api-key" (Azure) would go along to the new host, and after a
+/// 307 or 308 the texts of the screen as well. Refused, the redirect arrives as the reply.
+private final class RedirectRefusal: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        nil
+    }
+}
+
 extension LLMProvider {
     /// The name to show: as the brand writes it; only "Custom" is a word to translate
     var localizedName: String {
@@ -107,15 +118,18 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         return connection.provider.localizedName
     }
 
-    /// Nothing of a request is kept on this Mac: no cookies, no cache
-    private static func makeSession() -> URLSession {
+    /// Nothing of a request is kept on this Mac: no cookies, no cache. A redirect is not
+    /// followed (`RedirectRefusal`).
+    /// - Parameter configure: changes the configuration before the session is made (for the tests)
+    static func makeSession(configure: (URLSessionConfiguration) -> Void = { _ in }) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = requestTimeout
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: configuration)
+        configure(configuration)
+        return URLSession(configuration: configuration, delegate: RedirectRefusal(), delegateQueue: nil)
     }
 
     static func urlRequest(for request: LLMHTTPRequest) throws -> URLRequest {
@@ -314,6 +328,9 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             } catch let error as LLMError where error.isPermanent {
                 // a wrong key, an unknown model: the translation would fail the same way
                 throw error
+            } catch let failure as TranslationFailure where failure.isPermanent {
+                // a redirect: the translation would be redirected as well
+                throw failure
             } catch {
                 // Not to be had right now: this request goes without extras, the next one asks again.
                 if !isCancellation(error) {
@@ -381,11 +398,28 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         }
         guard let task = started else { throw CancellationError() }
         defer { finished(id) }
-        return try await withTaskCancellationHandler {
+        let reply = try await withTaskCancellationHandler {
             try await task.value
         } onCancel: {
             task.cancel()
         }
+        if let failure = redirectFailure(reply, of: request) { throw failure }
+        return reply
+    }
+
+    /// The reply is a redirect, which the session does not follow (`RedirectRefusal`). The
+    /// service answers every request the same way, so trying again is pointless.
+    private func redirectFailure(_ reply: LLMHTTPReply, of request: LLMHTTPRequest) -> TranslationFailure? {
+        guard reply.status >= 300 && reply.status < 400,
+              let location = LLMHeader.value(of: "location", in: reply.headers) else { return nil }
+        // a Location may be relative to the address that was asked
+        let target = URL(string: location, relativeTo: URL(string: request.url))?.absoluteString ?? location
+        let host = LLMConnection.host(of: target)
+        let shown = host.isEmpty ? Self.short(location) : host
+        Log.error("Translation: \(name): the request was redirected to \(host.isEmpty ? "another address" : host)")
+        return TranslationFailure(message: name + ": "
+                                  + String(localized: "the service forwards the request to \(shown), which MirrorAct does not follow – check the address in the settings"),
+                                  isPermanent: true)
     }
 
     private func finished(_ id: UUID) {
