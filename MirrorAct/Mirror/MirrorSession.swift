@@ -21,7 +21,14 @@ final class MirrorSession: ObservableObject, Identifiable {
     @Published var deviceName: String
     @Published var modelIdentifier: String? { didSet { updateProfile() } }
     @Published var sourcePixelSize: CGSize? { didSet { updateProfile() } }
-    @Published var state: State = .connecting
+    @Published var state: State = .connecting {
+        didSet {
+            // The device went away or connects anew: Translate ends here, before AirPlay and
+            // Android clear the sink, while the device's last frame is still there to be shown
+            // again without the translations. A new stream starts without the old ones.
+            if state != .live { translator.stop() }
+        }
+    }
     @Published private(set) var frameSize: CGSize = .zero
     @Published private(set) var profile: DeviceProfile
     @Published var muted: Bool { didSet { onMuteChange?(muted) } }

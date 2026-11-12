@@ -77,6 +77,8 @@ final class FrameSink: @unchecked Sendable {
     private var lastTime = CMTime.invalid
     /// how far the times of the source lag behind "now" (cable: the capture delay; 0 otherwise)
     private var timeLag = CMTime.zero
+    /// a frame changed by the processor went to the display since the last `clear`
+    private var showedProcessed = false
 
     /// on the main thread: new frame size (e.g. rotation)
     var onSizeChange: ((CGSize) -> Void)?
@@ -133,7 +135,15 @@ final class FrameSink: @unchecked Sendable {
     }
 
     func clear() {
+        presenting.lock()
+        defer { presenting.unlock() }
         lock.lock()
+        // The flush keeps the picture on the screen but drops what is queued. Translate may have
+        // been turned off just before (the device went away) and its clean frame still be in the
+        // queue, behind a picture with the translations: that frame is shown again afterwards.
+        let restore = showedProcessed ? latestSourceBuffer : nil
+        let description = formatDescription
+        showedProcessed = false
         latestBuffer = nil
         latestSourceBuffer = nil
         deliveredFirstFrame = false
@@ -142,6 +152,10 @@ final class FrameSink: @unchecked Sendable {
         let layer = self.layer
         lock.unlock()
         layer?.sampleBufferRenderer.flush(removingDisplayedImage: false, completionHandler: nil)
+        if let layer, let restore, let description,
+           CMVideoFormatDescriptionMatchesImageBuffer(description, imageBuffer: restore) {
+            Self.enqueue(restore, description: description, on: layer)
+        }
     }
 
     /// time: host time of the frame (for recordings); "now" if omitted
@@ -183,6 +197,7 @@ final class FrameSink: @unchecked Sendable {
         latestSourceBuffer = source
         latestBuffer = pixelBuffer
         lastTime = lastTime.isValid ? max(lastTime, time) : time
+        if pixelBuffer !== source { showedProcessed = true }
         let sizeChanged = size != lastSize
         lastSize = size
         let first = !deliveredFirstFrame
@@ -209,6 +224,11 @@ final class FrameSink: @unchecked Sendable {
         }
 
         guard let layer, let description else { return }
+        Self.enqueue(pixelBuffer, description: description, on: layer)
+    }
+
+    private static func enqueue(_ pixelBuffer: CVPixelBuffer, description: CMVideoFormatDescription,
+                                on layer: AVSampleBufferDisplayLayer) {
         var timing = CMSampleTimingInfo(duration: .invalid,
                                         presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
                                         decodeTimeStamp: .invalid)
