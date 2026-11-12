@@ -242,6 +242,32 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertTrue(storedKeys.isEmpty, "\(storedKeys)")
     }
 
+    /// A key is stored, but macOS did not hand it out: "enter the key" would contradict
+    /// "A key is stored in the keychain" right above it
+    func testTestAndTheListSayWhenTheStoredKeyIsNotHandedOut() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        keysThere = [LLMProvider.openAI.id: nil as String?]
+        _ = try showPage()
+        XCTAssertTrue(page.hasStoredKey)
+        let refused = TranslationEngines.failure(for: .apiKey, in: LLMConnection(provider: .openAI),
+                                                 keyIsStored: true).message
+        page.runTest()
+        XCTAssertEqual(page.testOutcome, .init(text: refused, failed: true))
+        page.loadModels()
+        XCTAssertEqual(page.modelsProblem, refused)
+    }
+
+    /// Without a stored key the page still asks for one
+    func testTestAsksForAKeyWhenNoneIsStored() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        _ = try showPage()
+        let missing = TranslationEngines.failure(for: .apiKey, in: LLMConnection(provider: .openAI)).message
+        page.runTest()
+        XCTAssertEqual(page.testOutcome, .init(text: missing, failed: true))
+        page.loadModels()
+        XCTAssertEqual(page.modelsProblem, missing)
+    }
+
     // MARK: Leaving the window
 
     /// Translate in the mirror window uses what the field shows, also when the settings window

@@ -482,6 +482,16 @@ extension TextSettingsView {
                                  apiKey: entered.isEmpty ? keys.key(provider.id) : entered)
         }
 
+        /// What the user still has to enter, as translating would say it. A key that is stored
+        /// but that macOS did not hand out is not "missing": the page says it is stored. A typed
+        /// key is never such a key.
+        private func failureMessage(for missing: LLMMissingSetting, in connection: LLMConnection) -> String {
+            let keyIsStored = missing == .apiKey
+                && enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && keys.hasKey(provider.id)
+            return TranslationEngines.failure(for: missing, in: connection, keyIsStored: keyIsStored).message
+        }
+
         func loadModels() {
             stopWork()
             commitDrafts()
@@ -489,7 +499,7 @@ extension TextSettingsView {
             let connection = enteredConnection()
             // the list needs no model; the address and the key it does need
             if let missing = connection.missing, missing != .model {
-                modelsProblem = TranslationEngines.failure(for: missing, in: connection).message
+                modelsProblem = failureMessage(for: missing, in: connection)
                 return
             }
             isLoadingModels = true
@@ -519,7 +529,7 @@ extension TextSettingsView {
             testOutcome = nil
             let connection = enteredConnection()
             if let missing = connection.missing {
-                testOutcome = Outcome(text: TranslationEngines.failure(for: missing, in: connection).message, failed: true)
+                testOutcome = Outcome(text: failureMessage(for: missing, in: connection), failed: true)
                 return
             }
             let target = settings.translationTarget
