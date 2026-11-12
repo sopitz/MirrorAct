@@ -21,6 +21,25 @@ final class SettingsLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(height + SettingsView.windowChrome, smallScreen)
     }
 
+    func testTextFitsOnSmallScreen() {
+        let height = pageHeight(TextSettingsView(), visibleHeight: smallScreen)
+        XCTAssertLessThanOrEqual(height + SettingsView.windowChrome, smallScreen)
+    }
+
+    /// the longest the text page gets: a service with address, key and all its lines
+    func testTextWithALanguageModelServiceFitsOnSmallScreen() {
+        let settings = AppSettings.shared
+        let engine = settings.translationEngine, provider = settings.llmProvider
+        defer {
+            settings.translationEngine = engine
+            settings.llmProvider = provider
+        }
+        settings.translationEngine = "llm"
+        settings.llmProvider = LLMProvider.custom.id
+        let height = pageHeight(TextSettingsView(), visibleHeight: smallScreen)
+        XCTAssertLessThanOrEqual(height + SettingsView.windowChrome, smallScreen)
+    }
+
     /// on large screens everything stays visible without scrolling
     func testPagesKeepTheirFullHeightOnLargeScreens() {
         XCTAssertEqual(pageHeight(GeneralSettingsView(), visibleHeight: largeScreen),

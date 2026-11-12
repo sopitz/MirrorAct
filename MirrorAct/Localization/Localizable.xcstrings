@@ -2986,6 +2986,616 @@
           }
         }
       }
+    },
+    "Text" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text"
+          }
+        }
+      }
+    },
+    "Copy the text on the screen (⌥⌘T)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text auf dem Bildschirm kopieren (⌥⌘T)"
+          }
+        }
+      }
+    },
+    "Translate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen"
+          }
+        }
+      }
+    },
+    "Translate the text on the screen in place (⇧⌘T) – language under Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text auf dem Bildschirm an Ort und Stelle übersetzen (⇧⌘T) – Sprache in den Einstellungen"
+          }
+        }
+      }
+    },
+    "Text recognition failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texterkennung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "No text found" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Text gefunden"
+          }
+        }
+      }
+    },
+    "Text copied to the clipboard" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text in die Zwischenablage kopiert"
+          }
+        }
+      }
+    },
+    "No video to translate yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch kein Bild zum Übersetzen"
+          }
+        }
+      }
+    },
+    "Translation into %@ isn’t available on this Mac" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen ist auf diesem Mac nicht verfügbar (Zielsprache: %@)"
+          }
+        }
+      }
+    },
+    "Translation failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Copy Text on Screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text auf dem Bildschirm kopieren"
+          }
+        }
+      }
+    },
+    "Translate Text on Screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text auf dem Bildschirm übersetzen"
+          }
+        }
+      }
+    },
+    "Translate into" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen nach"
+          }
+        }
+      }
+    },
+    "Loading %@ for translating …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wird zum Übersetzen geladen …"
+          }
+        }
+      }
+    },
+    "Loading %@ failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ konnte nicht geladen werden"
+          }
+        }
+      }
+    },
+    "%@ is not loaded yet – turn translating on again to load it" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist noch nicht geladen – zum Laden das Übersetzen erneut einschalten"
+          }
+        }
+      }
+    },
+    "%@ can’t be translated on this Mac" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lässt sich auf diesem Mac nicht übersetzen"
+          }
+        }
+      }
+    },
+    "Translation failed: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung fehlgeschlagen: %@"
+          }
+        }
+      }
+    },
+    "Translation on this Mac is not responding" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Übersetzung auf diesem Mac reagiert nicht"
+          }
+        }
+      }
+    },
+    "Custom" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzerdefiniert"
+          }
+        }
+      }
+    },
+    "%@ answered instead, because the chosen model declined" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat stattdessen geantwortet, weil das gewählte Modell abgelehnt hat"
+          }
+        }
+      }
+    },
+    "cannot be reached at %@ – is it running?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ist unter %@ nicht erreichbar – läuft der Server?"
+          }
+        }
+      }
+    },
+    "the API key was not accepted" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "der API-Schlüssel wurde nicht akzeptiert"
+          }
+        }
+      }
+    },
+    "access was denied – check what the API key may be used for" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zugriff verweigert – prüfen, wofür der API-Schlüssel verwendet werden darf"
+          }
+        }
+      }
+    },
+    "the model %@ is not available – choose another one in the settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "das Modell %@ ist nicht verfügbar – in den Einstellungen ein anderes wählen"
+          }
+        }
+      }
+    },
+    "no credit left, or the spending limit is reached" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kein Guthaben mehr, oder das Ausgabenlimit ist erreicht"
+          }
+        }
+      }
+    },
+    "too many requests right now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "gerade zu viele Anfragen"
+          }
+        }
+      }
+    },
+    "the service is busy right now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "der Dienst ist gerade ausgelastet"
+          }
+        }
+      }
+    },
+    "the request was rejected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "die Anfrage wurde abgelehnt"
+          }
+        }
+      }
+    },
+    "the request was rejected (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "die Anfrage wurde abgelehnt (%@)"
+          }
+        }
+      }
+    },
+    "the model declined to translate this text" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "das Modell hat es abgelehnt, diesen Text zu übersetzen"
+          }
+        }
+      }
+    },
+    "the model’s answer cannot be used – choose another model in the settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "die Antwort des Modells ist nicht brauchbar – in den Einstellungen ein anderes Modell wählen"
+          }
+        }
+      }
+    },
+    "the service reported an error (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "der Dienst hat einen Fehler gemeldet (%@)"
+          }
+        }
+      }
+    },
+    "Enter the address of the service in the settings first" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuerst in den Einstellungen die Adresse des Dienstes eingeben"
+          }
+        }
+      }
+    },
+    "The address %@ cannot be used – check it in the settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Adresse %@ ist nicht verwendbar – in den Einstellungen prüfen"
+          }
+        }
+      }
+    },
+    "Enter the API key for %@ in the settings first" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuerst in den Einstellungen den API-Schlüssel für %@ eingeben"
+          }
+        }
+      }
+    },
+    "Choose a model for %@ in the settings first" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuerst in den Einstellungen ein Modell für %@ wählen"
+          }
+        }
+      }
+    },
+    "Translate with" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen mit"
+          }
+        }
+      }
+    },
+    "This Mac (Apple)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Mac (Apple)"
+          }
+        }
+      }
+    },
+    "A language model service, with your own API key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Sprachmodell-Dienst, mit eigenem API-Schlüssel"
+          }
+        }
+      }
+    },
+    "Language model service" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprachmodell-Dienst"
+          }
+        }
+      }
+    },
+    "Service" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dienst"
+          }
+        }
+      }
+    },
+    "Runs on this Mac or in your network; nothing is sent to the internet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft auf diesem Mac oder im eigenen Netzwerk; nichts geht ins Internet."
+          }
+        }
+      }
+    },
+    "The text recognized on the screen is sent to %@ to be translated. Nothing is sent while translating is off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der auf dem Bildschirm erkannte Text wird zum Übersetzen an %@ gesendet. Solange das Übersetzen aus ist, wird nichts gesendet."
+          }
+        }
+      }
+    },
+    "Address" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adresse"
+          }
+        }
+      }
+    },
+    "Models" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelle"
+          }
+        }
+      }
+    },
+    "Load the list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Liste laden"
+          }
+        }
+      }
+    },
+    "API key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schlüssel"
+          }
+        }
+      }
+    },
+    "A key is stored in the keychain." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Schlüssel ist im Schlüsselbund gesichert."
+          }
+        }
+      }
+    },
+    "No key is stored yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch kein Schlüssel gesichert."
+          }
+        }
+      }
+    },
+    "No key is stored; this service may not need one." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Schlüssel gesichert; dieser Dienst braucht womöglich keinen."
+          }
+        }
+      }
+    },
+    "Get a key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlüssel holen"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern"
+          }
+        }
+      }
+    },
+    "Test" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Testen"
+          }
+        }
+      }
+    },
+    "Answer: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antwort: %@"
+          }
+        }
+      }
+    },
+    "The key could not be removed from the keychain." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Schlüssel konnte nicht aus dem Schlüsselbund entfernt werden."
+          }
+        }
+      }
+    },
+    "The key could not be stored in the keychain. It is used until MirrorAct quits." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Schlüssel konnte nicht im Schlüsselbund gesichert werden. Er wird verwendet, bis MirrorAct beendet wird."
+          }
+        }
+      }
+    },
+    "The service lists no models for translating." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Dienst führt keine Modelle zum Übersetzen auf."
+          }
+        }
+      }
+    },
+    "“Text” in the mirror window copies the text on the screen, “Translate” shows its translation in place, also while you scroll. With “This Mac”, both run on this Mac; macOS asks once before it downloads a language." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Text» im Spiegelfenster kopiert den Text auf dem Bildschirm, «Übersetzen» zeigt seine Übersetzung an Ort und Stelle, auch beim Scrollen. Mit «Dieser Mac» läuft beides auf diesem Mac; macOS fragt einmal, bevor es eine Sprache lädt."
+          }
+        }
+      }
+    },
+    "Translating with %@ – the text on the screen is sent there" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen mit %@ – der Text auf dem Bildschirm wird dorthin gesendet"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

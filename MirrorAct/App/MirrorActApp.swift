@@ -80,6 +80,11 @@ struct MirrorCommands: Commands {
             .keyboardShortcut("r")
             Toggle("Record with Device Frame", isOn: $settings.recordWithFrame)
             Divider()
+            Button("Copy Text on Screen") { mirror?.session.copyText() }
+                .keyboardShortcut("t", modifiers: [.command, .option])
+            Button("Translate Text on Screen") { mirror?.session.translator.toggle() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+            Divider()
             Button("Control Device") { mirror?.toggleControl() }
                 .keyboardShortcut("c", modifiers: [.command, .option])
             Divider()

@@ -45,15 +45,25 @@ final class VideoDisplayView: NSView {
     }
 }
 
+/// Sees every frame before it is shown and recorded and may replace it, e.g. with a copy that
+/// has the translations drawn in. Called on the thread that delivers the frame, one call at a time.
+protocol FrameProcessor: AnyObject {
+    func process(_ pixelBuffer: CVPixelBuffer, time: CMTime) -> CVPixelBuffer
+}
+
 /// Accepts frames from any thread, keeps the latest one (for screenshots)
 /// and passes them on to the display.
 final class FrameSink: @unchecked Sendable {
     private let lock = NSLock()
+    /// held while a frame is processed and shown, so that frames stay in order
+    private let presenting = NSLock()
     private var latestBuffer: CVPixelBuffer?
+    private var latestSourceBuffer: CVPixelBuffer?
     private var lastSize: CGSize = .zero
     private var layer: AVSampleBufferDisplayLayer?
     private var formatDescription: CMVideoFormatDescription?
     private var activeRecorder: MirrorRecorder?
+    private var activeProcessor: FrameProcessor?
 
     /// on the main thread: new frame size (e.g. rotation)
     var onSizeChange: ((CGSize) -> Void)?
@@ -77,10 +87,24 @@ final class FrameSink: @unchecked Sendable {
         recorder?.appendAudio(sampleBuffer)
     }
 
+    /// changes the frames on their way to the display and the recorder (nil = shown as they arrive)
+    var processor: FrameProcessor? {
+        get { lock.lock(); defer { lock.unlock() }; return activeProcessor }
+        set { lock.lock(); activeProcessor = newValue; lock.unlock() }
+    }
+
+    /// the latest frame as shown (with what the processor drew into it)
     var latest: CVPixelBuffer? {
         lock.lock()
         defer { lock.unlock() }
         return latestBuffer
+    }
+
+    /// the latest frame as the device sent it
+    var latestSource: CVPixelBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        return latestSourceBuffer
     }
 
     var size: CGSize {
@@ -92,6 +116,7 @@ final class FrameSink: @unchecked Sendable {
     func clear() {
         lock.lock()
         latestBuffer = nil
+        latestSourceBuffer = nil
         deliveredFirstFrame = false
         let layer = self.layer
         lock.unlock()
@@ -100,9 +125,27 @@ final class FrameSink: @unchecked Sendable {
 
     /// time: host time of the frame (for recordings); "now" if omitted
     func push(_ pixelBuffer: CVPixelBuffer, time: CMTime? = nil) {
+        presenting.lock()
+        defer { presenting.unlock() }
+        present(pixelBuffer, time: time ?? MirrorRecorder.now)
+    }
+
+    /// Runs the latest frame through the processor again and shows the result. A still screen
+    /// sends no new frames, so this is how something that arrives later (a translation) gets
+    /// into the picture and into a running recording.
+    func redisplay() {
+        presenting.lock()
+        defer { presenting.unlock() }
+        guard let source = latestSource else { return }
+        present(source, time: MirrorRecorder.now)
+    }
+
+    private func present(_ source: CVPixelBuffer, time: CMTime) {
+        let pixelBuffer = processor?.process(source, time: time) ?? source
         let size = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
 
         lock.lock()
+        latestSourceBuffer = source
         latestBuffer = pixelBuffer
         let sizeChanged = size != lastSize
         lastSize = size
@@ -120,7 +163,7 @@ final class FrameSink: @unchecked Sendable {
         let recorder = activeRecorder
         lock.unlock()
 
-        recorder?.appendVideo(pixelBuffer, at: time ?? MirrorRecorder.now)
+        recorder?.appendVideo(pixelBuffer, at: time)
 
         if sizeChanged || first {
             DispatchQueue.main.async { [weak self] in

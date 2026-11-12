@@ -63,6 +63,9 @@ targets:
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp
+        # a language model that runs on this Mac or in the local network (http://localhost, IP addresses, .local)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: MirrorAct/MirrorAct.entitlements
       properties:

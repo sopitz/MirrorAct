@@ -50,6 +50,10 @@ final class MirrorSession: ObservableObject, Identifiable {
     @Published private(set) var controlState: ControlState?
     var isControlReady: Bool { controlState == .ready }
 
+    /// translates the text on the screen in place (see `ScreenTranslator`)
+    let translator: ScreenTranslator
+    @Published private(set) var isTranslating = false
+
     var onMuteChange: ((Bool) -> Void)?
     /// window was closed: stop the source
     var onClose: (() -> Void)?
@@ -62,6 +66,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         self.deviceName = deviceName
         self.modelIdentifier = modelIdentifier
         self.muted = muted
+        translator = ScreenTranslator(sink: sink)
         profile = DeviceProfile.resolve(modelIdentifier: modelIdentifier, screenPixels: nil,
                                         frameSize: CGSize(width: 1170, height: 2532))
         sink.onSizeChange = { [weak self] size in
@@ -73,6 +78,8 @@ final class MirrorSession: ObservableObject, Identifiable {
         sink.onFirstFrame = { [weak self] in
             MainActor.assumeIsolated { self?.state = .live }
         }
+        translator.onMessage = { [weak self] message in self?.showToast(message) }
+        translator.$isActive.assign(to: &$isTranslating)
     }
 
     private func updateProfile() {
@@ -225,5 +232,30 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
         FrameRenderer.copyToPasteboard(image)
         showToast(String(localized: "Copied to the clipboard"))
+    }
+
+    // MARK: Text
+
+    /// Reads the text on the screen (Vision, on this Mac) and copies it to the clipboard:
+    /// the text of the device, also while its translation is shown
+    func copyText() {
+        guard let buffer = sink.latestSource ?? sink.latest else {
+            NSSound.beep()
+            return
+        }
+        Task { [weak self] in
+            guard let lines = await TextRecognizer.recognize(buffer) else {
+                self?.showToast(String(localized: "Text recognition failed"))
+                return
+            }
+            guard !lines.isEmpty else {
+                NSSound.beep()
+                self?.showToast(String(localized: "No text found"))
+                return
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(TextLayout.plainText(lines), forType: .string)
+            self?.showToast(String(localized: "Text copied to the clipboard"))
+        }
     }
 }

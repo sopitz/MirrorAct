@@ -1,0 +1,748 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import AppKit
+import NaturalLanguage
+import SwiftUI
+import Translation
+
+/// Translates on this Mac with Apple's Translation framework; no text leaves the Mac.
+///
+/// The framework hands out its sessions only to SwiftUI views (`translationTask`), one language
+/// pair per session, and a session may only be used while its view exists. So the engine keeps
+/// one invisible view per language pair in use (`AppleTranslationHost`, shown in a window nobody
+/// sees). The task of each view runs `serve`, which translates the jobs queued for its pair and
+/// does not return before the pair is no longer needed. The texts of a request are sorted by
+/// their language first (`LanguageMatching`), because a session translates from one language only.
+///
+/// All mirror windows share the engine. Each turn of translating of a window talks to it
+/// through an `AppleTranslationClient` of its own, which gets the notices of its requests and
+/// whose `cancel` ends its own work only.
+@MainActor
+final class AppleTranslationEngine: ObservableObject {
+    /// One for the whole app: all mirror windows share the sessions and the window that holds them.
+    static let shared = AppleTranslationEngine()
+
+    init() {}
+
+    /// One entry per language pair in use; `AppleTranslationHostView` shows a view for each
+    @Published private(set) var hosts: [AppleTranslationHost] = []
+
+    /// seconds macOS may take to say which languages and pairs it translates
+    var questionLimit: TimeInterval = 20
+    /// seconds a job waits for a session before it is given up
+    var pickUpLimit: TimeInterval = 20
+    /// seconds a session may take to answer before the caller stops waiting for it
+    var answerLimit: TimeInterval = 60
+    /// seconds without work after which a pair gives its session back
+    var idleLimit: TimeInterval = 300
+    /// seconds a pair whose languages could not be loaded is left alone
+    var retryPause: TimeInterval = 60
+    /// seconds to wait for languages that macOS is loading
+    var loadingLimit: TimeInterval = 1800
+
+    private var window: NSWindow?
+    /// The window normally lies outside of all screens. Should the views not start there, it is
+    /// moved onto the main screen for good (it is not to be seen there either).
+    private var keepsWindowOnScreen = false
+    /// the languages macOS translates; asked once, the list does not change while the app runs
+    private var supported: [Locale.Language] = []
+
+    private var signals: [UUID: AppleTranslationSignal] = [:]
+    /// hosts whose view has started and holds a session
+    private var serving: Set<UUID> = []
+    /// hosts that take no more jobs and end after what they are doing
+    private var ending: Set<UUID> = []
+    /// hosts that wait for macOS to load their languages
+    private var loading: Set<UUID> = []
+
+    /// jobs no session has taken yet, oldest first
+    private var waiting: [AppleTranslationJob] = []
+    /// jobs a session is working on
+    private var running: [AppleTranslationJob] = []
+
+    /// the clients whose translating is on, by `ObjectIdentifier`
+    private var clients: [ObjectIdentifier: AppleTranslationClient.Reference] = [:]
+
+    // What follows is forgotten when translating is turned on again (a new client asks).
+    /// pairs whose languages the user did not let macOS load
+    private var declined: Set<String> = []
+    /// whether macOS can translate a pair at all
+    private var pairSupport: [String: Bool] = [:]
+
+    /// pairs whose languages failed to load, and when they may be tried again
+    private var blockedUntil: [String: TimeInterval] = [:]
+
+    private static var clock: TimeInterval { ProcessInfo.processInfo.systemUptime }
+
+    /// the language the app shows its own texts in
+    private static var noticeLocale: Locale {
+        Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")
+    }
+
+    private static func pair(_ source: Locale.Language, _ target: Locale.Language) -> String {
+        "\(LanguageMatching.key(source))→\(LanguageMatching.key(target))"
+    }
+
+    // MARK: Requests
+
+    /// What `AppleTranslationClient.translate` does: the texts of one request of `client`.
+    func translate(_ texts: [String], into wanted: Locale.Language,
+                   for client: AppleTranslationClient) async throws -> [String?] {
+        guard !texts.isEmpty else { return [] }
+        guard register(client) else { return [String?](repeating: nil, count: texts.count) }
+        guard let supported = await supportedLanguages() else {
+            // no answer from macOS: not now
+            noteNoAnswer(to: client)
+            return [String?](repeating: nil, count: texts.count)
+        }
+        guard let target = LanguageMatching.match(wanted, in: supported) else {
+            let language = LanguageMatching.name(of: wanted, in: Self.noticeLocale)
+            throw TranslationFailure(message: String(localized: "Translation into \(language) isn’t available on this Mac"),
+                                     isPermanent: true)
+        }
+        // telling the languages apart takes a moment: not on the main thread
+        let tags = LanguageMatching.recognizerTags(for: supported)
+        let read = await Task.detached(priority: .userInitiated) {
+            AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: supported)
+        }.value
+        if let common = read.common { client.commonLanguage = common }
+        let plan = LanguageMatching.Plan(findings: read.findings, common: client.commonLanguage, target: target,
+                                         supported: supported)
+        var results = plan.results(for: texts)
+        for language in plan.unknown { noteUntranslatable(language, to: [client]) }
+
+        // one job per language; their sessions work side by side
+        var pending: [(group: LanguageMatching.Plan.Group, answer: Task<[String?], Error>)] = []
+        for group in plan.groups {
+            let pair = Self.pair(group.source, target)
+            client.pairs.insert(pair)
+            let groupTexts = group.indices.map { texts[$0] }
+            guard let translatable = await isSupported(pair, from: group.source, to: target) else {
+                noteNoAnswer(to: client)
+                continue
+            }
+            guard translatable else {
+                // nothing to be done for this language: its texts stay, and are not asked for again
+                group.place(groupTexts.map { Optional($0) }, in: &results)
+                noteUntranslatable(group.source, to: [client])
+                continue
+            }
+            // turned off meanwhile, or the languages are not on this Mac (yet): nil, the caller asks again
+            if Task.isCancelled || client.isCancelled || isPostponed(pair) { continue }
+            let job = AppleTranslationJob(client: client, pair: pair, source: group.source, target: target,
+                                          texts: groupTexts)
+            pending.append((group: group, answer: Task { try await self.answer(to: job) }))
+        }
+        var failure: Error?
+        var translated = false
+        for entry in pending {
+            do {
+                let translations = try await entry.answer.value
+                entry.group.place(translations, in: &results)
+                translated = true
+            } catch {
+                if failure == nil { failure = error }
+            }
+        }
+        if let failure {
+            // the request as a whole failed only if nothing came of it
+            guard translated else { throw failure }
+            let message = (failure as? TranslationFailure)?.message ?? failure.localizedDescription
+            note("failed " + message, message, to: [client])
+        }
+        return results
+    }
+
+    /// The first request of a client turns its translating on. false = it was cancelled already.
+    private func register(_ client: AppleTranslationClient) -> Bool {
+        guard !client.isCancelled else { return false }
+        let key = ObjectIdentifier(client)
+        if clients[key]?.client !== client {
+            // translating was turned on again: ask macOS again what was declined or unknown
+            declined.removeAll()
+            pairSupport.removeAll()
+            clients[key] = AppleTranslationClient.Reference(client: client)
+        }
+        return true
+    }
+
+    /// The clients whose translating is on
+    private var activeClients: [AppleTranslationClient] {
+        clients.values.compactMap(\.client).filter { !$0.isCancelled }
+    }
+
+    /// `AppleTranslationClient.cancel`: its jobs are answered "not now" at once; the sessions stay
+    /// for the other clients, and end once no client is left.
+    func cancel(_ client: AppleTranslationClient) {
+        clients[ObjectIdentifier(client)] = nil
+        // (a client that went away without cancelling counts as gone as well)
+        clients = clients.filter { $0.value.client.map { !$0.isCancelled } ?? false }
+        let jobs = (waiting + running).filter { $0.client === client }
+        waiting.removeAll { $0.client === client }
+        running.removeAll { $0.client === client }
+        for job in jobs { job.finish(job.postponed) }
+        guard clients.isEmpty else { return }
+        declined.removeAll()
+        pairSupport.removeAll()
+        for host in hosts {
+            if serving.contains(host.id) {
+                // it may be in the middle of a call on its session: it ends by itself after that
+                end(host)
+            } else {
+                remove(host)
+            }
+        }
+    }
+
+    /// nil = macOS did not answer in time
+    private func supportedLanguages() async -> [Locale.Language]? {
+        if supported.isEmpty {
+            // an empty answer is not kept: the next request asks again
+            guard let languages = await inTime({ await LanguageAvailability().supportedLanguages }) else {
+                Log.error("Translation: macOS did not say within \(Int(questionLimit)) s which languages it translates")
+                return nil
+            }
+            supported = languages
+            Log.info("Translation: macOS translates \(languages.map(\.minimalIdentifier).sorted().joined(separator: " "))")
+        }
+        return supported
+    }
+
+    /// macOS knows both languages, but not every pair of them. nil = it did not answer in time.
+    private func isSupported(_ pair: String, from source: Locale.Language, to target: Locale.Language) async -> Bool? {
+        if let known = pairSupport[pair] { return known }
+        guard let status = await inTime({ await LanguageAvailability().status(from: source, to: target) }) else {
+            Log.error("Translation: macOS did not say within \(Int(questionLimit)) s whether it translates \(pair)")
+            return nil
+        }
+        pairSupport[pair] = status != .unsupported
+        return status != .unsupported
+    }
+
+    /// The answer to a question to macOS, or nil when it takes longer than `questionLimit`: a
+    /// request must come back even if the framework does not.
+    private func inTime<Answer>(_ question: @escaping () async -> Answer) async -> Answer? {
+        let limit = UInt64(questionLimit * 1_000_000_000)
+        return await withCheckedContinuation { continuation in
+            let first = AppleTranslationFirstAnswer(continuation)
+            Task { first.give(await question()) }
+            Task {
+                try? await Task.sleep(nanoseconds: limit)
+                first.give(nil)
+            }
+        }
+    }
+
+    /// The texts of this pair cannot be translated right now: they are answered with nil, without a job
+    private func isPostponed(_ pair: String) -> Bool {
+        if declined.contains(pair) { return true }
+        if let until = blockedUntil[pair] {
+            if Self.clock < until { return true }
+            blockedUntil[pair] = nil
+        }
+        return hosts.contains { $0.pair == pair && loading.contains($0.id) && !ending.contains($0.id) }
+    }
+
+    // MARK: Jobs
+
+    /// Queues a job and waits for its answer. There always is one: from a session, or nil for
+    /// every text when no session took the job in time or translating was turned off.
+    private func answer(to job: AppleTranslationJob) async throws -> [String?] {
+        try await withCheckedThrowingContinuation { continuation in
+            job.wait(for: continuation)
+            enqueue(job)
+        }
+    }
+
+    private func enqueue(_ job: AppleTranslationJob) {
+        // decided while the job was on its way here
+        guard !job.client.isCancelled, !isPostponed(job.pair) else {
+            job.finish(job.postponed)
+            return
+        }
+        waiting.append(job)
+        wakeHost(for: job)
+        let limit = UInt64(pickUpLimit * 1_000_000_000)
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: limit)
+            self?.giveUp(job)
+        }
+    }
+
+    /// No session took the job in time.
+    private func giveUp(_ job: AppleTranslationJob) {
+        guard let index = waiting.firstIndex(where: { $0 === job }) else { return }
+        waiting.remove(at: index)
+        if hosts.contains(where: { $0.pair == job.pair && serving.contains($0.id) }) {
+            Log.error("Translation: the session for \(job.pair) was busy for \(Int(pickUpLimit)) s")
+        } else {
+            Log.error("Translation: no session for \(job.pair) within \(Int(pickUpLimit)) s; "
+                      + "the view that is to get it may not be running")
+            // a host whose view never started has no session: the next job gets a new one
+            for host in hosts where host.pair == job.pair {
+                remove(host)
+            }
+            if !keepsWindowOnScreen, let window {
+                keepsWindowOnScreen = true
+                Log.info("Translation: moving the window of the views onto the screen")
+                AppleTranslationHostWindow.place(window, onScreen: true)
+            }
+            // others that wait for the pair do not have to wait for nothing
+            if let next = waiting.first(where: { $0.pair == job.pair }) { wakeHost(for: next) }
+        }
+        noteNoAnswer(to: job.client)
+        job.finish(job.postponed)
+    }
+
+    /// The session did not answer in time. Its call cannot be taken back; the caller stops waiting.
+    private func overdue(_ job: AppleTranslationJob, on host: AppleTranslationHost) {
+        guard let index = running.firstIndex(where: { $0 === job }) else { return }
+        running.remove(at: index)
+        Log.error("Translation: no answer for \(job.pair) within \(Int(answerLimit)) s")
+        // the next job of the pair gets a new session
+        end(host)
+        noteNoAnswer(to: job.client)
+        job.finish(job.postponed)
+    }
+
+    private func takeJob(for pair: String) -> AppleTranslationJob? {
+        guard let index = waiting.firstIndex(where: { $0.pair == pair }) else { return nil }
+        return waiting.remove(at: index)
+    }
+
+    private func finishWaitingJobs(of pair: String, with answer: (AppleTranslationJob) -> [String?]) {
+        let jobs = waiting.filter { $0.pair == pair }
+        waiting.removeAll { $0.pair == pair }
+        for job in jobs { job.finish(answer(job)) }
+    }
+
+    // MARK: Hosts
+
+    /// Makes sure the pair of a job has a host that takes jobs, and wakes it.
+    private func wakeHost(for job: AppleTranslationJob) {
+        if !hosts.contains(where: { $0.pair == job.pair && !ending.contains($0.id) }) {
+            if window == nil { window = AppleTranslationHostWindow.make(for: self) }
+            let host = AppleTranslationHost(pair: job.pair, source: job.source, target: job.target)
+            let (stream, wake) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+            signals[host.id] = AppleTranslationSignal(stream: stream, wake: wake)
+            hosts.append(host)
+            Log.info("Translation: session for \(host.pair) requested")
+        }
+        for host in hosts where host.pair == job.pair {
+            signals[host.id]?.wake.yield()
+        }
+    }
+
+    /// Tells a host to end after what it is doing. It takes itself out of the list then.
+    private func end(_ host: AppleTranslationHost) {
+        ending.insert(host.id)
+        signals[host.id]?.wake.finish()
+    }
+
+    /// Takes a host out of the list, which ends its view and with it the session. Never while the
+    /// session is in use: `serve` does this when it is done, everyone else only for a host whose
+    /// view has not started.
+    private func remove(_ host: AppleTranslationHost) {
+        signals.removeValue(forKey: host.id)?.wake.finish()
+        serving.remove(host.id)
+        ending.remove(host.id)
+        setLoading(false, for: host)
+        hosts.removeAll { $0.id == host.id }
+    }
+
+    private func isEnding(_ host: AppleTranslationHost) -> Bool {
+        Task.isCancelled || ending.contains(host.id)
+    }
+
+    private func setLoading(_ isLoading: Bool, for host: AppleTranslationHost) {
+        let wasLoading = !loading.isEmpty
+        if isLoading {
+            loading.insert(host.id)
+        } else {
+            loading.remove(host.id)
+        }
+        // macOS may attach its question about loading languages to the window that asks: it has
+        // to be on a screen for that long
+        if wasLoading != !loading.isEmpty, !keepsWindowOnScreen, let window {
+            AppleTranslationHostWindow.place(window, onScreen: !loading.isEmpty)
+        }
+    }
+
+    /// Runs inside the `translationTask` of the host's view, on its session, and returns when the
+    /// pair is no longer needed. Only in here the session is valid, and the view has to stay
+    /// until this returns; that is why nobody else removes a host that is served.
+    func serve(_ host: AppleTranslationHost, with session: TranslationSession) async {
+        // a host that was given up meanwhile, or a second session for the same view
+        guard let signal = signals[host.id], !serving.contains(host.id) else { return }
+        serving.insert(host.id)
+        if await load(host, with: session) {
+            await work(for: host, on: signal, with: session)
+        }
+        remove(host)
+        Log.info("Translation: session for \(host.pair) ended")
+        // a job that came while this host was on its way out
+        if let job = waiting.first(where: { $0.pair == host.pair }) { wakeHost(for: job) }
+    }
+
+    /// Makes sure the languages of the pair are on this Mac. macOS asks the user before it loads
+    /// them. false = this host cannot translate.
+    private func load(_ host: AppleTranslationHost, with session: TranslationSession) async -> Bool {
+        var status = await LanguageAvailability().status(from: host.source, to: host.target)
+        if status == .supported, !isEnding(host) {
+            setLoading(true, for: host)
+            // loading takes minutes: those who wait for this pair ask again later
+            finishWaitingJobs(of: host.pair) { $0.postponed }
+            let language = LanguageMatching.name(of: host.source, in: Self.noticeLocale)
+            note("loading " + host.pair, String(localized: "Loading \(language) for translating …"),
+                 to: clients(using: host.pair))
+            Log.info("Translation: asking macOS to load the languages for \(host.pair)")
+            do {
+                try await session.prepareTranslation()
+            } catch {
+                setLoading(false, for: host)
+                // translating was turned off meanwhile: what became of the question no longer matters
+                if isEnding(host) { return false }
+                if Self.isCancellation(error) {
+                    declinedLoading(for: host)
+                } else {
+                    blockedUntil[host.pair] = Self.clock + retryPause
+                    Log.error("Translation: loading the languages for \(host.pair) failed: \(Self.describe(error))")
+                    note("not loaded " + host.pair, String(localized: "Loading \(language) failed"),
+                         to: clients(using: host.pair))
+                }
+                return false
+            }
+            // prepareTranslation also returns while the languages are still on their way
+            let start = Self.clock
+            status = await LanguageAvailability().status(from: host.source, to: host.target)
+            while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                status = await LanguageAvailability().status(from: host.source, to: host.target)
+            }
+            setLoading(false, for: host)
+            if status == .supported, !isEnding(host) {
+                blockedUntil[host.pair] = Self.clock + retryPause
+                Log.error("Translation: the languages for \(host.pair) are not there after \(Int(loadingLimit)) s")
+                note("not loaded " + host.pair, String(localized: "Loading \(language) failed"),
+                     to: clients(using: host.pair))
+                return false
+            }
+            if status == .installed { Log.info("Translation: the languages for \(host.pair) are loaded") }
+        }
+        if isEnding(host) { return false }
+        if status == .installed { return true }
+        // the answer has changed since the request looked: macOS cannot translate this pair
+        pairSupport[host.pair] = false
+        noteUntranslatable(host.source, to: clients(using: host.pair))
+        finishWaitingJobs(of: host.pair) { $0.unchanged }
+        return false
+    }
+
+    /// The user closed the question of macOS or its progress window: not now. Nothing is asked
+    /// again until translating is turned off and on.
+    private func declinedLoading(for host: AppleTranslationHost) {
+        declined.insert(host.pair)
+        Log.info("Translation: the languages for \(host.pair) were not loaded (cancelled)")
+        let language = LanguageMatching.name(of: host.source, in: Self.noticeLocale)
+        note("declined " + host.pair,
+             String(localized: "\(language) is not loaded yet – turn translating on again to load it"),
+             to: clients(using: host.pair))
+        finishWaitingJobs(of: host.pair) { $0.postponed }
+    }
+
+    /// Translates the jobs of the pair as they come, until the host has to end.
+    private func work(for host: AppleTranslationHost, on signal: AppleTranslationSignal, with session: TranslationSession) async {
+        var idle = idleTimer(for: host)
+        // woken once when the host was made, so jobs that were queued before the view started are seen
+        for await _ in signal.stream {
+            idle.cancel()
+            var intact = true
+            while intact, !isEnding(host), let job = takeJob(for: host.pair) {
+                intact = await run(job, on: session, for: host)
+            }
+            if !intact || isEnding(host) { break }
+            idle = idleTimer(for: host)
+        }
+        idle.cancel()
+    }
+
+    /// Ends the host when no job came for a while.
+    private func idleTimer(for host: AppleTranslationHost) -> Task<Void, Never> {
+        let limit = UInt64(idleLimit * 1_000_000_000)
+        return Task { [weak self] in
+            try? await Task.sleep(nanoseconds: limit)
+            guard !Task.isCancelled else { return }
+            self?.end(host)
+        }
+    }
+
+    /// One call on the session. false = the session may be broken and is not used again.
+    private func run(_ job: AppleTranslationJob, on session: TranslationSession, for host: AppleTranslationHost) async -> Bool {
+        var requests: [TranslationSession.Request] = []
+        for (index, text) in job.texts.enumerated() {
+            requests.append(TranslationSession.Request(sourceText: text, clientIdentifier: String(index)))
+        }
+        running.append(job)
+        let limit = UInt64(answerLimit * 1_000_000_000)
+        let watch = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: limit)
+            guard !Task.isCancelled else { return }
+            self?.overdue(job, on: host)
+        }
+        defer {
+            watch.cancel()
+            running.removeAll { $0 === job }
+        }
+        do {
+            let responses = try await session.translations(from: requests)
+            var translations = [String?](repeating: nil, count: job.texts.count)
+            for (position, response) in responses.enumerated() {
+                // the identifier says which text a response belongs to; without one, the order does
+                var index = response.clientIdentifier.flatMap { Int($0) }
+                if index == nil, responses.count == job.texts.count { index = position }
+                guard let index, translations.indices.contains(index) else { continue }
+                let translation = response.targetText
+                // an empty translation would blank the text on the screen
+                let isEmpty = translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                translations[index] = isEmpty ? job.texts[index] : translation
+            }
+            job.finish(translations)
+            return true
+        } catch {
+            if isEnding(host) {
+                // translating was turned off meanwhile, and the job is answered already
+                job.finish(job.postponed)
+            } else if Self.isCancellation(error) {
+                // macOS asked the user after all (the languages were removed?) and got no for an answer
+                declinedLoading(for: host)
+                job.finish(job.postponed)
+            } else if TranslationError.unsupportedLanguagePairing ~= error
+                        || TranslationError.unsupportedSourceLanguage ~= error
+                        || TranslationError.unsupportedTargetLanguage ~= error {
+                pairSupport[host.pair] = false
+                noteUntranslatable(host.source, to: clients(using: host.pair))
+                job.finish(job.unchanged)
+                finishWaitingJobs(of: host.pair) { $0.unchanged }
+            } else {
+                Log.error("Translation: \(host.pair) failed: \(Self.describe(error))")
+                job.fail(TranslationFailure(message: String(localized: "Translation failed: \(error.localizedDescription)")))
+            }
+            return false
+        }
+    }
+
+    // MARK: Notices
+
+    /// Shows a notice to each of `receivers` whose translating is on, once per turn of translating.
+    private func note(_ key: String, _ message: String, to receivers: [AppleTranslationClient]) {
+        for client in receivers where !client.isCancelled {
+            guard client.noticed.insert(key).inserted, let handler = client.notify else { continue }
+            handler(message)
+        }
+    }
+
+    /// The clients that asked for a pair: they are told what becomes of it
+    private func clients(using pair: String) -> [AppleTranslationClient] {
+        activeClients.filter { $0.pairs.contains(pair) }
+    }
+
+    /// Without this the user would see nothing at all when the framework does not answer.
+    private func noteNoAnswer(to client: AppleTranslationClient) {
+        note("no answer", String(localized: "Translation on this Mac is not responding"), to: [client])
+    }
+
+    private func noteUntranslatable(_ language: Locale.Language, to receivers: [AppleTranslationClient]) {
+        let languageName = LanguageMatching.name(of: language, in: Self.noticeLocale)
+        note("untranslatable " + LanguageMatching.key(language),
+             String(localized: "\(languageName) can’t be translated on this Mac"), to: receivers)
+    }
+
+    /// The user said no, or the task of the view was cancelled
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let nsError = error as NSError
+        return nsError.domain == NSCocoaErrorDomain && nsError.code == NSUserCancelledError
+    }
+
+    /// Domain and code tell more about an error of the framework than its text
+    private static func describe(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "\(nsError.domain) \(nsError.code): \(error.localizedDescription)"
+    }
+
+    // MARK: Languages of the texts
+
+    /// What the language recognizer makes of each text, and the language the texts have in
+    /// common (nil = cannot be told). Takes a moment: call it off the main thread.
+    nonisolated static func readLanguages(of texts: [String], tags: [String], supported: [Locale.Language])
+        -> (findings: [LanguageMatching.Finding], common: Locale.Language?) {
+        // one recognizer, used by this call only; it must not be shared between threads
+        let recognizer = NLLanguageRecognizer()
+        let constraints = tags.map { NLLanguage(rawValue: $0) }
+        let findings = texts.map { finding(for: [$0], with: recognizer, constraints: constraints, supported: supported) }
+        var common = LanguageMatching.prevailingLanguage(of: findings)
+        if common == nil, texts.count > 1 {
+            // nothing but short texts, a list of settings for example: together they are long enough
+            common = finding(for: texts, with: recognizer, constraints: constraints, supported: supported).decided
+        }
+        return (findings, common)
+    }
+
+    /// `texts` are read as one text.
+    private nonisolated static func finding(for texts: [String], with recognizer: NLLanguageRecognizer,
+                                            constraints: [NLLanguage], supported: [Locale.Language]) -> LanguageMatching.Finding {
+        recognizer.reset()
+        for text in texts { recognizer.processString(text) }
+        let open = hypotheses(of: recognizer)
+        // reset also removes the constraints
+        recognizer.reset()
+        recognizer.languageConstraints = constraints
+        for text in texts { recognizer.processString(text) }
+        let constrained = hypotheses(of: recognizer)
+        let letters = texts.reduce(0) { $0 + LanguageMatching.letterCount($1) }
+        return LanguageMatching.finding(letters: letters, open: open, constrained: constrained, supported: supported)
+    }
+
+    private nonisolated static func hypotheses(of recognizer: NLLanguageRecognizer) -> [LanguageMatching.Hypothesis] {
+        recognizer.languageHypotheses(withMaximum: 2).map {
+            LanguageMatching.Hypothesis(tag: $0.key.rawValue, probability: $0.value)
+        }
+    }
+}
+
+/// One turn of translating of one mirror window, on the engine all windows share
+/// (`AppleTranslationEngine.shared`). Its notices go to this turn only, and `cancel` ends this
+/// turn's work only: the sessions stay for the other windows. Like the engines of the language
+/// model services it serves one turn: once cancelled it answers every request with "not now".
+final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
+    let engine: AppleTranslationEngine
+    let name = "Apple"
+    let isRemote = false
+    let prefersSettledText = false
+
+    /// how the engine keeps its clients without keeping them alive
+    struct Reference {
+        weak var client: AppleTranslationClient?
+    }
+
+    /// protects `handler` and `cancelled`
+    private let lock = NSLock()
+    private var handler: ((String) -> Void)?
+    private var cancelled = false
+
+    // Used by the engine, on the main actor only
+    /// notices shown already
+    fileprivate var noticed: Set<String> = []
+    /// the language most of the last requests was in, for texts too short to tell
+    fileprivate var commonLanguage: Locale.Language?
+    /// the language pairs this client asked for: it is told what becomes of them
+    fileprivate var pairs: Set<String> = []
+
+    init(engine: AppleTranslationEngine) {
+        self.engine = engine
+    }
+
+    var notify: ((String) -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return handler
+        }
+        set {
+            lock.lock()
+            handler = newValue
+            lock.unlock()
+        }
+    }
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func translate(_ texts: [String], into target: Locale.Language) async throws -> [String?] {
+        guard !texts.isEmpty else { return [] }
+        guard !isCancelled else { return [String?](repeating: nil, count: texts.count) }
+        return try await engine.translate(texts, into: target, for: self)
+    }
+
+    func cancel() {
+        lock.lock()
+        let wasCancelled = cancelled
+        cancelled = true
+        lock.unlock()
+        guard !wasCancelled else { return }
+        let engine = self.engine
+        // at once where possible, so that turning translating off and on again keeps its order
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { engine.cancel(self) }
+        } else {
+            Task { @MainActor in engine.cancel(self) }
+        }
+    }
+}
+
+/// Gives a continuation the first of several answers and drops the others.
+private final class AppleTranslationFirstAnswer<Answer>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Answer?, Never>?
+
+    init(_ continuation: CheckedContinuation<Answer?, Never>) {
+        self.continuation = continuation
+    }
+
+    func give(_ answer: Answer?) {
+        lock.lock()
+        let waiting = continuation
+        continuation = nil
+        lock.unlock()
+        waiting?.resume(returning: answer)
+    }
+}
+
+/// Wakes the `serve` of one host; finished = the host has to end
+private struct AppleTranslationSignal {
+    let stream: AsyncStream<Void>
+    let wake: AsyncStream<Void>.Continuation
+}
+
+/// Texts in one language that wait for the session of their pair
+private final class AppleTranslationJob {
+    /// whose request it is
+    let client: AppleTranslationClient
+    let pair: String
+    let source: Locale.Language
+    let target: Locale.Language
+    let texts: [String]
+    private var continuation: CheckedContinuation<[String?], Error>?
+
+    init(client: AppleTranslationClient, pair: String, source: Locale.Language, target: Locale.Language,
+         texts: [String]) {
+        self.client = client
+        self.pair = pair
+        self.source = source
+        self.target = target
+        self.texts = texts
+    }
+
+    /// "not now" for every text: the caller asks again
+    var postponed: [String?] { [String?](repeating: nil, count: texts.count) }
+    /// "leave them as they are": the caller does not ask again
+    var unchanged: [String?] { texts.map { Optional($0) } }
+
+    func wait(for continuation: CheckedContinuation<[String?], Error>) {
+        self.continuation = continuation
+    }
+
+    /// Only the first answer counts: a job may be answered for its session when translating is
+    /// turned off or the session takes too long.
+    func finish(_ translations: [String?]) {
+        continuation?.resume(returning: translations)
+        continuation = nil
+    }
+
+    func fail(_ error: Error) {
+        continuation?.resume(throwing: error)
+        continuation = nil
+    }
+}

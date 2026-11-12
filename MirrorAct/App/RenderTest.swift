@@ -61,6 +61,7 @@ enum RenderTest {
                 FrameRenderer.writePNG(out, to: directory.appendingPathComponent("duo-\(pose.rawValue).png"))
             }
         }
+        renderTranslations(into: directory)
         MainActor.assumeIsolated {
             renderView(LauncherView(), to: directory.appendingPathComponent("launcher.png"))
             let cards = HStack(alignment: .top, spacing: 16) {
@@ -239,6 +240,114 @@ enum RenderTest {
                                   bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                                       | CGBitmapInfo.byteOrder32Little.rawValue) else { return nil }
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return buffer
+    }
+
+    /// Translations as the mirror window, screenshots and recordings show them: the test screen
+    /// with a few text blocks on it, once as BGRA and once as 4:2:0 video, which is what the
+    /// devices send. The boxes and texts should look the same in both pictures.
+    private static func renderTranslations(into directory: URL) {
+        guard let screen = testScreen(size: CGSize(width: 1170, height: 2532)), let bgra = pixelBuffer(from: screen),
+              let video = videoBuffer(from: bgra) else { return }
+        for (name, frame) in [("translation-bgra", bgra), ("translation-420", video)] {
+            guard let translated = TranslationCompositor().compose(frame, blocks: translationBlocks(on: frame)),
+                  let image = FrameRenderer.cgImage(from: translated) else {
+                print("\(name): not rendered")
+                continue
+            }
+            FrameRenderer.writePNG(image, to: directory.appendingPathComponent("\(name).png"))
+        }
+    }
+
+    /// Blocks as the tracker places them (pixels of the frame, counted from the top left)
+    private static func translationBlocks(on frame: CVPixelBuffer) -> [PlacedBlock] {
+        // colors: nil = those of the frame at this place, as when a block was read from it
+        func block(_ id: Int, _ text: String, _ rect: CGRect, lines: Int = 1, visible: CGRect? = nil,
+                   colors: BlockColors? = nil) -> PlacedBlock {
+            PlacedBlock(id: id, text: text, rect: rect, visibleRect: visible, lineCount: lines,
+                        colors: colors ?? BlockColors.estimate(pixels: FramePixels.colors(in: rect, of: frame)))
+        }
+        // on a white tile, in a color of its own: the background of the tile, the blue of a link
+        var link = block(4, "Mehr erfahren", CGRect(x: 141, y: 960, width: 210, height: 44))
+        link.colors.foreground = RGBColor(red: 0, green: 102, blue: 204)
+        let ink = RGBColor(red: 28, green: 28, blue: 30)
+        return [
+            block(1, "Übersetzter Titel", CGRect(x: 117, y: 300, width: 620, height: 84)),
+            block(2, "Ein längerer Absatz, der in der Übersetzung mehr Platz braucht als das Original und deshalb kleiner gesetzt wird.",
+                  CGRect(x: 117, y: 440, width: 936, height: 132), lines: 2,
+                  colors: BlockColors(background: RGBColor(red: 246, green: 246, blue: 248), foreground: ink)),
+            block(3, "Farben aus dem Bild: der Kasten hebt sich kaum vom Verlauf ab.",
+                  CGRect(x: 117, y: 630, width: 700.5, height: 150.5), lines: 3),
+            link,
+            block(5, "Löschen", CGRect(x: 469, y: 950, width: 208, height: 64),
+                  colors: BlockColors(background: RGBColor(red: 215, green: 0, blue: 21), foreground: .white)),
+            // far too long for its place: set smaller
+            block(6, "Benachrichtigungseinstellungen", CGRect(x: 790, y: 960, width: 222, height: 40)),
+            block(7, "Zwei Zeilen im Kästchen", CGRect(x: 135, y: 1290, width: 222, height: 96), lines: 2),
+            // the upper third is hidden, as under a title bar: nothing may be drawn there
+            block(8, "Dieser Absatz ist oben abgeschnitten, als läge eine Titelleiste darüber: nur der sichtbare Teil wird gezeichnet.",
+                  CGRect(x: 117, y: 1620, width: 936, height: 180), lines: 3,
+                  visible: CGRect(x: 117, y: 1680, width: 936, height: 120), colors: .blackOnWhite),
+            // written from the right: aligned at the right
+            block(9, "مرحبا بالعالم، هذه ترجمة", CGRect(x: 117, y: 1900, width: 936, height: 72),
+                  colors: BlockColors(background: RGBColor(red: 44, green: 44, blue: 46), foreground: .white)),
+            block(10, "设置与隐私：翻译后的文字", CGRect(x: 117, y: 2040, width: 936, height: 72),
+                  colors: BlockColors(background: ink, foreground: RGBColor(red: 255, green: 214, blue: 10))),
+            // hangs over the right edge of the frame
+            block(11, "Über den Rand hinaus", CGRect(x: 900, y: 2200, width: 420, height: 64),
+                  colors: BlockColors(background: RGBColor(red: 36, green: 138, blue: 61), foreground: .white)),
+        ]
+    }
+
+    /// The same picture as bi-planar 4:2:0 video (BT.709, video range), which is what the decoders deliver
+    private static func videoBuffer(from bgra: CVPixelBuffer) -> CVPixelBuffer? {
+        let width = CVPixelBufferGetWidth(bgra), height = CVPixelBufferGetHeight(bgra)
+        var buffer: CVPixelBuffer?
+        let attrs: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary]
+        CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                            attrs as CFDictionary, &buffer)
+        guard let buffer else { return nil }
+        CVPixelBufferLockBaseAddress(bgra, .readOnly)
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer {
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            CVPixelBufferUnlockBaseAddress(bgra, .readOnly)
+        }
+        guard let source = CVPixelBufferGetBaseAddress(bgra), let luma = CVPixelBufferGetBaseAddressOfPlane(buffer, 0),
+              let chroma = CVPixelBufferGetBaseAddressOfPlane(buffer, 1) else { return nil }
+        let sourceRowBytes = CVPixelBufferGetBytesPerRow(bgra)
+        let lumaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
+        let chromaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(buffer, 1)
+        for y in 0..<height {
+            let pixels = (source + y * sourceRowBytes).assumingMemoryBound(to: UInt8.self)
+            let row = (luma + y * lumaRowBytes).assumingMemoryBound(to: UInt8.self)
+            for x in 0..<width {
+                let color = RGBColor(red: pixels[x * 4 + 2], green: pixels[x * 4 + 1], blue: pixels[x * 4])
+                row[x] = YCbCrColor(color, fullRange: false).y
+            }
+        }
+        // one color for every 2 × 2 pixels: that of their mean
+        for y in 0..<(height + 1) / 2 {
+            let upper = (source + 2 * y * sourceRowBytes).assumingMemoryBound(to: UInt8.self)
+            let lower = (source + min(2 * y + 1, height - 1) * sourceRowBytes).assumingMemoryBound(to: UInt8.self)
+            let row = (chroma + y * chromaRowBytes).assumingMemoryBound(to: UInt8.self)
+            for x in 0..<(width + 1) / 2 {
+                let left = 2 * x * 4, right = min(2 * x + 1, width - 1) * 4
+                func mean(_ channel: Int) -> UInt8 {
+                    let above = Int(upper[left + channel]) + Int(upper[right + channel])
+                    let below = Int(lower[left + channel]) + Int(lower[right + channel])
+                    return UInt8((above + below + 2) / 4)
+                }
+                let color = YCbCrColor(RGBColor(red: mean(2), green: mean(1), blue: mean(0)), fullRange: false)
+                row[2 * x] = color.cb
+                row[2 * x + 1] = color.cr
+            }
+        }
+        // What kind of video this is. The compositor passes it on to its copy, and the way
+        // back into an image goes by it.
+        CVBufferSetAttachment(buffer, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
+        CVBufferSetAttachment(buffer, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
+        CVBufferSetAttachment(buffer, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate)
         return buffer
     }
 

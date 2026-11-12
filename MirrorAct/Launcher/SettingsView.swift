@@ -27,6 +27,10 @@ struct SettingsView: View {
                 .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("Style", systemImage: "paintpalette") }
                 .tag("design")
+            TextSettingsView()
+                .settingsPage(maxHeight: maxHeight)
+                .tabItem { Label("Text", systemImage: "text.viewfinder") }
+                .tag("text")
         }
         .frame(width: Self.width)
     }
