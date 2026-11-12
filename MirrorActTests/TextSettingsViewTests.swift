@@ -292,6 +292,28 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertNil(settings.llmBaseURLs[LLMProvider.ollama.id])
     }
 
+    // MARK: Where the text goes
+
+    /// The caption says where translating sends the text now, not where a half-typed address
+    /// would send it once it is applied
+    func testTheCaptionNamesTheAddressInUseWhileAnotherIsTyped() throws {
+        settings.llmProvider = LLMProvider.custom.id
+        settings.llmBaseURLs = [LLMProvider.custom.id: "https://api.example.com/v1"]
+        let view = try showPage()
+        XCTAssertEqual(page.serviceNotice, .remote("api.example.com"))
+
+        let address = try field(at: 0, in: view)
+        window?.makeFirstResponder(address)
+        spin()
+        (address.currentEditor() as? NSTextView)?.selectAll(nil)
+        type("http://192.168.1.5:8080", into: address)
+        XCTAssertEqual(page.addressDraft, "http://192.168.1.5:8080")
+        XCTAssertEqual(page.serviceNotice, .remote("api.example.com"))
+
+        pressReturn(in: address)
+        XCTAssertTrue(waitUntil { self.page.serviceNotice == .local })
+    }
+
     // MARK: Helpers
 
     private func showPage() throws -> NSView {

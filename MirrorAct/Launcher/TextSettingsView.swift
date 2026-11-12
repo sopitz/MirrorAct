@@ -101,7 +101,7 @@ struct TextSettingsView: View {
     @ViewBuilder
     private var serviceSection: some View {
         let provider = page.provider
-        let notice = Self.serviceNotice(for: page.shownConnection)
+        let notice = page.serviceNotice
         Section("Language model service") {
             Picker("Service", selection: providerSelection) {
                 ForEach(LLMProvider.all) { provider in
@@ -341,10 +341,13 @@ extension TextSettingsView {
             TranslationEngines.llmProvider(id: settings.llmProvider)
         }
 
-        /// The service as it is set up, without asking the keychain (that may make macOS ask the
-        /// user); for what the page shows
-        var shownConnection: LLMConnection {
-            LLMConnection(provider: provider, baseURL: addressDraft, model: modelDraft)
+        /// Where the caption says the recognized text goes: where translating sends it now, so
+        /// from the settings, not from an address that is being typed and not applied yet. Its
+        /// key is not needed, so the keychain (which may make macOS ask the user) is left alone.
+        var serviceNotice: ServiceNotice {
+            TextSettingsView.serviceNotice(for: LLMConnection(provider: provider,
+                                                              baseURL: settings.llmBaseURLs[provider.id],
+                                                              model: settings.llmModels[provider.id]))
         }
 
         /// The models the app suggests, then those the service listed
