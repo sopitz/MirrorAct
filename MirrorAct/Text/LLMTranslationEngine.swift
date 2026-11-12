@@ -61,8 +61,12 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
     }
 
-    /// seconds a request waits for its answer
+    /// Seconds a request to a service waits for its answer. A request gets no byte before the
+    /// whole answer is there, so this is the time the model may take.
     static let requestTimeout: TimeInterval = 60
+    /// The same for a server on this Mac or in the network: a large model on an ordinary
+    /// computer takes minutes for a full screen, the first time also to load the model.
+    static let localRequestTimeout: TimeInterval = 300
     /// Longest wait in seconds before a request is sent again. When the service asks for more,
     /// the user is told instead.
     static let longestRetryWait: TimeInterval = 5
@@ -100,7 +104,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         if let transport {
             self.transport = transport
         } else {
-            let session = Self.makeSession()
+            let session = Self.makeSession(timeout: Self.timeout(for: connection))
             self.session = session
             self.transport = session
         }
@@ -118,12 +122,20 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         return connection.provider.localizedName
     }
 
+    /// Seconds a request over `connection` waits for its answer
+    static func timeout(for connection: LLMConnection) -> TimeInterval {
+        connection.isLocal ? localRequestTimeout : requestTimeout
+    }
+
     /// Nothing of a request is kept on this Mac: no cookies, no cache. A redirect is not
     /// followed (`RedirectRefusal`).
-    /// - Parameter configure: changes the configuration before the session is made (for the tests)
-    static func makeSession(configure: (URLSessionConfiguration) -> Void = { _ in }) -> URLSession {
+    /// - Parameters:
+    ///   - timeout: seconds a request waits for its answer
+    ///   - configure: changes the configuration before the session is made (for the tests)
+    static func makeSession(timeout: TimeInterval = requestTimeout,
+                            configure: (URLSessionConfiguration) -> Void = { _ in }) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForRequest = timeout
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
@@ -244,6 +256,15 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
                 return texts
             }
             Log.info("Translation: \(name): asking again for \(texts.count) texts in two halves (\(Self.kind(of: error)))")
+            let half = (texts.count + 1) / 2
+            let first = try await translate(Array(texts[..<half]), system: system)
+            let second = try await translate(Array(texts[half...]), system: system)
+            return first + second
+        } catch let error as URLError where error.code == .timedOut && texts.count > 1 && !isCancellation(error) {
+            // The model did not finish in time. Sent again whole, it would not finish the next
+            // time either; half as many texts take about half as long. Says nothing about
+            // whether the model can be used, so it does not count against its patience.
+            Log.info("Translation: \(name): asking again for \(texts.count) texts in two halves (timed out)")
             let half = (texts.count + 1) / 2
             let first = try await translate(Array(texts[..<half]), system: system)
             let second = try await translate(Array(texts[half...]), system: system)

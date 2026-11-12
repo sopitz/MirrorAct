@@ -218,6 +218,36 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, 3)
     }
 
+    func testARequestThatTimesOutIsAskedForAgainInTwoHalves() async throws {
+        let texts = (1...25).map { "Text \($0)" }
+        // a slow model: more than ten texts take longer than a request may wait
+        let transport = ScriptedTransport { request, _ in
+            if sentTexts(request).count > 10 { throw URLError(.timedOut) }
+            return openAIReply(translated(request))
+        }
+        let engine = makeEngine(transport: transport)
+        let translations = try await engine.translate(texts, into: german)
+        XCTAssertEqual(translations, texts.map { Optional("de:" + $0) })
+        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [25, 13, 7, 6, 12, 6, 6])
+    }
+
+    func testASingleTextThatTimesOutIsAskedForLater() async {
+        let transport = ScriptedTransport { _, _ in throw URLError(.timedOut) }
+        let engine = makeEngine(transport: transport)
+        let failure = await failure { try await engine.translate(["Settings", "General"], into: self.german) }
+        // not left as it is: the next time the model may be quicker
+        XCTAssertEqual(failure?.isPermanent, false)
+        XCTAssertEqual(transport.requests.map { sentTexts($0) }, [["Settings", "General"], ["Settings"]])
+    }
+
+    func testAServerOnThisMacOrInTheNetworkHasMoreTimeToAnswer() {
+        let local = LLMTranslationEngine.timeout(for: LLMConnection(provider: .ollama, baseURL: "192.168.1.20:11434", model: "m"))
+        let remote = LLMTranslationEngine.timeout(for: LLMConnection(provider: .openAI, apiKey: "k"))
+        XCTAssertEqual(remote, LLMTranslationEngine.requestTimeout)
+        XCTAssertEqual(local, LLMTranslationEngine.localRequestTimeout)
+        XCTAssertGreaterThan(local, remote)
+    }
+
     func testATextTheModelDeclinesStaysAsItIsAndTheUserIsToldOnce() async throws {
         let transport = ScriptedTransport { request, _ in
             if sentTexts(request).contains("two") {
