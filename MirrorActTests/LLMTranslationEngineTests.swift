@@ -485,6 +485,21 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, 2)
     }
 
+    func testTheNoticeSaysHowLongALongWaitIs() async {
+        let transport = ScriptedTransport { _, _ in reply(429, rateLimited, headers: [LLMHeader("Retry-After", "590")]) }
+        let engine = makeEngine(transport: transport)
+        let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+        XCTAssertEqual(failure?.retryAfter, 590)
+        // otherwise the texts that come into view meanwhile stay untranslated without a word
+        XCTAssertEqual(failure?.message, "Mistral: " + String(localized: "too many requests right now")
+                       + " – " + String(localized: "trying again in \(10) min"))
+
+        // a short wait is not worth mentioning
+        let brief = ScriptedTransport { _, _ in reply(429, rateLimited, headers: [LLMHeader("Retry-After", "20")]) }
+        let other = await self.failure { try await self.makeEngine(transport: brief).translate(["Settings"], into: self.german) }
+        XCTAssertEqual(other?.message, "Mistral: " + String(localized: "too many requests right now"))
+    }
+
     func testAServiceThatKeepsFailingIsAskedLessAndLessOften() async throws {
         var failing = true
         let transport = ScriptedTransport { request, _ in

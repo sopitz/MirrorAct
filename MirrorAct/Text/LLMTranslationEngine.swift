@@ -217,7 +217,11 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
                 // translating was turned off meanwhile: "not now" for what is left
                 if isCancellation(error) { break }
                 var failure = self.failure(for: error)
-                if !failure.isPermanent { failure.retryAfter = backOff() }
+                if !failure.isPermanent {
+                    let wait = backOff()
+                    failure = TranslationFailure(message: failure.message + Self.words(forWait: wait),
+                                                 isPermanent: false, retryAfter: wait)
+                }
                 // the request as a whole failed only if nothing came of it
                 guard !results.isEmpty else { throw failure }
                 note(failure.message)
@@ -239,6 +243,13 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             notBefore = now() + wait
             return wait
         }
+    }
+
+    /// What a notice adds about a wait of `seconds` before the next request: nothing for a short
+    /// one. A long one is named, because until then new texts stay untranslated without a word.
+    private static func words(forWait seconds: TimeInterval) -> String {
+        guard seconds >= 60 else { return "" }
+        return " – " + String(localized: "trying again in \(Int((seconds / 60).rounded(.up))) min")
     }
 
     /// Translates one text and takes no answer but a usable one: for "Test" in the settings,
