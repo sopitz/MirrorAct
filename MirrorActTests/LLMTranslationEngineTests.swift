@@ -285,11 +285,41 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(transport: transport)
         let first = try await engine.translate(["Settings"], into: german)
         XCTAssertEqual(first, ["de:Settings"])
-        // from here on nothing usable: every text is asked for down to itself and stays as it is
+        // from here on nothing usable: the texts are asked for in halves and stay as they are
         let texts = (1...16).map { "Text \($0)" }
         let second = try await engine.translate(texts, into: german)
         XCTAssertEqual(second, texts)
-        XCTAssertEqual(transport.requests.count, 1 + 31)
+        XCTAssertEqual(transport.requests.count, 1 + LLMTranslationEngine.requestBudget(for: 16))
+    }
+
+    func testAScreenTheModelDeclinesCostsAFewRequestsNotOnePerText() async throws {
+        let transport = ScriptedTransport { request, number in
+            if number == 0 { return openAIReply(translated(request)) }
+            return reply(200, #"{"choices":[{"message":{"role":"assistant","content":null,"refusal":"I can't help with that."},"finish_reason":"stop"}]}"#)
+        }
+        let engine = makeEngine(.openAI, transport: transport)
+        _ = try await engine.translate(["Settings"], into: german)
+        let texts = (1...40).map { "Text \($0)" }
+        let translations = try await engine.translate(texts, into: german)
+        XCTAssertEqual(translations, texts)
+        // halving down to every single text would take 79 requests
+        XCTAssertEqual(LLMTranslationEngine.requestBudget(for: 40), 14)
+        XCTAssertEqual(transport.requests.count, 1 + 14)
+    }
+
+    func testOneTroublesomeTextAmongFortyIsStillFoundWithinTheBudget() async throws {
+        let transport = ScriptedTransport { request, number in
+            if number == 0 { return openAIReply(translated(request)) }
+            if sentTexts(request).contains("Text 29") { return openAIReply("[]") }
+            return openAIReply(translated(request))
+        }
+        let engine = makeEngine(transport: transport)
+        _ = try await engine.translate(["Settings"], into: german)
+        let texts = (1...40).map { "Text \($0)" }
+        let translations = try await engine.translate(texts, into: german)
+        XCTAssertEqual(translations, texts.map { Optional($0 == "Text 29" ? $0 : "de:" + $0) })
+        XCTAssertEqual(LLMTranslationEngine.requestBudget(for: 1), 2)
+        XCTAssertEqual(LLMTranslationEngine.requestBudget(for: 2), 4)
     }
 
     // MARK: Failures of the service
