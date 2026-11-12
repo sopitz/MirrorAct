@@ -6,7 +6,8 @@ import Translation
 /// (this Mac, or a language model service with the user's own API key).
 ///
 /// The API key goes straight into the keychain (`KeychainStore`); the field is emptied after
-/// saving and the key is never shown again.
+/// saving and the key is never shown again. A typed key is saved with Save, on Return, and when
+/// the service or the page changes, so that one Test worked with is not lost.
 struct TextSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
@@ -118,6 +119,7 @@ struct TextSettingsView: View {
         }
         .onDisappear {
             commitDrafts()
+            storeEnteredKey()
             stopWork()
         }
         .onChange(of: focusedField) { commitDrafts() }
@@ -215,6 +217,7 @@ struct TextSettingsView: View {
     @ViewBuilder
     private func keyRows(for provider: LLMProvider) -> some View {
         SecureField("API key", text: $enteredKey)
+            .onSubmit { storeEnteredKey() }
         HStack {
             Group {
                 if let keyProblem {
@@ -257,6 +260,7 @@ struct TextSettingsView: View {
             guard id != provider.id else { return }
             stopWork()
             commitDrafts()
+            storeEnteredKey()
             settings.llmProvider = id
             loadDrafts()
             enteredKey = ""
@@ -324,6 +328,12 @@ struct TextSettingsView: View {
         enteredKey = ""
         testOutcome = nil
         refreshKeyState()
+    }
+
+    /// Saves a key that was typed and not saved yet, for the service shown
+    private func storeEnteredKey() {
+        guard !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        storeKey(enteredKey)
     }
 
     private func stopWork() {

@@ -93,6 +93,42 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertTrue(waitUntil { self.settings.llmBaseURLs[LLMProvider.ollama.id] == "http://studio.local:11434" })
     }
 
+    // MARK: The key
+
+    /// Return in the key field stores the key, like Save
+    func testTheKeyIsStoredOnReturn() throws {
+        settings.llmProvider = LLMProvider.custom.id
+        let page = try showPage()
+        let key = try field(at: 2, in: page)
+        XCTAssertTrue(key is NSSecureTextField)
+        type("sk-test", into: key)
+        XCTAssertTrue(storedKeys.isEmpty)
+        pressReturn(in: key)
+        XCTAssertTrue(waitUntil { !self.storedKeys.isEmpty })
+        XCTAssertEqual(storedKeys.first?.key, "sk-test")
+        XCTAssertEqual(storedKeys.first?.provider, LLMProvider.custom.id)
+    }
+
+    /// A key that was typed and not saved is not lost when the window closes: Test may have
+    /// worked with it, and translating would then ask for a key
+    func testATypedKeyIsStoredWhenThePageCloses() throws {
+        settings.llmProvider = LLMProvider.custom.id
+        let page = try showPage()
+        type("sk-test", into: try field(at: 2, in: page))
+        closePage()
+        XCTAssertTrue(waitUntil { !self.storedKeys.isEmpty })
+        XCTAssertEqual(storedKeys.map(\.key), ["sk-test"])
+        XCTAssertEqual(storedKeys.first?.provider, LLMProvider.custom.id)
+    }
+
+    /// Nothing typed, nothing stored: closing the page must not remove a key that is there
+    func testClosingThePageWithoutAKeyStoresNothing() throws {
+        settings.llmProvider = LLMProvider.custom.id
+        _ = try showPage()
+        closePage()
+        XCTAssertTrue(storedKeys.isEmpty)
+    }
+
     // MARK: Helpers
 
     private func showPage() throws -> NSView {
