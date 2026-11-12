@@ -71,25 +71,102 @@ final class FrameSinkTests: XCTestCase {
         XCTAssertEqual(kept.count, 20)
     }
 
+    /// A clock the test moves by hand, so that the times do not depend on the load of the machine
+    private final class TestClock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var time = CMTime(value: 1_000_000, timescale: 1000)
+
+        var now: CMTime {
+            lock.lock()
+            defer { lock.unlock() }
+            return time
+        }
+
+        func set(_ value: CMTime) {
+            lock.lock()
+            time = value
+            lock.unlock()
+        }
+
+        func advance(by milliseconds: Double) {
+            set(CMTimeAdd(now, CMTime(seconds: milliseconds / 1000, preferredTimescale: 1_000_000)))
+        }
+    }
+
+    /// The capture delay of the cable varies by a few milliseconds from frame to frame. A frame
+    /// shown again shortly before the next live frame arrives must still lie before that frame's
+    /// capture time, also when the next one was delayed longer than the one before.
+    func testShowingAFrameAgainKeepsLiveFramesWhoseDelayVaries() throws {
+        let clock = TestClock()
+        let sink = FrameSink(clock: { clock.now })
+        let recording = RecordingStandIn()
+        sink.recording = recording
+        let base = clock.now
+        let lags = [50.0, 53.0]
+        var pushed: [CVPixelBuffer] = []
+        func arrival(_ index: Int) -> CMTime {
+            CMTimeAdd(base, CMTime(seconds: Double(index) / 60 + lags[index % 2] / 1000, preferredTimescale: 1_000_000))
+        }
+        for index in 0..<10 {
+            // captured at 60 frames per second, the capture times rise steadily
+            let capture = CMTimeAdd(base, CMTime(value: CMTimeValue(index), timescale: 60))
+            clock.set(arrival(index))
+            let buffer = try frame()
+            pushed.append(buffer)
+            sink.push(buffer, time: capture)
+            // a translation comes in a millisecond before the next frame arrives
+            clock.set(CMTimeSubtract(arrival(index + 1), milliseconds(1)))
+            sink.redisplay()
+        }
+        let kept = recording.kept
+        XCTAssertEqual(recording.dropped, 0, "frames were thrown away")
+        for frame in pushed {
+            XCTAssertTrue(kept.contains { $0.buffer === frame }, "a live frame is missing in the recording")
+        }
+        XCTAssertEqual(kept.count, 20)
+    }
+
     /// A still screen sends no frames: something shown again later moves forward in time, the
     /// way it happened, and stays behind the next live frame.
     func testFrameShownAgainOnAStillScreenMovesForwardInTime() throws {
-        let sink = FrameSink()
+        let clock = TestClock()
+        let sink = FrameSink(clock: { clock.now })
         let recording = RecordingStandIn()
         sink.recording = recording
         let lag = milliseconds(50)
-        let start = CMTimeSubtract(MirrorRecorder.now, lag)
+        let start = CMTimeSubtract(clock.now, lag)
         sink.push(try frame(), time: start)
-        Thread.sleep(forTimeInterval: 0.03)
+        clock.advance(by: 200)
         sink.redisplay()
         sink.redisplay()
         let again = try XCTUnwrap(recording.kept.last?.time)
-        XCTAssertGreaterThanOrEqual(CMTimeSubtract(again, start).seconds, 0.025,
-                                    "the frame shown again must lie about as far after the first as it was shown later")
-        let next = CMTimeSubtract(MirrorRecorder.now, lag)
-        sink.push(try frame(), time: next)
+        XCTAssertEqual(CMTimeSubtract(again, start).seconds, 0.2, accuracy: 0.001,
+                       "the frame shown again must lie as far after the first as it was shown later")
+        clock.advance(by: 16)
+        sink.push(try frame(), time: CMTimeSubtract(clock.now, lag))
         XCTAssertEqual(recording.kept.count, 4)
         XCTAssertEqual(recording.dropped, 0)
+    }
+
+    /// On a still screen a frame shown again is placed by the longest delay of the frames just
+    /// before, not by the delay of the last one: the next live frame may be delayed as long.
+    func testFrameShownAgainOnAStillScreenAllowsForTheLongestRecentDelay() throws {
+        let clock = TestClock()
+        let sink = FrameSink(clock: { clock.now })
+        let recording = RecordingStandIn()
+        sink.recording = recording
+        sink.push(try frame(), time: CMTimeSubtract(clock.now, milliseconds(53)))
+        clock.advance(by: 16)
+        sink.push(try frame(), time: CMTimeSubtract(clock.now, milliseconds(50)))
+        clock.advance(by: 300)
+        sink.redisplay()
+        // captured 52 ms before the frame was shown again, delayed by 53 ms
+        let next = try frame()
+        let capture = CMTimeSubtract(clock.now, milliseconds(52))
+        clock.advance(by: 1)
+        sink.push(next, time: capture)
+        XCTAssertEqual(recording.dropped, 0, "the live frame was thrown away")
+        XCTAssertTrue(recording.kept.last?.buffer === next)
     }
 
     /// AirPlay and Android frames come without a time: they are stamped "now", and so is a

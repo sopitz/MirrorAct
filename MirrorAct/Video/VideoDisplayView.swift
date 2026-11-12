@@ -75,8 +75,9 @@ final class FrameSink: @unchecked Sendable {
     private var activeProcessor: FrameProcessor?
     /// time of the last frame given to the recording
     private var lastTime = CMTime.invalid
-    /// how far the times of the source lag behind "now" (cable: the capture delay; 0 otherwise)
-    private var timeLag = CMTime.zero
+    /// host time and lag of the recent frames: how far their times lay behind "now" (cable:
+    /// the capture delay, which varies a little; 0 otherwise)
+    private var recentLags: [(arrival: CMTime, lag: CMTime)] = []
     /// a frame changed by the processor went to the display since the last `clear`
     private var showedProcessed = false
 
@@ -85,6 +86,19 @@ final class FrameSink: @unchecked Sendable {
     /// on the main thread: first frame after attach/clear
     var onFirstFrame: (() -> Void)?
     private var deliveredFirstFrame = false
+
+    /// how long without a new frame makes the screen count as still (about three frames)
+    private static let stillAfter = CMTime(value: 50, timescale: 1000)
+    /// for a frame shown again on a still screen, the delays of the frames of the last second
+    /// before it went still count
+    private static let lagMemory = CMTime(value: 1, timescale: 1)
+
+    /// host time "now"; the tests hand in a clock of their own
+    private let clock: () -> CMTime
+
+    init(clock: @escaping () -> CMTime = { MirrorRecorder.now }) {
+        self.clock = clock
+    }
 
     func attach(_ layer: AVSampleBufferDisplayLayer?) {
         lock.lock()
@@ -148,7 +162,7 @@ final class FrameSink: @unchecked Sendable {
         latestSourceBuffer = nil
         deliveredFirstFrame = false
         lastTime = .invalid
-        timeLag = .zero
+        recentLags = []
         let layer = self.layer
         lock.unlock()
         layer?.sampleBufferRenderer.flush(removingDisplayedImage: false, completionHandler: nil)
@@ -162,10 +176,14 @@ final class FrameSink: @unchecked Sendable {
     func push(_ pixelBuffer: CVPixelBuffer, time: CMTime? = nil) {
         presenting.lock()
         defer { presenting.unlock() }
-        let now = MirrorRecorder.now
+        let now = clock()
         let time = time ?? now
         lock.lock()
-        timeLag = max(.zero, CMTimeSubtract(now, time))
+        recentLags.append((now, max(.zero, CMTimeSubtract(now, time))))
+        let oldest = CMTimeSubtract(now, Self.lagMemory)
+        if let stale = recentLags.firstIndex(where: { $0.arrival >= oldest }), stale > 0 {
+            recentLags.removeFirst(stale)
+        }
         lock.unlock()
         present(pixelBuffer, time: time)
     }
@@ -177,14 +195,22 @@ final class FrameSink: @unchecked Sendable {
         presenting.lock()
         defer { presenting.unlock() }
         guard let source = latestSource else { return }
-        // On the timeline of the source: a cable frame carries the time it was captured, and
-        // the live frames after this one are captured later than "now" minus that delay. A time
-        // past theirs would make the recording drop them. It must still be later than the last
-        // frame, or the recording drops this one; by a microsecond only, so that the next live
-        // frame stays after it even when frames arrive in a burst.
+        // On the timeline of the source: a cable frame carries the time it was captured, a
+        // little before it arrives, and the recording drops a frame that is not later than the
+        // one before. This one must be later than the last frame, and earlier than the next
+        // live one. While frames flow, that one is due any moment and its delay may be a few
+        // milliseconds longer than the last one's, so this one lies just a microsecond after
+        // the last frame. On a still screen it moves on with the time that has passed, less
+        // the longest delay of the recent frames.
         lock.lock()
-        var time = CMTimeSubtract(MirrorRecorder.now, timeLag)
-        if lastTime.isValid { time = max(time, CMTimeAdd(lastTime, CMTime(value: 1, timescale: 1_000_000))) }
+        let now = clock()
+        let afterLast = lastTime.isValid ? CMTimeAdd(lastTime, CMTime(value: 1, timescale: 1_000_000)) : now
+        var time = afterLast
+        let flowing = recentLags.last.map { CMTimeSubtract(now, $0.arrival) < Self.stillAfter } ?? false
+        if !flowing {
+            let longestLag = recentLags.map(\.lag).max() ?? .zero
+            time = max(CMTimeSubtract(now, longestLag), afterLast)
+        }
         lock.unlock()
         present(source, time: time)
     }
