@@ -385,6 +385,32 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertGreaterThan(letters.pixels.filter { $0 == 255 }.count, 300)
     }
 
+    /// Japanese, Chinese and Korean share characters that each draws in its own forms: the
+    /// language of the translation chooses them, not the languages of the Mac.
+    func testTheLanguageOfTheTranslationChoosesTheGlyphForms() throws {
+        func mask(_ language: String?) throws -> [UInt8] {
+            try XCTUnwrap(BlockTextMask(text: "直骨", width: 200, height: 60, lineCount: 1, language: language)).pixels
+        }
+        XCTAssertNotEqual(try mask("ja-Jpan-JP"), try mask("zh-Hans-CN"))
+        XCTAssertNotEqual(try mask("zh-Hant-TW"), try mask("zh-Hans-CN"))
+        XCTAssertEqual(try mask("ja-Jpan-JP"), try mask("ja"))
+
+        // the compositor draws in the language it was given, and anew when that changes
+        let source = try videoFrame(width: 640, height: 240)
+        let placed = PlacedBlock(id: 1, text: "直骨", rect: CGRect(x: 40, y: 40, width: 200, height: 60), visibleRect: nil,
+                                 lineCount: 1, colors: darkOnLight)
+        let compositor = TranslationCompositor()
+        compositor.language = "zh-Hans-CN"
+        let chinese = picture(of: try XCTUnwrap(compositor.compose(source, blocks: [placed])))
+        compositor.language = "ja-Jpan-JP"
+        let japanese = picture(of: try XCTUnwrap(compositor.compose(source, blocks: [placed])))
+        XCTAssertEqual(compositor.texts.drawCount, 2)
+        XCTAssertFalse(japanese == chinese)
+        let other = TranslationCompositor()
+        other.language = "ja-Jpan-JP"
+        XCTAssertTrue(picture(of: try XCTUnwrap(other.compose(source, blocks: [placed]))) == japanese)
+    }
+
     func testTextThatCannotFitIsCutOffNotLeftOut() throws {
         let endless = String(repeating: "word ", count: 80)
         let mask = try XCTUnwrap(BlockTextMask(text: endless, width: 120, height: 24, lineCount: 1))

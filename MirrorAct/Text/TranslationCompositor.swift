@@ -18,13 +18,29 @@ final class TranslationCompositor: @unchecked Sendable {
     /// the texts of the blocks as they were drawn (internal for the tests)
     let texts = BlockTextCache()
 
-    /// protects the pool: `reset` may come from another thread than the frames
+    /// protects the pool and the language: `reset` and `language` may come from another thread than the frames
     private let poolLock = NSLock()
     private var pool: CVPixelBufferPool?
     private var poolWidth = 0
     private var poolHeight = 0
     /// the pixel format of the frames; `prepare` goes by it before the first frame was drawn
     private var poolFormat: OSType = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+
+    /// BCP 47 identifier of the language the translations are in; it chooses the forms of the
+    /// characters that languages share (see `BlockTextMask`). nil = as the languages of the Mac say.
+    var language: String? {
+        get {
+            poolLock.lock()
+            defer { poolLock.unlock() }
+            return currentLanguage
+        }
+        set {
+            poolLock.lock()
+            currentLanguage = newValue
+            poolLock.unlock()
+        }
+    }
+    private var currentLanguage: String?
 
     // "Device" color spaces: the bytes get the values given here, nothing is color matched
     private let gray = CGColorSpaceCreateDeviceGray()
@@ -55,9 +71,10 @@ final class TranslationCompositor: @unchecked Sendable {
         // display and the recorder would take the copy for another kind of video
         CVBufferPropagateAttachments(source, copy)
 
+        let language = self.language
         let drawn = biPlanar
-            ? drawVideo(blocks, into: copy, width: width, height: height, fullRange: fullRange)
-            : drawBGRA(blocks, into: copy, width: width, height: height)
+            ? drawVideo(blocks, into: copy, width: width, height: height, fullRange: fullRange, language: language)
+            : drawBGRA(blocks, into: copy, width: width, height: height, language: language)
         return drawn ? copy : nil
     }
 
@@ -65,13 +82,13 @@ final class TranslationCompositor: @unchecked Sendable {
     /// (blocks without translation are skipped)
     func prepare(_ blocks: [TrackedBlock]) {
         poolLock.lock()
-        let format = poolFormat
+        let format = poolFormat, language = currentLanguage
         poolLock.unlock()
         let fullRange = format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
         for block in blocks {
             guard let translation = block.translation, let size = BlockPlacement.textSize(of: block.rect),
                   let text = texts.entry(id: block.id, text: translation, width: size.width, height: size.height,
-                                         lineCount: block.lineCount) else { continue }
+                                         lineCount: block.lineCount, language: language) else { continue }
             // Text in a color of its own on 4:2:0 video also needs its masks for the color
             // plane: all four, because scrolling moves a block between odd and even positions
             guard format != kCVPixelFormatType_32BGRA else { continue }
@@ -165,7 +182,7 @@ final class TranslationCompositor: @unchecked Sendable {
     /// 4:2:0 video: the first plane is the brightness of every pixel, the second the color of
     /// every 2 × 2 pixels
     private func drawVideo(_ blocks: [PlacedBlock], into frame: CVPixelBuffer, width: Int, height: Int,
-                           fullRange: Bool) -> Bool {
+                           fullRange: Bool, language: String?) -> Bool {
         guard let luma = CVPixelBufferGetBaseAddressOfPlane(frame, 0),
               let chromaBase = CVPixelBufferGetBaseAddressOfPlane(frame, 1),
               let context = CGContext(data: luma, width: width, height: height, bitsPerComponent: 8,
@@ -179,7 +196,8 @@ final class TranslationCompositor: @unchecked Sendable {
             guard let placement = BlockPlacement(rect: block.rect, visibleRect: block.visibleRect,
                                                  lineCount: block.lineCount, frameWidth: width, frameHeight: height),
                   let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
-                                         height: placement.text.height, lineCount: block.lineCount) else { continue }
+                                         height: placement.text.height, lineCount: block.lineCount,
+                                         language: language) else { continue }
             // the values the frame had there, so a box has exactly the brightness and color of what surrounds it
             let (background, foreground) = Self.videoColors(of: block.colors, fullRange: fullRange)
             Self.draw(text.mask, at: placement, background: .gray(background.y), foreground: .gray(foreground.y),
@@ -202,7 +220,8 @@ final class TranslationCompositor: @unchecked Sendable {
         return true
     }
 
-    private func drawBGRA(_ blocks: [PlacedBlock], into frame: CVPixelBuffer, width: Int, height: Int) -> Bool {
+    private func drawBGRA(_ blocks: [PlacedBlock], into frame: CVPixelBuffer, width: Int, height: Int,
+                          language: String?) -> Bool {
         guard let base = CVPixelBufferGetBaseAddress(frame),
               let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: CVPixelBufferGetBytesPerRow(frame), space: rgb,
@@ -213,7 +232,8 @@ final class TranslationCompositor: @unchecked Sendable {
             guard let placement = BlockPlacement(rect: block.rect, visibleRect: block.visibleRect,
                                                  lineCount: block.lineCount, frameWidth: width, frameHeight: height),
                   let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
-                                         height: placement.text.height, lineCount: block.lineCount) else { continue }
+                                         height: placement.text.height, lineCount: block.lineCount,
+                                         language: language) else { continue }
             Self.draw(text.mask, at: placement, background: .rgb(block.colors.background),
                       foreground: .rgb(block.colors.foreground), in: context)
         }
@@ -321,6 +341,7 @@ final class BlockTextCache: @unchecked Sendable {
         let width: Int
         let height: Int
         let lineCount: Int
+        let language: String?
 
         // The text is compared but not hashed: every block of every frame is looked up, and
         // hashing a paragraph costs more than drawing its box. Blocks rarely share the rest.
@@ -364,9 +385,9 @@ final class BlockTextCache: @unchecked Sendable {
 
     /// The text of a block, drawn now if it is not there yet. `id`: of the block; `text`: its
     /// translation; `width`, `height`: size of the block in whole pixels; `lineCount`: lines
-    /// of the original. nil when it cannot be drawn.
-    func entry(id: Int, text: String, width: Int, height: Int, lineCount: Int) -> Entry? {
-        let key = Key(id: id, text: text, width: width, height: height, lineCount: lineCount)
+    /// of the original; `language`: of the translation. nil when it cannot be drawn.
+    func entry(id: Int, text: String, width: Int, height: Int, lineCount: Int, language: String? = nil) -> Entry? {
+        let key = Key(id: id, text: text, width: width, height: height, lineCount: lineCount, language: language)
         lock.lock()
         uses += 1
         if let entry = entries[key] {
@@ -377,7 +398,8 @@ final class BlockTextCache: @unchecked Sendable {
         lock.unlock()
 
         // Core Text works outside the lock: a frame must not wait for a text that `prepare` is drawing
-        guard let mask = BlockTextMask(text: text, width: width, height: height, lineCount: lineCount) else { return nil }
+        guard let mask = BlockTextMask(text: text, width: width, height: height, lineCount: lineCount,
+                                       language: language) else { return nil }
         let entry = Entry(mask: mask, key: key)
         lock.lock()
         defer { lock.unlock() }

@@ -36,9 +36,11 @@ struct BlockTextMask {
     static let smallestFontShare: CGFloat = 0.28
     static let smallestFontSize: CGFloat = 9
 
-    /// `width`, `height`: size of the block in pixels; `lineCount`: lines of the original text.
-    /// nil when there is nothing to draw or no picture could be made.
-    init?(text: String, width: Int, height: Int, lineCount: Int) {
+    /// `width`, `height`: size of the block in pixels; `lineCount`: lines of the original text;
+    /// `language`: BCP 47 identifier of the language of the text, which chooses the forms of
+    /// characters that languages share (Japanese kanji are not drawn as Chinese hanzi); nil =
+    /// as the languages of the Mac say. nil when there is nothing to draw or no picture could be made.
+    init?(text: String, width: Int, height: Int, lineCount: Int, language: String? = nil) {
         // one paragraph: a line break inside a translation would cost a line the block does not have
         let text = text.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
         guard width > 0, height > 0, !text.isEmpty else { return nil }
@@ -52,15 +54,16 @@ struct BlockTextMask {
         // between a size that fits and one that does not until they are half a pixel apart.
         // A word broken between two letters does not count as fitting; only the smallest font
         // may break one, when nothing else is left.
-        var layout = Layout(text, fontSize: largest, in: box, lineHeight: lineHeight, breaks: breaks)
+        var layout = Layout(text, fontSize: largest, in: box, lineHeight: lineHeight, breaks: breaks, language: language)
         if !layout.fits, smallest < largest {
-            layout = Layout(text, fontSize: smallest, in: box, lineHeight: lineHeight, breaks: breaks)
+            layout = Layout(text, fontSize: smallest, in: box, lineHeight: lineHeight, breaks: breaks, language: language)
             if layout.fits {
                 var fitting = smallest, tooLarge = largest
                 var steps = 0
                 while tooLarge - fitting > 0.5, steps < 6 {
                     let middle = (fitting + tooLarge) / 2
-                    let candidate = Layout(text, fontSize: middle, in: box, lineHeight: lineHeight, breaks: breaks)
+                    let candidate = Layout(text, fontSize: middle, in: box, lineHeight: lineHeight, breaks: breaks,
+                                           language: language)
                     if candidate.fits {
                         fitting = middle
                         layout = candidate
@@ -96,15 +99,21 @@ struct BlockTextMask {
         let fits: Bool
 
         /// `breaks`: where the text may be broken (see `breakOpportunities`)
-        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat, breaks: Set<Int>) {
-            let font = CTFontCreateUIFontForLanguage(.system, fontSize, nil)
+        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat, breaks: Set<Int>,
+             language: String?) {
+            // The language picks the fonts for the characters the system font does not have
+            // (Hiragino for Japanese, PingFang SC or TC for Chinese) and their local forms.
+            let font = CTFontCreateUIFontForLanguage(.system, fontSize, language as CFString?)
                 ?? CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
             // White, because the picture is a mask. No paragraph style: the defaults are what
             // is wanted, lines broken between words and aligned at the side the script starts from.
-            let attributes: [NSAttributedString.Key: Any] = [
+            var attributes: [NSAttributedString.Key: Any] = [
                 NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font,
                 NSAttributedString.Key(rawValue: kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
             ]
+            if let language {
+                attributes[NSAttributedString.Key(rawValue: kCTLanguageAttributeName as String)] = language
+            }
             let string = NSAttributedString(string: text, attributes: attributes)
             let framesetter = CTFramesetterCreateWithAttributedString(string as CFAttributedString)
             let size = CTFramesetterSuggestFrameSizeWithConstraints(
