@@ -232,7 +232,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             let rect = CGRect(x: paragraph.rect.minX * size.width, y: paragraph.rect.minY * size.height,
                               width: paragraph.rect.width * size.width, height: paragraph.rect.height * size.height)
             // the frame's own colors, so that a box matches its surroundings exactly
-            let colors = BlockColors.estimate(pixels: FramePixels.colors(in: rect, of: frame))
+            let colors = FramePixels.blockColors(in: rect, of: frame)
             return RecognizedBlock(text: paragraph.text, rect: rect, lineCount: paragraph.lineCount, colors: colors,
                                    confidence: paragraph.confidence)
         }

@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
-/// A color as video frames store it (Y′CbCr, 8 bit, BT.709 numbers).
+/// A color as video frames store it (Y′CbCr, 8 bit); the conversions use BT.709 numbers.
 ///
-/// The colors of a text block are sampled from a frame as Y′CbCr, compared as RGB and written
-/// back as Y′CbCr. Both directions use the same numbers, so a color that goes there and back
-/// keeps its value to within one step, whatever the true color space of the video is: a box
-/// drawn in the background color of a text does not stand out from that background.
+/// The colors of a text block are sampled from a frame as Y′CbCr and compared as RGB. They are
+/// written back as they were sampled (`BlockColors.backgroundInVideo`), not converted back from
+/// RGB: that keeps a color only to within one step, and only where the BT.709 numbers turn it
+/// into a color inside RGB. A saturated color of video coded with other numbers (BT.601, as
+/// some Android encoders do) does not get there, and the clamped RGB would come back as
+/// another color. The conversion back is for colors that were not read from the frame.
 struct YCbCrColor: Equatable {
     var y: UInt8
     var cb: UInt8
@@ -55,4 +57,11 @@ struct YCbCrColor: Equatable {
     private static func byte(_ value: Double) -> UInt8 {
         UInt8(min(255, max(0, value.rounded())))
     }
+}
+
+/// A color of a text block as the 4:2:0 frame it was read from stores it
+struct VideoColor: Equatable {
+    var color: YCbCrColor
+    /// brightness in 0…255 instead of the 16…235 of video
+    var fullRange: Bool
 }

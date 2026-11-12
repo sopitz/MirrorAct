@@ -153,6 +153,43 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertTrue(picture(of: try XCTUnwrap(compositor.compose(source, blocks: []))) == before)
     }
 
+    /// The box takes the values of the frame, whatever matrix the video was coded with. A
+    /// saturated color of BT.601 video lies outside of RGB with the BT.709 numbers, and a box
+    /// converted back from the clamped RGB stood out from its surroundings.
+    func testBoxOnASaturatedColorOfBT601VideoHasExactlyItsValues() throws {
+        // the red (255, 59, 48) and the blue (0, 122, 255) of iOS as BT.601 codes them
+        for color in [YCbCrColor(y: 116, cb: 94, cr: 215), YCbCrColor(y: 102, cb: 204, cr: 65)] {
+            let source = try uniformVideoFrame(width: 640, height: 240, color: color)
+            let place = CGRect(x: 101, y: 61, width: 300, height: 60)
+            let colors = FramePixels.blockColors(in: place, of: source)
+            let placed = PlacedBlock(id: 1, text: "Löschen", rect: place, visibleRect: nil, lineCount: 1, colors: colors)
+            let result = picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [placed])))
+            let text = PixelRect(minX: 101, minY: 61, maxX: 401, maxY: 121), backdrop = text.grown(by: 7)
+            var wrongBrightness = 0, paper = 0, wrongColor = 0
+            for y in 0..<result.height {
+                for x in 0..<result.width where !isCorner(of: backdrop, x, y) {
+                    let value = result.luma(x, y)
+                    if !contains(text, x, y) {
+                        if value != color.y { wrongBrightness += 1 }
+                    } else if value == color.y {
+                        paper += 1
+                    }
+                }
+            }
+            // (under the text the color is mixed with that of the text)
+            for y in 0..<result.chromaHeight {
+                for x in 0..<result.chromaWidth
+                    where PixelRect(minX: 2 * x, minY: 2 * y, maxX: 2 * x + 2, maxY: 2 * y + 2).intersection(text).isEmpty {
+                    let cell = result.cell(x, y)
+                    if cell.cb != color.cb || cell.cr != color.cr { wrongColor += 1 }
+                }
+            }
+            XCTAssertEqual(wrongBrightness, 0, "\(color): the box must have the brightness of the frame")
+            XCTAssertEqual(wrongColor, 0, "\(color): the box must have the color of the frame")
+            XCTAssertGreaterThan(paper, text.width * text.height / 2, "\(color)")
+        }
+    }
+
     // MARK: BGRA
 
     func testBGRAFrameGetsTheBoxAndKeepsEverythingElse() throws {
@@ -490,6 +527,28 @@ final class TranslationCompositorTests: XCTestCase {
             for x in 0..<(width + 1) / 2 {
                 chroma[y * chromaRowBytes + 2 * x] = Self.testCb(x, y)
                 chroma[y * chromaRowBytes + 2 * x + 1] = Self.testCr(x, y)
+            }
+        }
+        return frame
+    }
+
+    /// A 4:2:0 frame (video range) of one color
+    private func uniformVideoFrame(width: Int, height: Int, color: YCbCrColor) throws -> CVPixelBuffer {
+        let frame = try emptyFrame(width: width, height: height, format: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                                   ioSurface: false)
+        CVPixelBufferLockBaseAddress(frame, [])
+        defer { CVPixelBufferUnlockBaseAddress(frame, []) }
+        let luma = try XCTUnwrap(CVPixelBufferGetBaseAddressOfPlane(frame, 0)).assumingMemoryBound(to: UInt8.self)
+        let lumaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(frame, 0)
+        for y in 0..<height {
+            for x in 0..<width { luma[y * lumaRowBytes + x] = color.y }
+        }
+        let chroma = try XCTUnwrap(CVPixelBufferGetBaseAddressOfPlane(frame, 1)).assumingMemoryBound(to: UInt8.self)
+        let chromaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(frame, 1)
+        for y in 0..<(height + 1) / 2 {
+            for x in 0..<(width + 1) / 2 {
+                chroma[y * chromaRowBytes + 2 * x] = color.cb
+                chroma[y * chromaRowBytes + 2 * x + 1] = color.cr
             }
         }
         return frame

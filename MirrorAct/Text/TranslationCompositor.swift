@@ -74,9 +74,9 @@ final class TranslationCompositor: @unchecked Sendable {
                                          lineCount: block.lineCount) else { continue }
             // Text in a color of its own on 4:2:0 video also needs its masks for the color
             // plane: all four, because scrolling moves a block between odd and even positions
-            guard format != kCVPixelFormatType_32BGRA,
-                  Self.differInColor(YCbCrColor(block.colors.foreground, fullRange: fullRange),
-                                     YCbCrColor(block.colors.background, fullRange: fullRange)) else { continue }
+            guard format != kCVPixelFormatType_32BGRA else { continue }
+            let colors = Self.videoColors(of: block.colors, fullRange: fullRange)
+            guard Self.differInColor(colors.foreground, colors.background) else { continue }
             for oddY in [false, true] {
                 for oddX in [false, true] {
                     _ = texts.chromaMask(of: text, oddX: oddX, oddY: oddY)
@@ -180,10 +180,8 @@ final class TranslationCompositor: @unchecked Sendable {
                                                  lineCount: block.lineCount, frameWidth: width, frameHeight: height),
                   let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
                                          height: placement.text.height, lineCount: block.lineCount) else { continue }
-            // The colors of a block were read from a frame with `YCbCrColor`; the same numbers
-            // lead back, so a box has exactly the brightness and color of what surrounds it.
-            let background = YCbCrColor(block.colors.background, fullRange: fullRange)
-            let foreground = YCbCrColor(block.colors.foreground, fullRange: fullRange)
+            // the values the frame had there, so a box has exactly the brightness and color of what surrounds it
+            let (background, foreground) = Self.videoColors(of: block.colors, fullRange: fullRange)
             Self.draw(text.mask, at: placement, background: .gray(background.y), foreground: .gray(foreground.y),
                       in: context)
 
@@ -275,6 +273,17 @@ final class TranslationCompositor: @unchecked Sendable {
         context.clip(to: box, mask: mask.image)
         foreground.setFill(in: context)
         context.fill(box)
+    }
+
+    /// The colors of a block as a 4:2:0 frame stores them: as they were read from such a frame,
+    /// or converted from RGB when they were not (or were read with the other range)
+    private static func videoColors(of colors: BlockColors, fullRange: Bool) -> (background: YCbCrColor, foreground: YCbCrColor) {
+        func sampled(_ color: VideoColor?) -> YCbCrColor? {
+            guard let color, color.fullRange == fullRange else { return nil }
+            return color.color
+        }
+        return (sampled(colors.backgroundInVideo) ?? YCbCrColor(colors.background, fullRange: fullRange),
+                sampled(colors.foregroundInVideo) ?? YCbCrColor(colors.foreground, fullRange: fullRange))
     }
 
     /// Text and background differ in more than their brightness

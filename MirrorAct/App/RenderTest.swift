@@ -265,7 +265,7 @@ enum RenderTest {
         func block(_ id: Int, _ text: String, _ rect: CGRect, lines: Int = 1, visible: CGRect? = nil,
                    colors: BlockColors? = nil) -> PlacedBlock {
             PlacedBlock(id: id, text: text, rect: rect, visibleRect: visible, lineCount: lines,
-                        colors: colors ?? BlockColors.estimate(pixels: FramePixels.colors(in: rect, of: frame)))
+                        colors: colors ?? FramePixels.blockColors(in: rect, of: frame))
         }
         // on a white tile, in a color of its own: the background of the tile, the blue of a link
         var link = block(4, "Mehr erfahren", CGRect(x: 141, y: 960, width: 210, height: 44))

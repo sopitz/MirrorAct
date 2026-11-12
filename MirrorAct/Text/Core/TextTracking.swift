@@ -25,9 +25,20 @@ struct RGBColor: Equatable, Hashable {
 /// Colors of a piece of text on the screen
 struct BlockColors: Equatable {
     /// what lies behind the text
-    var background: RGBColor
+    var background: RGBColor {
+        didSet { backgroundInVideo = nil }
+    }
     /// the text itself
-    var foreground: RGBColor
+    var foreground: RGBColor {
+        didSet { foregroundInVideo = nil }
+    }
+    /// The same colors as the 4:2:0 frame they were read from stores them (see
+    /// `estimate(samples:fullRange:)`), so that they can be written back exactly; nil when they
+    /// were not read from such a frame, or were changed since. Converting RGB back would not
+    /// do: the frame's own matrix may differ from the one `YCbCrColor` uses, and saturated
+    /// colors then lie outside of RGB.
+    var backgroundInVideo: VideoColor?
+    var foregroundInVideo: VideoColor?
 
     static let blackOnWhite = BlockColors(background: .white, foreground: .black)
 
@@ -35,7 +46,35 @@ struct BlockColors: Equatable {
     /// of them share is the background; the text is the color farthest from it, or black or
     /// white when the block shows no clear second color.
     static func estimate(pixels: [RGBColor]) -> BlockColors {
-        guard !pixels.isEmpty else { return .blackOnWhite }
+        guard let choice = choose(pixels) else { return .blackOnWhite }
+        return colors(of: pixels, choice)
+    }
+
+    /// The same from samples of a 4:2:0 frame: the colors are chosen as RGB, exactly as by
+    /// `estimate(pixels:)`, and also kept as the frame stores them, as the mean of the same samples.
+    static func estimate(samples: [YCbCrColor], fullRange: Bool) -> BlockColors {
+        let pixels = samples.map { $0.rgb(fullRange: fullRange) }
+        guard let choice = choose(pixels) else { return .blackOnWhite }
+        var result = colors(of: pixels, choice)
+        result.backgroundInVideo = VideoColor(color: mean(choice.background.map { samples[$0] }), fullRange: fullRange)
+        if let strokes = choice.strokes {
+            result.foregroundInVideo = VideoColor(color: mean(strokes.map { samples[$0] }), fullRange: fullRange)
+        }
+        return result
+    }
+
+    private static func colors(of pixels: [RGBColor], _ choice: (background: [Int], strokes: [Int]?)) -> BlockColors {
+        let background = mean(choice.background.map { pixels[$0] })
+        guard let strokes = choice.strokes else {
+            return BlockColors(background: background, foreground: background.luma < 128 ? .white : .black)
+        }
+        return BlockColors(background: background, foreground: mean(strokes.map { pixels[$0] }))
+    }
+
+    /// Which of the pixels make up the background and which the core of the strokes; strokes
+    /// nil when the block shows no clear second color. nil for no pixels.
+    private static func choose(_ pixels: [RGBColor]) -> (background: [Int], strokes: [Int]?)? {
+        guard !pixels.isEmpty else { return nil }
         // most frequent color, counted in steps of 16 per channel
         var counts: [Int: Int] = [:]
         for pixel in pixels {
@@ -46,18 +85,16 @@ struct BlockColors: Equatable {
             bestBin = key
             bestCount = count
         }
-        let background = mean(pixels.filter { bin($0) == bestBin })
+        let backgroundIndices = pixels.indices.filter { bin(pixels[$0]) == bestBin }
+        let background = mean(backgroundIndices.map { pixels[$0] })
 
         var farthest = 0
         for pixel in pixels {
             farthest = max(farthest, distance(pixel, background))
         }
-        guard farthest >= 96 else {
-            return BlockColors(background: background, foreground: background.luma < 128 ? .white : .black)
-        }
+        guard farthest >= 96 else { return (backgroundIndices, nil) }
         // the core of the strokes; pixels on their edges are mixtures with the background
-        let strokes = pixels.filter { distance($0, background) * 10 >= farthest * 7 }
-        return BlockColors(background: background, foreground: mean(strokes))
+        return (backgroundIndices, pixels.indices.filter { distance(pixels[$0], background) * 10 >= farthest * 7 })
     }
 
     private static func bin(_ color: RGBColor) -> Int {
@@ -79,6 +116,19 @@ struct BlockColors: Equatable {
         let count = colors.count
         return RGBColor(red: UInt8((red + count / 2) / count), green: UInt8((green + count / 2) / count),
                         blue: UInt8((blue + count / 2) / count))
+    }
+
+    private static func mean(_ colors: [YCbCrColor]) -> YCbCrColor {
+        guard !colors.isEmpty else { return YCbCrColor(y: 128, cb: 128, cr: 128) }
+        var y = 0, cb = 0, cr = 0
+        for color in colors {
+            y += Int(color.y)
+            cb += Int(color.cb)
+            cr += Int(color.cr)
+        }
+        let count = colors.count
+        return YCbCrColor(y: UInt8((y + count / 2) / count), cb: UInt8((cb + count / 2) / count),
+                          cr: UInt8((cr + count / 2) / count))
     }
 }
 
