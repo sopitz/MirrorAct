@@ -186,6 +186,86 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertFalse(page.typedKeyIsPending)
     }
 
+    /// A key Test worked with counts at once, also while the settings window stays open and
+    /// also in place of the key that is stored
+    func testAKeyThatPassedTheTestIsStored() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        keysThere = [LLMProvider.openAI.id: "sk-old"]
+        serviceAnswer = Self.chatReply("Hallo")
+        let view = try showPage()
+        type("sk-tested", into: try field(at: 1, in: view))
+        page.runTest()
+        XCTAssertTrue(waitUntil { !self.page.isTesting })
+        XCTAssertEqual(storedKeys.map(\.key), ["sk-tested"])
+        XCTAssertEqual(storedKeys.map(\.provider), [LLMProvider.openAI.id])
+        // the answer stays in view after the key went into the keychain
+        XCTAssertEqual(page.testOutcome, .init(text: "Hallo", failed: false))
+        XCTAssertEqual(page.enteredKey, "")
+    }
+
+    func testAKeyThatLoadedTheListIsStored() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        serviceAnswer = (200, [LLMHeader("Content-Type", "application/json")],
+                         Data(#"{"object":"list","data":[{"id":"gpt-6-luna"},{"id":"gpt-6.1-sol"}]}"#.utf8))
+        let view = try showPage()
+        type("sk-listed", into: try field(at: 1, in: view))
+        page.loadModels()
+        XCTAssertTrue(waitUntil { !self.page.isLoadingModels })
+        XCTAssertNil(page.modelsProblem)
+        XCTAssertEqual(storedKeys.map(\.key), ["sk-listed"])
+    }
+
+    /// A key the service turned down does not take the place of the one that is stored
+    func testAKeyThatFailedTheTestIsNotStored() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        keysThere = [LLMProvider.openAI.id: "sk-old"]
+        serviceAnswer = (401, [LLMHeader("Content-Type", "application/json")],
+                         Data(#"{"error":{"message":"Incorrect API key provided"}}"#.utf8))
+        let view = try showPage()
+        type("sk-wrong", into: try field(at: 1, in: view))
+        page.runTest()
+        XCTAssertTrue(waitUntil { !self.page.isTesting })
+        XCTAssertEqual(page.testOutcome?.failed, true)
+        XCTAssertTrue(storedKeys.isEmpty, "\(storedKeys)")
+        XCTAssertEqual(page.enteredKey, "sk-wrong")
+    }
+
+    /// Test with the stored key stores nothing
+    func testATestWithTheStoredKeyStoresNothing() throws {
+        settings.llmProvider = LLMProvider.openAI.id
+        keysThere = [LLMProvider.openAI.id: "sk-old"]
+        serviceAnswer = Self.chatReply("Hallo")
+        _ = try showPage()
+        page.runTest()
+        XCTAssertTrue(waitUntil { !self.page.isTesting })
+        XCTAssertEqual(page.testOutcome, .init(text: "Hallo", failed: false))
+        XCTAssertTrue(storedKeys.isEmpty, "\(storedKeys)")
+    }
+
+    // MARK: Leaving the window
+
+    /// Translate in the mirror window uses what the field shows, also when the settings window
+    /// stays open: the field keeps its focus when another window becomes key
+    func testWhatIsTypedIsAppliedWhenTheWindowIsNoLongerKey() throws {
+        let view = try showPage()
+        type("http://studio.local:11434", into: try field(at: 0, in: view))
+        XCTAssertNil(settings.llmBaseURLs[LLMProvider.ollama.id])
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        XCTAssertTrue(waitUntil { self.settings.llmBaseURLs[LLMProvider.ollama.id] == "http://studio.local:11434" })
+        XCTAssertEqual(changes, 1)
+    }
+
+    /// Another window that is no longer key is none of the page's business
+    func testAnotherWindowResigningAppliesNothing() throws {
+        let view = try showPage()
+        type("http://studio.local:11434", into: try field(at: 0, in: view))
+        let other = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        other.isReleasedWhenClosed = false
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: other)
+        spin()
+        XCTAssertNil(settings.llmBaseURLs[LLMProvider.ollama.id])
+    }
+
     // MARK: Helpers
 
     private func showPage() throws -> NSView {

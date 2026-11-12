@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import AppKit
 import SwiftUI
 import Translation
 
@@ -6,9 +7,10 @@ import Translation
 /// (this Mac, or a language model service with the user's own API key).
 ///
 /// The API key goes straight into the keychain (`KeychainStore`); the field is emptied after
-/// saving and the key is never shown again. A typed key is saved with Save and on Return. When the
-/// service or the page changes it is saved too, but only for a service that has no key yet: a key
-/// that is stored is never replaced without the user's doing.
+/// saving and the key is never shown again. A typed key is saved with Save, on Return, and as soon
+/// as Test or Load the list worked with it. When the service or the page changes it is saved too,
+/// but only for a service that has no key yet: a key that is stored is never replaced without the
+/// user's doing.
 struct TextSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
@@ -89,6 +91,9 @@ struct TextSettingsView: View {
         .onAppear { page.appear() }
         .onDisappear { page.disappear() }
         .onChange(of: focusedField) { page.commitDrafts() }
+        // A field keeps its focus when another window becomes key: without this, Translate in
+        // the mirror window would use the address of before while the field shows a new one
+        .background(KeyWindowWatcher { page.commitDrafts() })
     }
 
     // MARK: The service
@@ -450,6 +455,15 @@ extension TextSettingsView {
             storeKey(enteredKey)
         }
 
+        /// A typed key that the service just accepted counts at once, in place of a stored one:
+        /// the user would otherwise see Test work and Translate ask for the key. Only while the
+        /// field still holds that key and the service is the same.
+        private func keepWorkingKey(_ key: String, for providerID: String) {
+            guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  enteredKey == key, provider.id == providerID else { return }
+            storeKey(key)
+        }
+
         // MARK: Requests
 
         private func stopWork() {
@@ -479,13 +493,14 @@ extension TextSettingsView {
                 return
             }
             isLoadingModels = true
-            let transport = self.transport
+            let transport = self.transport, typed = enteredKey
             work = Task { @MainActor in
                 let engine = LLMTranslationEngine(connection: connection, transport: transport)
                 defer { engine.cancel() }
                 do {
                     let models = try await engine.models()
                     guard !Task.isCancelled else { return }
+                    keepWorkingKey(typed, for: connection.provider.id)
                     loadedModels = models
                     if models.isEmpty {
                         modelsProblem = String(localized: "The service lists no models for translating.")
@@ -509,13 +524,15 @@ extension TextSettingsView {
             }
             let target = settings.translationTarget
             isTesting = true
-            let transport = self.transport
+            let transport = self.transport, typed = enteredKey
             work = Task { @MainActor in
                 let engine = LLMTranslationEngine(connection: connection, transport: transport)
                 defer { engine.cancel() }
                 do {
                     let translation = try await engine.test("Hello", into: target)
                     guard !Task.isCancelled else { return }
+                    // before the outcome: storing the key clears it
+                    keepWorkingKey(typed, for: connection.provider.id)
                     testOutcome = Outcome(text: translation, failed: false)
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -523,6 +540,39 @@ extension TextSettingsView {
                 }
                 isTesting = false
             }
+        }
+    }
+}
+
+/// Calls `resigned` when the window it is in is no longer the key window
+private struct KeyWindowWatcher: NSViewRepresentable {
+    let resigned: () -> Void
+
+    func makeNSView(context: Context) -> WatcherView {
+        WatcherView()
+    }
+
+    func updateNSView(_ view: WatcherView, context: Context) {
+        view.resigned = resigned
+    }
+
+    final class WatcherView: NSView {
+        var resigned: () -> Void = {}
+        private var observer: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            guard let window else { return }
+            observer = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
+                                                              object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.resigned() }
+            }
+        }
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
         }
     }
 }
