@@ -160,7 +160,13 @@ final class OverlayTrackerStressTests: XCTestCase {
         }
         var top = 0
         var direction = 3
-        var firstSeconds = 0.0, lastSeconds = 0.0
+        // What the tracker holds must not grow with time. It is counted rather than timed: a
+        // count does not depend on the load of the machine, and it means the same in a debug
+        // build, which plays fewer frames. Besides the one block, the areas to read are the
+        // largest part. They are capped, but moving them can cut a few in two until the next
+        // area that is added merges them again (about 60 at most over 30 000 frames of this).
+        let bound = 2 * tracker.configuration.maxUnreadAreas
+        var mostHeld = 0
         let count = OverlayTrackerStressTests.length > 1 ? 2000 : 100
         for index in 0..<count {
             time += 1.0 / 60
@@ -169,16 +175,13 @@ final class OverlayTrackerStressTests: XCTestCase {
             var image = OverlayTrackerStressTests.frame(page, pageWidth: width, top: max(0, top), width: width, height: height,
                                                         scale: 1)
             if index % 97 == 0 { image = Page.noisy(image, amount: 40, seed: UInt64(index)) }
-            let start = ProcessInfo.processInfo.systemUptime
             _ = tracker.advance(image, scale: 1, time: time)
-            let seconds = ProcessInfo.processInfo.systemUptime - start
-            if index < 300 { firstSeconds += seconds }
-            if index >= count - 300 { lastSeconds += seconds }
+            mostHeld = max(mostHeld, tracker.heldItemCount)
         }
         XCTAssertLessThanOrEqual(tracker.blocks.count, 1, "no blocks are made up without reading")
         XCTAssertNotNil(tracker.recognitionDue, "something is due after all that moving")
-        // (what the tracker keeps does not grow with time: the last frames take no longer than the first)
-        XCTAssertLessThan(lastSeconds, 3 * firstSeconds + 0.05)
+        XCTAssertGreaterThan(mostHeld, 0)
+        XCTAssertLessThanOrEqual(mostHeld, bound, "what the tracker holds stays bounded however long it runs")
     }
 
     func testTimeGoingBackwardsOrStandingStill() {

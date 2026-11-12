@@ -268,6 +268,14 @@ final class OverlayTracker {
         return result
     }
 
+    /// How many things the tracker holds that could pile up while it runs: blocks, scrolling
+    /// areas, areas to read and what it remembers of texts. Only for checks that this stays
+    /// bounded; tracking does not depend on it.
+    var heldItemCount: Int {
+        tracked.count + areas.count + plan.areas.count + plan.inFlight.count + translations.count + requested.count
+            + failedAt.count
+    }
+
     /// A paragraph followed from frame to frame
     private struct Block {
         var id: Int
