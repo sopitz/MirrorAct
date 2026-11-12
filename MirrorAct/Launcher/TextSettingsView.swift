@@ -143,8 +143,10 @@ struct TextSettingsView: View {
                     Text("Runs on this Mac or in your network; nothing is sent to the internet.")
                 case .serverToEnter:
                     Text("The text recognized on the screen is sent to the server you enter here to be translated. Nothing is sent while translating is off.")
+                        + Text(verbatim: " ") + Self.costNotice
                 case .remote(let service):
                     Text("The text recognized on the screen is sent to \(service) to be translated. Nothing is sent while translating is off.")
+                        + Text(verbatim: " ") + Self.costNotice
                 }
             }
             .font(.caption)
@@ -258,6 +260,9 @@ struct TextSettingsView: View {
         /// to the service or host named
         case remote(String)
     }
+
+    /// Translate sends new text whenever it comes into view, and a service bills each request
+    private static let costNotice = Text("The service may charge your account for each request: the more new text comes into view, the more it costs.")
 
     static func serviceNotice(for connection: LLMConnection) -> ServiceNotice {
         if connection.isLocal { return .local }
