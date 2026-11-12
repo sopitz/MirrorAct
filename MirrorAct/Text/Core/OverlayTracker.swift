@@ -1526,9 +1526,12 @@ final class OverlayTracker {
         }
     }
 
-    /// Forget everything, as before the first frame.
+    /// Forget everything, as before the first frame. A pass that is running is dropped: the
+    /// caller may never finish or abandon it (its results belong to a turn that is over), and a
+    /// new one can start at once. Its request can no longer match, because ids keep counting up.
     func reset() {
         forgetPicture()
+        running = nil
         previous = nil
         translations = [:]
         requested = []

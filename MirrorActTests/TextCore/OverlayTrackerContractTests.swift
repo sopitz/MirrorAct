@@ -126,6 +126,29 @@ final class OverlayTrackerContractTests: XCTestCase {
         XCTAssertNotNil(update.recognitionDue)
     }
 
+    func testResetWhileAPassRunsStartsReadingAgain() throws {
+        // (the caller drops the pass of a turn that was turned off: it never finishes or abandons it)
+        let tracker = OverlayTracker()
+        _ = tracker.advance(page(), scale: scale, time: 0)
+        let stale = try readPage(tracker, at: 1)
+        tracker.reset()
+
+        let update = tracker.advance(page(), scale: scale, time: 2)
+        XCTAssertEqual(update.change, .first)
+        let due = try XCTUnwrap(update.recognitionDue, "after a reset the picture must be read again")
+        let request = try readPage(tracker, at: max(due, 2))
+        XCTAssertNotEqual(request, stale)
+        XCTAssertTrue(request.isFullFrame)
+
+        // the dropped pass may still come back late: it must change nothing
+        tracker.finishRecognition(stale, blocks: [block("Einstellungen", row: 40)], time: 2.1)
+        tracker.abandonRecognition(stale)
+        XCTAssertTrue(tracker.blocks.isEmpty)
+        XCTAssertNil(tracker.beginRecognition(time: 3), "the new pass is still running")
+        tracker.finishRecognition(request, blocks: [block("WLAN", row: 120)], time: 3)
+        XCTAssertEqual(tracker.blocks.map(\.text), ["WLAN"])
+    }
+
     func testThumbnailsAreBoxAverages() {
         let luma: [UInt8] = [0, 10, 20, 30, 99,
                              40, 50, 60, 70, 99,
