@@ -371,6 +371,53 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertGreaterThan(endless.pixels.filter { $0 > 127 }.count, 100)
     }
 
+    /// Japanese, Chinese and Korean may be broken between any two characters, also before ー
+    /// and the small kana, where Core Text breaks them once it knows the language. That is no
+    /// broken word and no reason to set the text in the smallest font.
+    func testScriptsWithoutSpacesAreNotSetSmallerForTheirLineBreaks() throws {
+        let cases: [(text: String, width: Int, height: Int, lineCount: Int, language: String)] = [
+            ("プライバシーとセキュリティ", 140, 44, 1, "ja"),
+            ("メールアカウントのセキュリティ設定", 150, 80, 2, "ja-Jpan-JP"),
+            ("一般情報とプライバシーとセキュリティの設定", 200, 60, 2, "ja"),
+            ("ユーザーアカウントとパスワードのリセット", 160, 70, 2, "ja"),
+            ("设置与隐私：翻译后的文字", 160, 60, 2, "zh-Hans-CN"),
+            ("通知設定與隱私權保護的選項", 150, 60, 2, "zh-Hant-TW"),
+            ("개인정보보호및보안설정관리", 150, 60, 2, "ko"),
+            ("개인 정보 보호 및 보안 설정을 관리합니다", 160, 60, 2, "ko-KR"),
+        ]
+        // where a line may end, by the characters on both sides alone
+        func breaksWord(_ before: String, _ after: String) -> Bool {
+            BlockTextMask.breaksWord(Array((before + after).utf16), at: before.utf16.count)
+        }
+        XCTAssertFalse(breaksWord("プライバシ", "ーと"))
+        XCTAssertFalse(breaksWord("セキ", "ュリティ"))
+        XCTAssertFalse(breaksWord("セキュリテ", "ィ"))
+        XCTAssertFalse(breaksWord("設", "定"))
+        XCTAssertFalse(breaksWord("隐私", "翻译"))
+        XCTAssertFalse(breaksWord("개인", "정보"))
+        XCTAssertFalse(breaksWord("ภาษา", "ไทย"))
+        XCTAssertFalse(breaksWord("iOS 2024", "年"))
+        XCTAssertFalse(breaksWord("𠮷", "野家"))
+        XCTAssertFalse(breaksWord("Datenschutz ", "verwalten"))
+        XCTAssertFalse(breaksWord("E-", "Mail"))
+        XCTAssertTrue(breaksWord("Benachrichtigun", "gseinstellungen"))
+        XCTAssertTrue(breaksWord("Привет", "ствие"))
+        XCTAssertTrue(breaksWord("12", "345"))
+        XCTAssertTrue(breaksWord("cafe\u{301}", "s"))
+        for item in cases {
+            for language in [item.language, nil] {
+                let label = "\(item.text) \(language ?? "no language")"
+                let mask = try XCTUnwrap(BlockTextMask(text: item.text, width: item.width, height: item.height,
+                                                       lineCount: item.lineCount, language: language), label)
+                XCTAssertTrue(mask.fits, label)
+                XCTAssertGreaterThan(mask.lineCount, 1, label)
+                XCTAssertEqual(mask.lines.joined(), item.text, label)
+                let lineHeight = CGFloat(item.height) / CGFloat(item.lineCount)
+                XCTAssertGreaterThan(mask.fontSize, BlockTextMask.smallestFontShare * lineHeight + 1, label)
+            }
+        }
+    }
+
     /// The mask says where the text covers the block. An emoji is drawn in its own colors; what
     /// counts for the mask is its shape, not how bright its colors are.
     func testEmojiCoverTheirShapeInTheMask() throws {

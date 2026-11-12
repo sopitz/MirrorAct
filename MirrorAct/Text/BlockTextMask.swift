@@ -48,21 +48,21 @@ struct BlockTextMask {
         let box = CGSize(width: CGFloat(width), height: CGFloat(height))
         let largest = max(1, lineHeight * BlockTextMask.largestFontShare)
         let smallest = min(largest, max(lineHeight * BlockTextMask.smallestFontShare, BlockTextMask.smallestFontSize))
-        let breaks = BlockTextMask.breakOpportunities(in: text)
+        let units = Array(text.utf16)
 
         // The largest font that fits: usually the first one tried. Otherwise halve the range
         // between a size that fits and one that does not until they are half a pixel apart.
         // A word broken between two letters does not count as fitting; only the smallest font
         // may break one, when nothing else is left.
-        var layout = Layout(text, fontSize: largest, in: box, lineHeight: lineHeight, breaks: breaks, language: language)
+        var layout = Layout(text, fontSize: largest, in: box, lineHeight: lineHeight, units: units, language: language)
         if !layout.fits, smallest < largest {
-            layout = Layout(text, fontSize: smallest, in: box, lineHeight: lineHeight, breaks: breaks, language: language)
+            layout = Layout(text, fontSize: smallest, in: box, lineHeight: lineHeight, units: units, language: language)
             if layout.fits {
                 var fitting = smallest, tooLarge = largest
                 var steps = 0
                 while tooLarge - fitting > 0.5, steps < 6 {
                     let middle = (fitting + tooLarge) / 2
-                    let candidate = Layout(text, fontSize: middle, in: box, lineHeight: lineHeight, breaks: breaks,
+                    let candidate = Layout(text, fontSize: middle, in: box, lineHeight: lineHeight, units: units,
                                            language: language)
                     if candidate.fits {
                         fitting = middle
@@ -98,8 +98,8 @@ struct BlockTextMask {
         /// and no word had to be broken between two letters for that
         let fits: Bool
 
-        /// `breaks`: where the text may be broken (see `breakOpportunities`)
-        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat, breaks: Set<Int>,
+        /// `units`: the text in UTF-16 units, as Core Text counts its ranges
+        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat, units: [UInt16],
              language: String?) {
             // The language picks the fonts for the characters the system font does not have
             // (Hiragino for Japanese, PingFang SC or TC for Chinese) and their local forms.
@@ -129,8 +129,7 @@ struct BlockTextMask {
             self.size = size
             fitsBox = size.height <= box.height + slack && size.width <= box.width + 0.5
             // A word wider than the block is broken by Core Text between two letters, without
-            // a hyphen, and the size above still fits. A line has to end where the rules of
-            // line breaking allow it (after a space, a hyphen, between two Chinese characters …).
+            // a hyphen, and the size above still fits. Such a line end does not count as fitting.
             var keepsWords = true
             if fitsBox {
                 let path = CGPath(rect: CGRect(x: 0, y: 0, width: box.width, height: size.height + box.height + 100),
@@ -139,7 +138,7 @@ struct BlockTextMask {
                 let lines = CTFrameGetLines(frame) as? [CTLine] ?? []
                 for line in lines.dropLast() {
                     let range = CTLineGetStringRange(line)
-                    if !breaks.contains(range.location + range.length) {
+                    if BlockTextMask.breaksWord(units, at: range.location + range.length) {
                         keepsWords = false
                         break
                     }
@@ -149,20 +148,73 @@ struct BlockTextMask {
         }
     }
 
-    /// Where the rules of line breaking (Unicode's) allow a line to end, as offsets in UTF-16
-    /// units like the string ranges of Core Text
-    private static func breakOpportunities(in text: String) -> Set<Int> {
-        let string = text as CFString
-        let length = CFStringGetLength(string)
-        guard let tokenizer = CFStringTokenizerCreate(nil, string, CFRange(location: 0, length: length),
-                                                      kCFStringTokenizerUnitLineBreak, nil) else { return [] }
-        var breaks: Set<Int> = [length]
-        while CFStringTokenizerAdvanceToNextToken(tokenizer) != [] {
-            let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-            breaks.insert(range.location + range.length)
-        }
-        return breaks
+    /// Whether a line that ends at `offset` (in UTF-16 units) breaks a word: only when it ends
+    /// between two letters or digits of scripts written with spaces between words. Japanese,
+    /// Chinese, Korean, Thai and the like may be broken between any two characters, where Core
+    /// Text chooses to for the language of the text; the rules of Unicode alone are stricter
+    /// there (no break before ー or a small kana) and would count those lines as broken words.
+    /// The decision depends only on the characters, not on the region or language of the Mac.
+    static func breaksWord(_ units: [UInt16], at offset: Int) -> Bool {
+        guard offset > 0, offset < units.count,
+              let before = scalar(in: units, endingAt: offset),
+              let after = scalar(in: units, startingAt: offset) else { return false }
+        return isLetterOrDigitOfSpacedScript(before) && isLetterOrDigitOfSpacedScript(after)
     }
+
+    private static func scalar(in units: [UInt16], endingAt offset: Int) -> Unicode.Scalar? {
+        let last = units[offset - 1]
+        if UTF16.isTrailSurrogate(last), offset >= 2, UTF16.isLeadSurrogate(units[offset - 2]) {
+            return Unicode.Scalar(UInt32(0x10000) + (UInt32(units[offset - 2] - 0xD800) << 10) + UInt32(last - 0xDC00))
+        }
+        return Unicode.Scalar(last)
+    }
+
+    private static func scalar(in units: [UInt16], startingAt offset: Int) -> Unicode.Scalar? {
+        let first = units[offset]
+        if UTF16.isLeadSurrogate(first), offset + 1 < units.count, UTF16.isTrailSurrogate(units[offset + 1]) {
+            return Unicode.Scalar(UInt32(0x10000) + (UInt32(first - 0xD800) << 10) + UInt32(units[offset + 1] - 0xDC00))
+        }
+        return Unicode.Scalar(first)
+    }
+
+    /// Letters, combining marks and digits, except those of the scripts written without spaces
+    private static func isLetterOrDigitOfSpacedScript(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+             .nonspacingMark, .spacingMark, .enclosingMark, .decimalNumber, .letterNumber, .otherNumber:
+            break
+        default:
+            return false
+        }
+        return !scriptsWithoutSpaces.contains { $0.contains(scalar.value) }
+    }
+
+    /// The blocks of the scripts that are written without spaces between words, or (Korean)
+    /// that may be broken between any two syllables
+    private static let scriptsWithoutSpaces: [ClosedRange<UInt32>] = [
+        0x0E00...0x0EFF,   // Thai, Lao
+        0x0F00...0x0FFF,   // Tibetan
+        0x1000...0x109F,   // Myanmar
+        0x1100...0x11FF,   // Hangul Jamo
+        0x1780...0x17FF,   // Khmer
+        0x1950...0x19FF,   // Tai Le, New Tai Lue, Khmer symbols
+        0x1A20...0x1AAF,   // Tai Tham
+        0x2E80...0x2FDF,   // CJK and Kangxi radicals
+        0x3000...0x303F,   // CJK symbols (々, 〆, the iteration marks)
+        0x3040...0x30FF,   // Hiragana, Katakana with ー and the small kana
+        0x3100...0x31FF,   // Bopomofo, Hangul compatibility Jamo, Kanbun, small Katakana extensions
+        0x3400...0x4DBF,   // CJK Extension A
+        0x4E00...0x9FFF,   // CJK Unified Ideographs
+        0xA000...0xA4CF,   // Yi
+        0xA960...0xA97F,   // Hangul Jamo Extended-A
+        0xA9E0...0xA9FF,   // Myanmar Extended-B
+        0xAA60...0xAADF,   // Myanmar Extended-A, Tai Viet
+        0xAC00...0xD7FF,   // Hangul syllables, Hangul Jamo Extended-B
+        0xF900...0xFAFF,   // CJK Compatibility Ideographs
+        0xFF66...0xFFDC,   // halfwidth Katakana and Hangul
+        0x1B000...0x1B16F, // Kana Supplement and Extended-A, small kana extension
+        0x20000...0x3FFFF, // CJK Extensions B and later
+    ]
 
     /// Draws the coverage of the text, one byte per pixel: 0 where there is none, 255 where it covers fully
     private static func draw(_ layout: Layout, width: Int, height: Int,
