@@ -876,6 +876,10 @@ final class LLMTranslationEngineTests: XCTestCase {
 /// The API keys in the login keychain. Skipped where the keychain cannot be used (a machine
 /// without a login session, for example).
 final class KeychainStoreTests: XCTestCase {
+    func testTheTestsKeepTheirItemsApartFromTheKeysOfTheUser() {
+        XCTAssertTrue(KeychainStore.service.hasSuffix(".llm.tests"), KeychainStore.service)
+    }
+
     func testAKeyIsStoredReadReplacedAndRemoved() throws {
         // an account that belongs to this test alone: no key of the user is touched
         let service = "test-" + UUID().uuidString.lowercased()

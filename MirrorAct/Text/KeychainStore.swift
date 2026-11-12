@@ -11,8 +11,10 @@ import Security
 /// app that made it: after a build that is not signed by a developer it asks the user before it
 /// hands the key out.
 enum KeychainStore {
-    /// what the items are filed under
-    private static let service = (Bundle.main.bundleIdentifier ?? "io.github.sopitz.MirrorAct") + ".llm"
+    /// What the items are filed under. The tests run inside the app and get a name of their own,
+    /// so that nothing they store or leave behind can ever be taken for a key of the user.
+    static let service = (Bundle.main.bundleIdentifier ?? "io.github.sopitz.MirrorAct")
+        + (AppDelegate.isTesting ? ".llm.tests" : ".llm")
 
     private static let lock = NSLock()
     /// The keys read or stored since the app started, by service; "" = removed. The keychain is
