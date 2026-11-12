@@ -15,8 +15,11 @@ enum TextRecognizer {
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
         request.automaticallyDetectsLanguage = true
-        // as a fraction of the picture's height; set explicitly because the documented default
-        // (1/32) would skip ordinary text on a phone screen
+        // As a fraction of the picture's height; set explicitly because the documented default
+        // (1/32) would skip ordinary text on a phone screen. Whether Vision measures it against
+        // the region of interest or the whole picture, 0.004 lies below anything legible (on
+        // macOS 26 the accurate recognizer drops no text by this value either way; see
+        // TextRecognizerTests).
         request.minimumTextHeight = 0.004
         // Vision counts from the bottom left, in fractions of the picture
         var interest = CGRect(x: 0, y: 0, width: 1, height: 1)

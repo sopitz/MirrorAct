@@ -43,8 +43,9 @@ enum TestFrames {
                 // Core Graphics counts from the bottom
                 let baseline = CGFloat(height) - line.top - ascent
                 context.textPosition = CGPoint(x: line.x, y: baseline)
-                CTLineDraw(ctLine, context)
+                // measured before drawing: drawing moves the text position to the end of the line
                 let ink = CTLineGetImageBounds(ctLine, context)
+                CTLineDraw(ctLine, context)
                 inked.append(CGRect(x: ink.minX, y: CGFloat(height) - ink.maxY, width: ink.width, height: ink.height))
             }
         }
