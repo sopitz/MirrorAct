@@ -583,6 +583,13 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             return TranslationFailure(message: name + ": "
                                       + String(localized: "the address \(connection.shownAddress) cannot be used – check it in the settings"),
                                       isPermanent: true)
+        case .notConnectedToInternet:
+            // What macOS reports for a computer in the local network when MirrorAct may not
+            // reach it (Privacy & Security > Local Network); this Mac itself needs no permission.
+            let isThisMac = host == "localhost" || host == "::1" || host.hasPrefix("127.") || host.hasSuffix(".localhost")
+            guard connection.isLocal, !isThisMac else { return nil }
+            return TranslationFailure(message: name + ": "
+                                      + String(localized: "cannot be reached at \(connection.shownAddress) – allow MirrorAct under System Settings > Privacy & Security > Local Network"))
         case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost:
             // a server on this Mac or in the network that does not answer is most often not running
             guard connection.isLocal else { return nil }

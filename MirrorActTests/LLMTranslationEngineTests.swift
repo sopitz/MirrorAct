@@ -503,6 +503,22 @@ final class LLMTranslationEngineTests: XCTestCase {
                        + String(localized: "cannot be reached at \("http://localhost:11434/v1") – is it running?"))
     }
 
+    func testAComputerInTheNetworkThatMacOSKeepsAwayIsExplained() async {
+        let transport = ScriptedTransport { _, _ in throw URLError(.notConnectedToInternet) }
+        let engine = makeEngine(.ollama, baseURL: "192.168.1.20:11434", model: "gemma4", transport: transport)
+        let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+        XCTAssertEqual(failure?.message, "Ollama: "
+                       + String(localized: "cannot be reached at \("http://192.168.1.20:11434/v1") – allow MirrorAct under System Settings > Privacy & Security > Local Network"))
+        XCTAssertEqual(failure?.isPermanent, false)
+
+        // this Mac itself needs no permission, and a service on the internet none either
+        for (provider, address) in [(LLMProvider.ollama, "localhost:11434"), (.openAI, "")] {
+            let other = makeEngine(provider, baseURL: address, model: "m", transport: transport)
+            let message = await self.failure { try await other.translate(["Settings"], into: self.german) }?.message
+            XCTAssertEqual(message?.contains("Local Network"), false, provider.id)
+        }
+    }
+
     func testANameAndPasswordInTheAddressAreNotShown() async {
         let transport = ScriptedTransport { _, _ in throw URLError(.cannotConnectToHost) }
         let engine = makeEngine(.custom, baseURL: "http://user:secret@192.168.1.5:8080/v1", model: "m", transport: transport)

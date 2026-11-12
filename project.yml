@@ -59,7 +59,7 @@ targets:
         NSHumanReadableCopyright: "GPL-3.0-or-later"
         NSCameraUsageDescription: MirrorAct shows the screen of an iPhone or iPad connected by cable.
         NSMicrophoneUsageDescription: MirrorAct plays the sound of an iPhone or iPad connected by cable.
-        NSLocalNetworkUsageDescription: MirrorAct can be reached as an AirPlay receiver for Screen Mirroring.
+        NSLocalNetworkUsageDescription: MirrorAct can be reached as an AirPlay receiver for Screen Mirroring and can translate with a language model on a computer in the local network.
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp
