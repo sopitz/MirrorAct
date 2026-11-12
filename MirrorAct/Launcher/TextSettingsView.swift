@@ -27,8 +27,8 @@ struct TextSettingsView: View {
         self.keys = keys
     }
 
-    /// languages the Mac can translate into (loaded when the page appears)
-    @State private var translationLanguages: [Locale.Language] = []
+    /// the rows of the languages the Mac can translate into (loaded when the page appears)
+    @State private var translationLanguages: [LanguageRow] = []
 
     /// a key that is being typed and is not stored yet
     @State private var enteredKey = ""
@@ -84,12 +84,13 @@ struct TextSettingsView: View {
                     Text("System language").tag("system")
                     // while the list loads, the language chosen before keeps its row
                     if settings.translationLanguage != "system",
-                       !translationLanguages.contains(where: { $0.minimalIdentifier == settings.translationLanguage }) {
-                        Text(verbatim: Self.name(of: Locale.Language(identifier: settings.translationLanguage)))
+                       !translationLanguages.contains(where: { $0.id == settings.translationLanguage }) {
+                        let chosen = Locale.Language(identifier: settings.translationLanguage)
+                        Text(verbatim: Self.label(of: chosen, in: Self.appLocale, withRegion: chosen.region != nil))
                             .tag(settings.translationLanguage)
                     }
-                    ForEach(translationLanguages, id: \.minimalIdentifier) { language in
-                        Text(verbatim: Self.name(of: language)).tag(language.minimalIdentifier)
+                    ForEach(translationLanguages) { row in
+                        Text(verbatim: row.label).tag(row.id)
                     }
                 }
                 Picker("Translate with", selection: engineSelection) {
@@ -109,9 +110,7 @@ struct TextSettingsView: View {
         .formStyle(.grouped)
         .task {
             let languages = await LanguageAvailability().supportedLanguages
-            translationLanguages = languages.sorted {
-                Self.name(of: $0).localizedCompare(Self.name(of: $1)) == .orderedAscending
-            }
+            translationLanguages = Self.languageRows(for: languages, in: Self.appLocale)
         }
         .onAppear {
             loadDrafts()
@@ -403,7 +402,37 @@ struct TextSettingsView: View {
         }
     }
 
-    private static func name(of language: Locale.Language) -> String {
-        LanguageMatching.name(of: language, in: appLocale)
+    /// One row of “Translate into”
+    struct LanguageRow: Identifiable, Equatable {
+        /// the language's minimal identifier, as the settings keep it
+        let id: String
+        let label: String
+    }
+
+    /// The rows for the languages Translation offers, in the order of their labels. Most of them
+    /// come in several regions ("en", "en-GB", "en-IN" …): those are told apart by the region, a
+    /// language that comes once keeps its plain name.
+    static func languageRows(for languages: [Locale.Language], in locale: Locale) -> [LanguageRow] {
+        var seen = Set<String>()
+        let unique = languages.filter { seen.insert($0.minimalIdentifier).inserted }
+        var count: [String: Int] = [:]
+        for language in unique {
+            count[LanguageMatching.name(of: language, in: locale), default: 0] += 1
+        }
+        return unique
+            .map { language in
+                let shared = count[LanguageMatching.name(of: language, in: locale), default: 0] > 1
+                return LanguageRow(id: language.minimalIdentifier,
+                                   label: label(of: language, in: locale, withRegion: shared))
+            }
+            .sorted { $0.label.compare($1.label, locale: locale) == .orderedAscending }
+    }
+
+    /// "German", or with the region "German (Switzerland)"
+    private static func label(of language: Locale.Language, in locale: Locale, withRegion: Bool) -> String {
+        let name = LanguageMatching.name(of: language, in: locale)
+        guard withRegion, let region = language.region?.identifier,
+              let place = locale.localizedString(forRegionCode: region) else { return name }
+        return "\(name) (\(place))"
     }
 }

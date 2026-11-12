@@ -205,3 +205,43 @@ final class TextSettingsViewTests: XCTestCase {
         return true
     }
 }
+
+/// The rows of “Translate into”
+final class TextSettingsLanguageMenuTests: XCTestCase {
+    /// what Apple's Translation offered on macOS 26.5, in its order
+    private let supported = [
+        "en-IN", "it-CH", "ko", "nb", "da", "en-CA", "en-SG", "es-MX", "uk", "fr-CA", "it", "zh-TW", "es",
+        "nl", "ar-AE", "zh-HK", "vi", "zh", "ru", "en-GB", "es-US", "fr", "hi", "en-ZA", "th", "en-AU",
+        "de-CH", "de", "en", "pt", "pl", "en-IE", "en-NZ", "sv", "id", "tr", "ja", "pt-PT",
+    ].map { Locale.Language(identifier: $0) }
+
+    /// Nine rows reading “English” cannot be told apart
+    func testEveryRowHasALabelOfItsOwn() {
+        for identifier in ["en", "de", "fr", "ja"] {
+            let rows = TextSettingsView.languageRows(for: supported, in: Locale(identifier: identifier))
+            XCTAssertEqual(rows.count, supported.count)
+            XCTAssertEqual(Set(rows.map(\.label)).count, rows.count, "in \(identifier): \(rows.map(\.label))")
+            XCTAssertEqual(Set(rows.map(\.id)), Set(supported.map(\.minimalIdentifier)))
+        }
+    }
+
+    func testTheRegionIsNamedWhereALanguageComesMoreThanOnce() {
+        let rows = TextSettingsView.languageRows(for: supported, in: Locale(identifier: "en"))
+        let labels = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.label) })
+        XCTAssertEqual(labels["de"], "German")
+        XCTAssertEqual(labels["de-CH"], "German (Switzerland)")
+        XCTAssertEqual(labels["en-GB"], "English (United Kingdom)")
+        XCTAssertEqual(labels["pt-PT"], "Portuguese (Portugal)")
+        XCTAssertEqual(labels["zh-TW"], "Chinese, Traditional (Taiwan)")
+        // alone in its language
+        XCTAssertEqual(labels["zh"], "Chinese, Simplified")
+        XCTAssertEqual(labels["ar-AE"], "Arabic")
+        XCTAssertEqual(labels["ko"], "Korean")
+    }
+
+    func testTheRowsAreInTheOrderOfTheirLabels() {
+        let locale = Locale(identifier: "de")
+        let labels = TextSettingsView.languageRows(for: supported, in: locale).map(\.label)
+        XCTAssertEqual(labels, labels.sorted { $0.compare($1, locale: locale) == .orderedAscending })
+    }
+}
