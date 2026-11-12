@@ -39,11 +39,12 @@ enum LanguageMatching {
 
     /// The entry of `supported` that stands for `wanted`: an equivalent one ("zh-Hant" for
     /// "zh-TW", "en-US" for "en"), otherwise one for the same language, script and region
-    /// ("de-CH" for "de-Latn-CH"), otherwise the language as it is usually written in that script
-    /// ("de" for "de-AT", "zh-TW" for "zh-MO"), otherwise one in the same language and script
-    /// ("zh-TW" for "zh-HK"), otherwise one in the same language ("pt-BR" for "pt-PT"). Never one
-    /// for an undetermined language. The order of `supported` only decides among entries that are
-    /// equally good.
+    /// ("de-CH" for "de-Latn-CH"), otherwise the closest wider form of the region ("en-GB" for
+    /// "en-DE", "es-MX" for "es-AR", "pt-PT" for "pt-AO", "zh-HK" for "zh-MO"), otherwise the
+    /// language as it is usually written in that script ("de" for "de-AT", "zh-TW" for
+    /// "zh-Hant-MY"), otherwise one in the same language and script ("zh-TW" for "zh-HK"),
+    /// otherwise one in the same language ("pt-BR" for "pt-PT"). Never one for an undetermined
+    /// language. The order of `supported` only decides among entries that are equally good.
     static func match(_ wanted: Locale.Language, in supported: [Locale.Language]) -> Locale.Language? {
         guard let wantedCode = code(of: wanted) else { return nil }
         let known = supported.filter { !isUndetermined($0) }
@@ -52,6 +53,9 @@ enum LanguageMatching {
         if let region = wanted.region,
            let sameRegion = sameCode.first(where: { $0.script == wanted.script && $0.region == region }) {
             return sameRegion
+        }
+        for wider in widerForms(of: wanted, code: wantedCode) {
+            if let entry = sameCode.first(where: { $0.isEquivalent(to: wider) }) { return entry }
         }
         // macOS lists the countries of a language before the language itself (en-IN before en,
         // de-CH before de): the first entry in the script would be some other country's spelling
@@ -62,6 +66,56 @@ enum LanguageMatching {
         }
         return sameCode.first
     }
+
+    /// The forms a region of a language falls back to, the closest first: "en-150", "en-GB" for
+    /// "en-DE"; "es-419", "es-MX", "es-US" for "es-AR". Empty where the language itself is next.
+    private static func widerForms(of language: Locale.Language, code: String) -> [Locale.Language] {
+        guard let script = script(of: language), var region = language.region?.identifier else { return [] }
+        let family = code + "-" + script
+        guard let parents = widerRegions[family] else { return [] }
+        var regions: [String] = []
+        // a few steps at most; the bound only guards against a loop in the table
+        for _ in 0..<4 {
+            regions += standIns[family]?[region] ?? []
+            guard let wider = parents[region] else { break }
+            regions.append(wider)
+            region = wider
+        }
+        return regions.map { Locale.Language(identifier: family + "-" + $0) }
+    }
+
+    /// The script of a language, also where the identifier names none ("Hant" for "zh-MO")
+    private static func script(of language: Locale.Language) -> String? {
+        language.maximalIdentifier.split(whereSeparator: { $0 == "-" || $0 == "_" })
+            .dropFirst().first { $0.count == 4 && $0.allSatisfy(\.isLetter) }.map(String.init)
+    }
+
+    /// The region macOS puts a region of a language under (`Locale.Language.parent` on macOS 26,
+    /// from CLDR's parent locales), by language and script. Only where that wider form is not
+    /// the language itself: everywhere else the language as it is usually written is the
+    /// closest. A Mac set to en-DE shows apps in British English for the same reason.
+    private static let widerRegions: [String: [String: String]] = {
+        func under(_ wider: String, _ regions: String) -> [String: String] {
+            Dictionary(uniqueKeysWithValues: regions.split(separator: " ").map { (String($0), wider) })
+        }
+        return [
+            "en-Latn": under("150", "AD AL AT BA BE BG BY CH CY CZ DE DK EE ES FI FO FR GE GL GR HR HU IS IT LI LT "
+                                    + "LU LV MC MD ME MK NL NO PL PT RO RS RU SE SI SK UA VA")
+                .merging(under("AU", "CC CK CX NF NR NU NZ WS")) { first, _ in first }
+                .merging(under("GB", "AI AU BB BD BM BN BS BW BZ DG DM FJ FK GD GG GH GI GM GY HK IE IM IN IO JE "
+                                     + "JM KE KI KN KY LC LK LS MO MS MT MU MV MW MY NA NG PK SB SC SD SG SH SL SS "
+                                     + "SZ TC TO TT TV TZ UG VC VG VU ZA ZM ZW 150")) { first, _ in first },
+            "es-Latn": under("419", "AG AI AR AW BB BL BM BO BQ BR BS BZ CA CL CO CR CU CW DM DO EC FK GD GF GL GP "
+                                    + "GT GY HN HT JP KN KY LC MF MQ MS MX NI PA PE PM PR PY SR SV SX TC TT US UY "
+                                    + "VC VE VG VI"),
+            "pt-Latn": under("PT", "AO CH CV FR GQ GW LU MO MZ ST TL"),
+            "zh-Hant": under("HK", "MO"),
+        ]
+    }()
+
+    /// Countries that stand in for a wider form macOS does not list, the closest first: it
+    /// translates Latin American Spanish as Mexico's and the United States', not as es-419
+    private static let standIns: [String: [String: [String]]] = ["es-Latn": ["419": ["MX", "US"]]]
 
     /// The name of a language for a notice, in the language of `locale`: "German",
     /// "Chinese, Traditional"

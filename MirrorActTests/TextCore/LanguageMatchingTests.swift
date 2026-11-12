@@ -53,8 +53,9 @@ final class LanguageMatchingTests: XCTestCase {
     func testOtherwiseTheSameLanguageInTheSameScriptIsMatched() {
         XCTAssertEqual(matched("de-CH"), "de-DE")
         XCTAssertEqual(matched("zh-HK"), "zh-TW")
-        // the language as it is usually written, not the first other country in the list
-        XCTAssertEqual(matched("en-AU"), "en-US")
+        // the form macOS falls back to, not the first other country in the list
+        XCTAssertEqual(matched("en-AU"), "en-GB")
+        XCTAssertEqual(matched("en-CA"), "en-US")
     }
 
     /// The languages exactly as macOS 26 lists them (`LanguageAvailability().supportedLanguages`):
@@ -73,16 +74,58 @@ final class LanguageMatchingTests: XCTestCase {
         // not the first country of the list: Austrian German is not Swiss German (no ß there)
         XCTAssertEqual(matchedAsListed("de-AT"), "de")
         XCTAssertEqual(matchedAsListed("de-LU"), "de")
-        XCTAssertEqual(matchedAsListed("en-DE"), "en")
-        XCTAssertEqual(matchedAsListed("en-150"), "en")
         XCTAssertEqual(matchedAsListed("fr-BE"), "fr")
         XCTAssertEqual(matchedAsListed("fr-CH"), "fr")
+        // French in Africa is written as in France; macOS has no wider form for it
+        XCTAssertEqual(matchedAsListed("fr-SN"), "fr")
+        XCTAssertEqual(matchedAsListed("fr-CI"), "fr")
+        XCTAssertEqual(matchedAsListed("fr-MA"), "fr")
         XCTAssertEqual(matchedAsListed("it-SM"), "it")
+        XCTAssertEqual(matchedAsListed("es-ES"), "es")
+        XCTAssertEqual(matchedAsListed("es-GQ"), "es")
+        // English where macOS puts it under en-001: as in the United States
+        XCTAssertEqual(matchedAsListed("en-001"), "en")
+        XCTAssertEqual(matchedAsListed("en-AO"), "en")
+        XCTAssertEqual(matchedAsListed("en-JP"), "en")
+        XCTAssertEqual(matchedAsListed("en-PR"), "en")
         // Chinese in the script of the region
-        XCTAssertEqual(matchedAsListed("zh-MO"), "zh-TW")
         XCTAssertEqual(matchedAsListed("zh-SG"), "zh")
+        XCTAssertEqual(matchedAsListed("zh-MY"), "zh")
+        XCTAssertEqual(matchedAsListed("zh-Hant-MY"), "zh-TW")
+        XCTAssertEqual(matchedAsListed("zh-Hans-MO"), "zh")
         XCTAssertEqual(matchedAsListed("zh-Hant"), "zh-TW")
         XCTAssertEqual(matchedAsListed("zh-Hans"), "zh")
+    }
+
+    /// The form macOS itself falls back to for a region (`Locale.Language.parent`, which is how
+    /// a Mac set to en-DE shows apps in British English), where macOS lists it
+    func testARegionMacOSDoesNotTranslateGetsTheClosestWiderFormItLists() {
+        // English in Europe and the Commonwealth is British English, never the first country
+        // of the list (Indian English)
+        XCTAssertEqual(matchedAsListed("en-DE"), "en-GB")
+        XCTAssertEqual(matchedAsListed("en-150"), "en-GB")
+        XCTAssertEqual(matchedAsListed("en-CH"), "en-GB")
+        XCTAssertEqual(matchedAsListed("en-HK"), "en-GB")
+        XCTAssertEqual(matchedAsListed("en-NG"), "en-GB")
+        XCTAssertEqual(matchedAsListed("en-WS"), "en-AU")
+        // Latin American Spanish: macOS lists Mexico and the United States, not es-419
+        XCTAssertEqual(matchedAsListed("es-419"), "es-MX")
+        XCTAssertEqual(matchedAsListed("es-AR"), "es-MX")
+        XCTAssertEqual(matchedAsListed("es-CO"), "es-MX")
+        XCTAssertEqual(matchedAsListed("es-PR"), "es-MX")
+        let withoutMexico = listedByMacOS.filter { $0.minimalIdentifier != "es-MX" }
+        XCTAssertEqual(LanguageMatching.match(language("es-AR"), in: withoutMexico)?.minimalIdentifier, "es-US")
+        XCTAssertEqual(LanguageMatching.match(language("es-419"), in: withoutMexico)?.minimalIdentifier, "es-US")
+        // whatever the order of the list
+        XCTAssertEqual(LanguageMatching.match(language("es-AR"), in: listedByMacOS.reversed())?.minimalIdentifier,
+                       "es-MX")
+        // Portuguese in Africa and Asia is written as in Portugal
+        XCTAssertEqual(matchedAsListed("pt-AO"), "pt-PT")
+        XCTAssertEqual(matchedAsListed("pt-MZ"), "pt-PT")
+        XCTAssertEqual(matchedAsListed("pt-MO"), "pt-PT")
+        // Macau writes Traditional Chinese as Hong Kong does
+        XCTAssertEqual(matchedAsListed("zh-MO"), "zh-HK")
+        XCTAssertEqual(matchedAsListed("zh-Hant-MO"), "zh-HK")
     }
 
     func testARegionMacOSTranslatesIsTakenAsItIs() {
@@ -93,6 +136,9 @@ final class LanguageMatchingTests: XCTestCase {
         XCTAssertEqual(matchedAsListed("en-AU"), "en-AU")
         XCTAssertEqual(matchedAsListed("fr-CA"), "fr-CA")
         XCTAssertEqual(matchedAsListed("pt-PT"), "pt-PT")
+        XCTAssertEqual(matchedAsListed("pt-BR"), "pt")
+        XCTAssertEqual(matchedAsListed("es-MX"), "es-MX")
+        XCTAssertEqual(matchedAsListed("es-US"), "es-US")
         XCTAssertEqual(matchedAsListed("zh-HK"), "zh-HK")
         // the region in another script is another language
         XCTAssertEqual(matchedAsListed("zh-Hans-HK"), "zh")
