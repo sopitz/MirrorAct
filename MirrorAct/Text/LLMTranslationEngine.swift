@@ -31,9 +31,16 @@ private final class RedirectRefusal: NSObject, URLSessionTaskDelegate {
 
 extension LLMConnection {
     /// The address for notices: without a name and password typed into it
-    /// ("http://user:secret@192.168.1.5:8080/v1"). Notices of failures also go to the log file,
+    /// ("http://user:secret@192.168.1.5:8080/v1"), and without its query and fragment, where a
+    /// proxy may take the key ("…/v1?key=…"). Notices of failures also go to the log file,
     /// which people attach to bug reports.
-    var shownAddress: String { Self.withoutCredentials(baseURL) }
+    var shownAddress: String { Self.shown(baseURL) }
+
+    /// `address` without credentials, query and fragment
+    static func shown(_ address: String) -> String {
+        let bare = withoutCredentials(address)
+        return String(bare[..<(bare.firstIndex { $0 == "?" || $0 == "#" } ?? bare.endIndex)])
+    }
 
     static func withoutCredentials(_ address: String) -> String {
         let start = address.range(of: "://")?.upperBound ?? address.startIndex

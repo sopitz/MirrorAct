@@ -583,6 +583,20 @@ final class LLMTranslationEngineTests: XCTestCase {
                        String(localized: "The address \("ftp://example.com") cannot be used – check it in the settings"))
     }
 
+    func testAKeyInTheQueryOfTheAddressIsNotShown() async {
+        let transport = ScriptedTransport { _, _ in reply(404, "Not Found") }
+        let engine = makeEngine(.custom, baseURL: "https://proxy.example.com/v1?key=sk-123#top", model: "m", transport: transport)
+        let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+        XCTAssertEqual(failure?.message, "proxy.example.com: "
+                       + String(localized: "the address \("https://proxy.example.com/v1") cannot be used – check it in the settings"))
+        XCTAssertEqual(failure?.message.contains("sk-123"), false)
+
+        let other = LLMConnection(provider: .custom, baseURL: "ftp://user:pw@example.com/v1?key=sk-123", model: "m")
+        XCTAssertEqual(other.shownAddress, "ftp://example.com/v1")
+        XCTAssertEqual(LLMConnection(provider: .custom, baseURL: "http://192.168.1.5:8080/v1", model: "m").shownAddress,
+                       "http://192.168.1.5:8080/v1")
+    }
+
     func testAServiceThatCannotBeReachedIsNamed() async {
         let transport = ScriptedTransport { _, _ in throw URLError(.notConnectedToInternet) }
         let engine = makeEngine(.openAI, transport: transport)
