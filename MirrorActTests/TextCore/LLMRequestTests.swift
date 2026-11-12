@@ -218,6 +218,12 @@ final class LLMRequestTests: XCTestCase {
         XCTAssertEqual(address(.ollama, "http://192.168.1.20:11434/"), "http://192.168.1.20:11434/v1")
         XCTAssertEqual(address(.ollama, "mac-mini:11434"), "http://mac-mini:11434/v1")
         XCTAssertEqual(address(.ollama, "https://ollama.com/v1"), "https://ollama.com/v1")
+        // Ollama and LM Studio speak nothing but plain HTTP, wherever they run
+        XCTAssertEqual(address(.ollama, "gpu-box.lan:11434"), "http://gpu-box.lan:11434/v1")
+        XCTAssertEqual(address(.ollama, "100.101.102.103:11434"), "http://100.101.102.103:11434/v1")
+        XCTAssertEqual(address(.lmStudio, "studio.tailnet.ts.net:1234"), "http://studio.tailnet.ts.net:1234/v1")
+        // a server of one's own under such a name is more likely behind https
+        XCTAssertEqual(address(.custom, "gpu-box.lan:8080/v1"), "https://gpu-box.lan:8080/v1")
         XCTAssertEqual(address(.lmStudio, "http://[::1]:1234"), "http://[::1]:1234/v1")
         XCTAssertEqual(address(.lmStudio, "http://localhost:1234/api/v0"), "http://localhost:1234/api/v0")
 

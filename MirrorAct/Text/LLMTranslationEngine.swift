@@ -461,13 +461,42 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             return TranslationFailure(message: name + ": " + Self.words(for: error, model: connection.model),
                                       isPermanent: error.isPermanent)
         }
-        // a server on this Mac or in the network that does not answer is most often not running
-        if let error = error as? URLError, connection.isLocal,
-           [URLError.Code.cannotConnectToHost, .cannotFindHost, .networkConnectionLost].contains(error.code) {
+        if let error = error as? URLError, let failure = failure(for: error) { return failure }
+        return TranslationFailure(message: name + ": " + error.localizedDescription)
+    }
+
+    /// The failures of the connection itself that the user can do something about
+    private func failure(for error: URLError) -> TranslationFailure? {
+        let host = LLMConnection.host(of: connection.baseURL)
+        switch error.code {
+        case .appTransportSecurityRequiresSecureConnection:
+            // App Transport Security lets plain HTTP through only to this Mac, private and
+            // link-local IP addresses, .local names and names without a dot (project.yml).
+            // "*.localhost" is this Mac as well, but not to ATS.
+            let words = host.hasSuffix(".localhost")
+                ? String(localized: "plain HTTP to \(host) is not allowed – use localhost or 127.0.0.1 instead")
+                : String(localized: "plain HTTP to \(host) is not allowed – use a private IP address, a .local name or https")
+            return TranslationFailure(message: name + ": " + words, isPermanent: true)
+        case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid, .clientCertificateRejected,
+             .clientCertificateRequired:
+            // Most often a local server that speaks plain HTTP behind an address with https
+            // (or without a scheme, which gets https for a name with a dot)
+            return TranslationFailure(message: name + ": "
+                                      + String(localized: "no secure connection to \(host) – for a server without https, enter its address with http:// and a private IP address or a .local name"),
+                                      isPermanent: true)
+        case .badURL, .unsupportedURL:
+            return TranslationFailure(message: name + ": "
+                                      + String(localized: "the address \(connection.baseURL) cannot be used – check it in the settings"),
+                                      isPermanent: true)
+        case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost:
+            // a server on this Mac or in the network that does not answer is most often not running
+            guard connection.isLocal else { return nil }
             return TranslationFailure(message: name + ": "
                                       + String(localized: "cannot be reached at \(connection.baseURL) – is it running?"))
+        default:
+            return nil
         }
-        return TranslationFailure(message: name + ": " + error.localizedDescription)
     }
 
     /// What follows the name of the service in a notice about `error`

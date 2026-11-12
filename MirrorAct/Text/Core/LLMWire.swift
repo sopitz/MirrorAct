@@ -110,8 +110,10 @@ struct LLMConnection: Equatable, CustomStringConvertible {
         var address = provider.baseURLRule == .fixed ? "" : tidy(entered)
         if address.isEmpty { return tidy(provider.defaultBaseURL) }
         if address.range(of: "://") == nil {
-            // plain HTTP is what local servers speak
-            address = (isLocalHost(host(of: address)) ? "http://" : "https://") + address
+            // Plain HTTP is what local servers speak. Ollama and LM Studio speak nothing else,
+            // also on another computer that is reached by a name such as "gpu-box.lan".
+            let plain = provider.isLocal || isLocalHost(host(of: address))
+            address = (plain ? "http://" : "https://") + address
         }
         if !provider.pathWhenMissing.isEmpty && !hasPath(address) {
             address += provider.pathWhenMissing

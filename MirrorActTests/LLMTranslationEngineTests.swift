@@ -387,6 +387,35 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(failure?.message.hasPrefix("OpenAI: "), true)
     }
 
+    func testPlainHTTPThatTheSystemDoesNotAllowSaysWhatWorks() async {
+        let transport = ScriptedTransport { _, _ in throw URLError(.appTransportSecurityRequiresSecureConnection) }
+        let lan = makeEngine(.ollama, baseURL: "gpu-box.lan:11434", model: "gemma4", transport: transport)
+        let failure = await failure { try await lan.translate(["Settings"], into: self.german) }
+        // nothing changes by itself: asking again every few seconds would be no use
+        XCTAssertEqual(failure?.isPermanent, true)
+        XCTAssertEqual(failure?.message, "Ollama: "
+                       + String(localized: "plain HTTP to \("gpu-box.lan") is not allowed – use a private IP address, a .local name or https"))
+
+        // a name under .localhost is this Mac, but the system treats it like any other name
+        let named = makeEngine(.custom, baseURL: "http://llm.localhost:8080/v1", model: "m", transport: transport)
+        let other = await self.failure { try await named.translate(["Settings"], into: self.german) }
+        XCTAssertEqual(other?.isPermanent, true)
+        XCTAssertEqual(other?.message, "llm.localhost: "
+                       + String(localized: "plain HTTP to \("llm.localhost") is not allowed – use localhost or 127.0.0.1 instead"))
+    }
+
+    func testAServerWithoutASecureConnectionIsNotAskedAgainAndAgain() async {
+        for code in [URLError.Code.secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasUnknownRoot] {
+            let transport = ScriptedTransport { _, _ in throw URLError(code) }
+            let engine = makeEngine(.custom, baseURL: "gpu-box.lan:8080/v1", model: "m", transport: transport)
+            let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+            XCTAssertEqual(failure?.isPermanent, true, "\(code)")
+            XCTAssertEqual(failure?.message, "gpu-box.lan: "
+                           + String(localized: "no secure connection to \("gpu-box.lan") – for a server without https, enter its address with http:// and a private IP address or a .local name"))
+            XCTAssertEqual(transport.requests.count, 1)
+        }
+    }
+
     // MARK: Turning translating off
 
     func testCancelEndsARequestThatWaitsForItsAnswer() async throws {

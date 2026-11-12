@@ -63,7 +63,12 @@ targets:
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp
-        # a language model that runs on this Mac or in the local network (http://localhost, IP addresses, .local)
+        # Plain http for a language model on this Mac or in the local network. Tried on macOS 26,
+        # with and without this key alike, ATS lets through: localhost, loopback, private
+        # (10/8, 172.16/12, 192.168/16, fc00::/7) and link-local IP addresses, .local names and
+        # names without a dot. It refuses *.localhost, other DNS names (.lan, .home.arpa, tailnet
+        # names) and public or CGNAT (100.64/10) addresses: those need https. The app explains
+        # such a refusal instead of showing the system's message (LLMTranslationEngine).
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     entitlements:
