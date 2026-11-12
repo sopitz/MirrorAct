@@ -362,7 +362,7 @@ struct StylePanel: View {
                     .toggleStyle(.checkbox)
                 Spacer()
                 Button("All Settings …") {
-                    UserDefaults.standard.set("design", forKey: "settingsTab")
+                    AppSettings.shared.defaults.set("design", forKey: "settingsTab")
                     openSettings()
                 }
                 .buttonStyle(.link)

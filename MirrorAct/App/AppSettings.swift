@@ -7,7 +7,23 @@ import Foundation
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
-    private let defaults = UserDefaults.standard
+    /// Where the settings are kept: the app's own preferences, or those of the tests while the
+    /// app runs as their host. The test host has the app's bundle identifier, so without a domain
+    /// of their own the tests would change the settings of the installed app.
+    let defaults: UserDefaults
+
+    /// The domain of the tests' settings; nil when the app is not running as the test host
+    static let testSuiteName: String? = AppDelegate.isTesting
+        ? (Bundle.main.bundleIdentifier ?? "io.github.sopitz.MirrorAct") + ".tests"
+        : nil
+
+    /// The app's preferences, or those of the tests, emptied first so that every test run starts
+    /// from the registered defaults
+    private static func makeDefaults() -> UserDefaults {
+        guard let name = testSuiteName, let suite = UserDefaults(suiteName: name) else { return .standard }
+        suite.removePersistentDomain(forName: name)
+        return suite
+    }
 
     @Published var receiverName: String { didSet { defaults.set(receiverName, forKey: "receiverName") } }
     @Published var pin: String { didSet { defaults.set(pin, forKey: "pin") } }
@@ -52,6 +68,7 @@ final class AppSettings: ObservableObject {
     let receiverDeviceID: String
 
     init() {
+        defaults = Self.makeDefaults()
         defaults.register(defaults: [
             "receiverName": "MirrorAct",
             "streamHeight": 2160,
@@ -90,7 +107,7 @@ final class AppSettings: ObservableObject {
             style = FrameStyle()
         }
 
-        let store = UserDefaults.standard
+        let store = defaults
         if let stored = store.string(forKey: "pin"), stored.count == 4 {
             pin = stored
         } else {
@@ -108,6 +125,11 @@ final class AppSettings: ObservableObject {
             let fresh = bytes.map { String(format: "%02X", $0) }.joined(separator: ":")
             store.set(fresh, forKey: "receiverDeviceID")
             receiverDeviceID = fresh
+        }
+
+        if let data = defaults.data(forKey: "knownDevices"),
+           let list = try? JSONDecoder().decode([KnownDevice].self, from: data) {
+            knownDevices = list
         }
     }
 
@@ -184,11 +206,7 @@ final class AppSettings: ObservableObject {
         var lastSeen: Date
     }
 
-    @Published private(set) var knownDevices: [KnownDevice] = {
-        guard let data = UserDefaults.standard.data(forKey: "knownDevices"),
-              let list = try? JSONDecoder().decode([KnownDevice].self, from: data) else { return [] }
-        return list
-    }()
+    @Published private(set) var knownDevices: [KnownDevice] = []
 
     func remember(_ device: KnownDevice) {
         var list = knownDevices.filter { $0.id != device.id }
