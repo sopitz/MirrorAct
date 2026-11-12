@@ -503,6 +503,24 @@ final class LLMTranslationEngineTests: XCTestCase {
                        + String(localized: "cannot be reached at \("http://localhost:11434/v1") – is it running?"))
     }
 
+    func testANameAndPasswordInTheAddressAreNotShown() async {
+        let transport = ScriptedTransport { _, _ in throw URLError(.cannotConnectToHost) }
+        let engine = makeEngine(.custom, baseURL: "http://user:secret@192.168.1.5:8080/v1", model: "m", transport: transport)
+        let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+        XCTAssertEqual(failure?.message, "192.168.1.5: "
+                       + String(localized: "cannot be reached at \("http://192.168.1.5:8080/v1") – is it running?"))
+        XCTAssertEqual(failure?.message.contains("secret"), false)
+
+        XCTAssertEqual(LLMConnection.withoutCredentials("https://user@example.com/v1?x=a@b"), "https://example.com/v1?x=a@b")
+        XCTAssertEqual(LLMConnection.withoutCredentials("user:pw@[::1]:1234"), "[::1]:1234")
+        XCTAssertEqual(LLMConnection.withoutCredentials("https://example.com/v1/a@b"), "https://example.com/v1/a@b")
+        XCTAssertEqual(LLMConnection.withoutCredentials(""), "")
+
+        let odd = LLMConnection(provider: .custom, baseURL: "ftp://user:secret@example.com", model: "m")
+        XCTAssertEqual(TranslationEngines.failure(for: .address, in: odd).message,
+                       String(localized: "The address \("ftp://example.com") cannot be used – check it in the settings"))
+    }
+
     func testAServiceThatCannotBeReachedIsNamed() async {
         let transport = ScriptedTransport { _, _ in throw URLError(.notConnectedToInternet) }
         let engine = makeEngine(.openAI, transport: transport)

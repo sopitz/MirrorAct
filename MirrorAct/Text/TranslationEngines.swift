@@ -42,7 +42,7 @@ enum TranslationEngines {
             if connection.baseURL.isEmpty {
                 message = String(localized: "Enter the address of the service in the settings first")
             } else {
-                message = String(localized: "The address \(connection.baseURL) cannot be used – check it in the settings")
+                message = String(localized: "The address \(connection.shownAddress) cannot be used – check it in the settings")
             }
         case .apiKey:
             message = String(localized: "Enter the API key for \(service) in the settings first")

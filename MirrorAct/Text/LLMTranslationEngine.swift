@@ -29,6 +29,21 @@ private final class RedirectRefusal: NSObject, URLSessionTaskDelegate {
     }
 }
 
+extension LLMConnection {
+    /// The address for notices: without a name and password typed into it
+    /// ("http://user:secret@192.168.1.5:8080/v1"). Notices of failures also go to the log file,
+    /// which people attach to bug reports.
+    var shownAddress: String { Self.withoutCredentials(baseURL) }
+
+    static func withoutCredentials(_ address: String) -> String {
+        let start = address.range(of: "://")?.upperBound ?? address.startIndex
+        let rest = address[start...]
+        let end = rest.firstIndex { $0 == "/" || $0 == "?" || $0 == "#" } ?? rest.endIndex
+        guard let at = rest[..<end].lastIndex(of: "@") else { return address }
+        return String(address[..<start]) + String(address[address.index(after: at)...])
+    }
+}
+
 extension LLMProvider {
     /// The name to show: as the brand writes it; only "Custom" is a word to translate
     var localizedName: String {
@@ -534,7 +549,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             // leads to a server, but not to the service ("/v1" missing …). Nothing changes by itself.
             if case .server(status: 404, _) = error, connection.provider.baseURLRule != .fixed {
                 return TranslationFailure(message: name + ": "
-                                          + String(localized: "the address \(connection.baseURL) cannot be used – check it in the settings"),
+                                          + String(localized: "the address \(connection.shownAddress) cannot be used – check it in the settings"),
                                           isPermanent: true)
             }
             return TranslationFailure(message: name + ": " + Self.words(for: error, model: connection.model),
@@ -566,13 +581,13 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
                                       isPermanent: true)
         case .badURL, .unsupportedURL:
             return TranslationFailure(message: name + ": "
-                                      + String(localized: "the address \(connection.baseURL) cannot be used – check it in the settings"),
+                                      + String(localized: "the address \(connection.shownAddress) cannot be used – check it in the settings"),
                                       isPermanent: true)
         case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost:
             // a server on this Mac or in the network that does not answer is most often not running
             guard connection.isLocal else { return nil }
             return TranslationFailure(message: name + ": "
-                                      + String(localized: "cannot be reached at \(connection.baseURL) – is it running?"))
+                                      + String(localized: "cannot be reached at \(connection.shownAddress) – is it running?"))
         default:
             return nil
         }
