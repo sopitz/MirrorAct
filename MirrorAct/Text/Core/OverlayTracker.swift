@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
+// CGRect is a Foundation type on Linux; on Apple platforms its members come with CoreGraphics
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// Keeps the translations of a screen on their text from frame to frame and decides which parts
 /// of the picture have to be read (again).

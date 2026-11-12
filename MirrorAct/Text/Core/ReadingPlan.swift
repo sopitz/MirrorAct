@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
+// CGRect is a Foundation type on Linux; on Apple platforms its members come with CoreGraphics
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// A part of the picture that has to be read, in thumbnail pixels of the current frame
 struct UnreadArea: Equatable {

@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
+// CGRect is a Foundation type on Linux; on Apple platforms its members come with CoreGraphics
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// A rectangle of whole thumbnail pixels
 struct ThumbnailRect: Equatable {

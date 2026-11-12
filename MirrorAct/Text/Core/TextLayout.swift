@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
+// CGRect is a Foundation type on Linux; on Apple platforms its members come with CoreGraphics
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// A line of text found on the screen. `rect` is in image coordinates 0…1, origin at the top left.
 struct RecognizedLine: Equatable {
