@@ -371,6 +371,20 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertGreaterThan(endless.pixels.filter { $0 > 127 }.count, 100)
     }
 
+    /// The mask says where the text covers the block. An emoji is drawn in its own colors; what
+    /// counts for the mask is its shape, not how bright its colors are.
+    func testEmojiCoverTheirShapeInTheMask() throws {
+        let mask = try XCTUnwrap(BlockTextMask(text: "😀", width: 120, height: 60, lineCount: 1))
+        let covered = mask.pixels.filter { $0 > 0 }
+        XCTAssertGreaterThan(covered.count, 500)
+        // inside the shape it covers fully; only its edge is partly covered
+        let full = covered.filter { $0 >= 250 }.count
+        XCTAssertGreaterThan(full * 10, covered.count * 7, "an emoji must not come out as a half transparent blot")
+        // and letters still cover as before
+        let letters = try XCTUnwrap(BlockTextMask(text: "Hello", width: 200, height: 60, lineCount: 1))
+        XCTAssertGreaterThan(letters.pixels.filter { $0 == 255 }.count, 300)
+    }
+
     func testTextThatCannotFitIsCutOffNotLeftOut() throws {
         let endless = String(repeating: "word ", count: 80)
         let mask = try XCTUnwrap(BlockTextMask(text: endless, width: 120, height: 24, lineCount: 1))

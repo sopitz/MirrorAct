@@ -155,7 +155,7 @@ struct BlockTextMask {
         return breaks
     }
 
-    /// Draws the text white on black, one byte per pixel
+    /// Draws the coverage of the text, one byte per pixel: 0 where there is none, 255 where it covers fully
     private static func draw(_ layout: Layout, width: Int, height: Int,
                              lineHeight: CGFloat) -> (pixels: [UInt8], image: CGImage, lines: [String])? {
         // The first row in memory is the top row of the picture, as in a frame. Core Graphics
@@ -166,9 +166,11 @@ struct BlockTextMask {
         let memory = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
         defer { memory.deallocate() }
         memory.initialize(repeating: 0, count: count)
+        // Only the coverage is drawn, not the color: an emoji, which comes in its own colors,
+        // would otherwise leave the brightness of those colors instead of its shape.
         guard let context = CGContext(data: memory, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
-                                      bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+                                      bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue) else { return nil }
         context.setShouldAntialias(true)
         // gray levels as they are; "font smoothing" would thicken the strokes as for an LCD
         context.setShouldSmoothFonts(false)
@@ -192,9 +194,13 @@ struct BlockTextMask {
             frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: below)
         }
         CTFrameDraw(frame, context)
-        // the picture is copied out of the memory here, which is released on return
-        guard let image = context.makeImage() else { return nil }
         let pixels = Array(UnsafeBufferPointer(start: memory, count: count))
+        // `clip(to:mask:)` takes gray without alpha: the coverage becomes the gray level
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: width,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: false,
+                                  intent: .defaultIntent) else { return nil }
         let text = layout.text as NSString
         let lines = (CTFrameGetLines(frame) as? [CTLine] ?? []).map { line -> String in
             let range = CTLineGetStringRange(line)
