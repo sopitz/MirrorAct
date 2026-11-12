@@ -51,6 +51,15 @@ protocol FrameProcessor: AnyObject {
     func process(_ pixelBuffer: CVPixelBuffer, time: CMTime) -> CVPixelBuffer
 }
 
+/// Takes the frames and the audio of a running recording: `MirrorRecorder`, in the tests a
+/// stand-in that notes what it gets.
+protocol FrameRecording: AnyObject {
+    func appendVideo(_ pixelBuffer: CVPixelBuffer, at time: CMTime)
+    func appendAudio(_ sampleBuffer: CMSampleBuffer)
+}
+
+extension MirrorRecorder: FrameRecording {}
+
 /// Accepts frames from any thread, keeps the latest one (for screenshots)
 /// and passes them on to the display.
 final class FrameSink: @unchecked Sendable {
@@ -62,8 +71,12 @@ final class FrameSink: @unchecked Sendable {
     private var lastSize: CGSize = .zero
     private var layer: AVSampleBufferDisplayLayer?
     private var formatDescription: CMVideoFormatDescription?
-    private var activeRecorder: MirrorRecorder?
+    private var activeRecording: FrameRecording?
     private var activeProcessor: FrameProcessor?
+    /// time of the last frame given to the recording
+    private var lastTime = CMTime.invalid
+    /// how far the times of the source lag behind "now" (cable: the capture delay; 0 otherwise)
+    private var timeLag = CMTime.zero
 
     /// on the main thread: new frame size (e.g. rotation)
     var onSizeChange: ((CGSize) -> Void)?
@@ -79,12 +92,18 @@ final class FrameSink: @unchecked Sendable {
 
     /// active recording (receives every frame and the audio)
     var recorder: MirrorRecorder? {
-        get { lock.lock(); defer { lock.unlock() }; return activeRecorder }
-        set { lock.lock(); activeRecorder = newValue; lock.unlock() }
+        get { recording as? MirrorRecorder }
+        set { recording = newValue }
+    }
+
+    /// what receives the frames and the audio of `recorder`
+    var recording: FrameRecording? {
+        get { lock.lock(); defer { lock.unlock() }; return activeRecording }
+        set { lock.lock(); activeRecording = newValue; lock.unlock() }
     }
 
     func recordAudio(_ sampleBuffer: CMSampleBuffer) {
-        recorder?.appendAudio(sampleBuffer)
+        recording?.appendAudio(sampleBuffer)
     }
 
     /// changes the frames on their way to the display and the recorder (nil = shown as they arrive)
@@ -118,6 +137,8 @@ final class FrameSink: @unchecked Sendable {
         latestBuffer = nil
         latestSourceBuffer = nil
         deliveredFirstFrame = false
+        lastTime = .invalid
+        timeLag = .zero
         let layer = self.layer
         lock.unlock()
         layer?.sampleBufferRenderer.flush(removingDisplayedImage: false, completionHandler: nil)
@@ -127,7 +148,12 @@ final class FrameSink: @unchecked Sendable {
     func push(_ pixelBuffer: CVPixelBuffer, time: CMTime? = nil) {
         presenting.lock()
         defer { presenting.unlock() }
-        present(pixelBuffer, time: time ?? MirrorRecorder.now)
+        let now = MirrorRecorder.now
+        let time = time ?? now
+        lock.lock()
+        timeLag = max(.zero, CMTimeSubtract(now, time))
+        lock.unlock()
+        present(pixelBuffer, time: time)
     }
 
     /// Runs the latest frame through the processor again and shows the result. A still screen
@@ -137,7 +163,16 @@ final class FrameSink: @unchecked Sendable {
         presenting.lock()
         defer { presenting.unlock() }
         guard let source = latestSource else { return }
-        present(source, time: MirrorRecorder.now)
+        // On the timeline of the source: a cable frame carries the time it was captured, and
+        // the live frames after this one are captured later than "now" minus that delay. A time
+        // past theirs would make the recording drop them. It must still be later than the last
+        // frame, or the recording drops this one; by a microsecond only, so that the next live
+        // frame stays after it even when frames arrive in a burst.
+        lock.lock()
+        var time = CMTimeSubtract(MirrorRecorder.now, timeLag)
+        if lastTime.isValid { time = max(time, CMTimeAdd(lastTime, CMTime(value: 1, timescale: 1_000_000))) }
+        lock.unlock()
+        present(source, time: time)
     }
 
     private func present(_ source: CVPixelBuffer, time: CMTime) {
@@ -147,6 +182,7 @@ final class FrameSink: @unchecked Sendable {
         lock.lock()
         latestSourceBuffer = source
         latestBuffer = pixelBuffer
+        lastTime = lastTime.isValid ? max(lastTime, time) : time
         let sizeChanged = size != lastSize
         lastSize = size
         let first = !deliveredFirstFrame
@@ -160,7 +196,7 @@ final class FrameSink: @unchecked Sendable {
             formatDescription = description
         }
         let description = formatDescription
-        let recorder = activeRecorder
+        let recorder = activeRecording
         lock.unlock()
 
         recorder?.appendVideo(pixelBuffer, at: time)
