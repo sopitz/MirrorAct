@@ -59,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MirrorCommands: Commands {
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var model = AppModel.shared
 
     private var mirror: MirrorWindowController? { MainActor.assumeIsolated { AppModel.shared.keyMirror } }
 
@@ -82,7 +83,9 @@ struct MirrorCommands: Commands {
             Divider()
             Button("Copy Text on Screen") { mirror?.session.copyText() }
                 .keyboardShortcut("t", modifiers: [.command, .option])
-            Button("Translate Text on Screen") { mirror?.session.translator.toggle() }
+            Toggle("Translate Text on Screen", isOn: Binding(
+                get: { model.keyMirrorIsTranslating },
+                set: { _ in MainActor.assumeIsolated { mirror?.session.translator.toggle() } }))
                 .keyboardShortcut("t", modifiers: [.command, .shift])
             Divider()
             Button("Control Device") { mirror?.toggleControl() }

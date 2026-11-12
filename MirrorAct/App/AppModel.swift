@@ -25,9 +25,15 @@ final class AppModel: ObservableObject {
     @Published var pinRequested = false
 
     private var controllers: [String: MirrorWindowController] = [:] {
-        didSet { openSessionIDs = Set(controllers.keys) }
+        didSet {
+            openSessionIDs = Set(controllers.keys)
+            observeKeyMirror()
+        }
     }
     @Published private(set) var openSessionIDs: Set<String> = []
+    /// whether the mirror the Device menu acts on translates, for the check mark in the menu bar
+    @Published private(set) var keyMirrorIsTranslating = false
+    private var keyMirrorChanges: AnyCancellable?
     private var captures: [String: USBCaptureSession] = [:]
     private weak var wirelessSession: MirrorSession?
     private var cancellables: Set<AnyCancellable> = []
@@ -38,6 +44,23 @@ final class AppModel: ObservableObject {
     static func keyMirror(among controllers: [MirrorWindowController]) -> MirrorWindowController? {
         controllers.first { $0.isPresenting } ?? controllers.first { $0.window?.isKeyWindow == true }
             ?? controllers.first
+    }
+
+    /// The menu bar shows the state of the key mirror: it changes with the key window and with
+    /// the translating of any open session.
+    private func observeKeyMirror() {
+        let translating = controllers.values.map { $0.session.$isTranslating.map { _ in () } }
+        keyMirrorChanges = Publishers.MergeMany(translating)
+            .merge(with: NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification).map { _ in () })
+            // @Published announces a change before it is made: read the state afterwards
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.updateKeyMirrorIsTranslating() }
+        updateKeyMirrorIsTranslating()
+    }
+
+    private func updateKeyMirrorIsTranslating() {
+        let translating = keyMirror?.session.isTranslating ?? false
+        if translating != keyMirrorIsTranslating { keyMirrorIsTranslating = translating }
     }
 
     func isMirroring(cableDevice id: String) -> Bool { openSessionIDs.contains("usb:\(id)") }
