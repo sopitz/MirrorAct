@@ -58,11 +58,20 @@ final class ChromaPlaneTests: XCTestCase {
         let clipped = try XCTUnwrap(BlockPlacement(rect: rect, visibleRect: nil, lineCount: 2, frameWidth: 640, frameHeight: 360))
         XCTAssertEqual(clipped.text, PixelRect(minX: 500, minY: 300, maxX: 800, maxY: 400))
         XCTAssertEqual(clipped.area, PixelRect(minX: 494, minY: 294, maxX: 640, maxY: 360))
-        // a bar hides everything above row 320: also the margin is gone there
+        // A bar hides everything above row 320: the margin is gone there. The other sides are
+        // not hidden and keep theirs (before, the margin went on every side, and the box
+        // jumped inward on three sides as soon as a bar touched it).
         let hidden = try XCTUnwrap(BlockPlacement(rect: rect, visibleRect: CGRect(x: 500, y: 320, width: 300, height: 80),
                                                   lineCount: 2, frameWidth: 640, frameHeight: 360))
-        XCTAssertEqual(hidden.visible, PixelRect(minX: 500, minY: 320, maxX: 800, maxY: 400))
-        XCTAssertEqual(hidden.area, PixelRect(minX: 500, minY: 320, maxX: 640, maxY: 360))
+        XCTAssertEqual(hidden.visible, PixelRect(minX: 494, minY: 320, maxX: 806, maxY: 406))
+        XCTAssertEqual(hidden.area, PixelRect(minX: 494, minY: 320, maxX: 640, maxY: 360))
+        // hidden on the left and at the bottom, with the fractions of a pixel the tracker leaves
+        let corner = try XCTUnwrap(BlockPlacement(rect: CGRect(x: 100.2, y: 100.3, width: 300, height: 100),
+                                                  visibleRect: CGRect(x: 160.4, y: 100.3, width: 239.8, height: 70.1),
+                                                  lineCount: 2, frameWidth: 640, frameHeight: 360))
+        XCTAssertEqual(corner.text, PixelRect(minX: 100, minY: 100, maxX: 400, maxY: 200))
+        XCTAssertEqual(corner.visible, PixelRect(minX: 160, minY: 94, maxX: 406, maxY: 170))
+        XCTAssertEqual(corner.area, corner.visible)
     }
 
     func testNothingToDrawGivesNoPlacement() {

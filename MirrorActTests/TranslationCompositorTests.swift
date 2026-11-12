@@ -593,7 +593,7 @@ final class TranslationCompositorTests: XCTestCase {
                             smallPrint: Bool = false, file: StaticString = #filePath, line: UInt = #line) {
         let backdrop = text.grown(by: margin)
         let frame = PixelRect(minX: 0, minY: 0, maxX: result.width, maxY: result.height)
-        let area = (visible.map { backdrop.intersection($0) } ?? backdrop).intersection(frame)
+        let area = (visible.map { backdrop.intersection(shown($0, text: text, margin: margin)) } ?? backdrop).intersection(frame)
         let background = YCbCrColor(colors.background, fullRange: fullRange), foreground = YCbCrColor(colors.foreground, fullRange: fullRange)
         XCTAssertEqual(result.width, source.width, file: file, line: line)
         XCTAssertEqual(result.height, source.height, file: file, line: line)
@@ -654,6 +654,15 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertEqual(colorChangedOutside, 0, "color changed outside the box", file: file, line: line)
         XCTAssertEqual(wrongColorInside, 0, "the box must have exactly the color of the background", file: file, line: line)
         XCTAssertGreaterThan(cellsInside, area.width * area.height / 8, file: file, line: line)
+    }
+
+    /// What a block may change when only `visible` of it can be seen: a side of `visible` that
+    /// reaches the edge of the text is not hidden, and the margin of the box stays there
+    private func shown(_ visible: PixelRect, text: PixelRect, margin: Int) -> PixelRect {
+        PixelRect(minX: visible.minX <= text.minX ? min(visible.minX, text.minX - margin) : visible.minX,
+                  minY: visible.minY <= text.minY ? min(visible.minY, text.minY - margin) : visible.minY,
+                  maxX: visible.maxX >= text.maxX ? max(visible.maxX, text.maxX + margin) : visible.maxX,
+                  maxY: visible.maxY >= text.maxY ? max(visible.maxY, text.maxY + margin) : visible.maxY)
     }
 
     private func contains(_ rect: PixelRect, _ x: Int, _ y: Int) -> Bool {

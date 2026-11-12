@@ -41,7 +41,8 @@ struct BlockPlacement: Equatable {
     let backdrop: PixelRect
     /// of the corners of `backdrop`
     let cornerRadius: CGFloat
-    /// `PlacedBlock.visibleRect` in whole pixels; nil = nothing hides a part of the block
+    /// `PlacedBlock.visibleRect` in whole pixels, with the margin on the sides where nothing
+    /// hides the block; nil = nothing hides a part of it
     let visible: PixelRect?
     /// the pixels of the frame that the block may change: `backdrop` within the frame and
     /// within `visible`
@@ -65,7 +66,15 @@ struct BlockPlacement: Equatable {
             // nothing may be drawn outside of it, so one that cannot be used hides everything
             guard let topLeft = Self.wholePixels(visibleRect.minX, visibleRect.minY),
                   let bottomRight = Self.wholePixels(visibleRect.maxX, visibleRect.maxY) else { return nil }
-            let part = PixelRect(minX: topLeft.x, minY: topLeft.y, maxX: bottomRight.x, maxY: bottomRight.y)
+            var part = PixelRect(minX: topLeft.x, minY: topLeft.y, maxX: bottomRight.x, maxY: bottomRight.y)
+            // The visible part is that of the text, which has no margin. A side that reaches the
+            // edge of the text is not hidden: there the margin stays, as on a block that is all
+            // visible, and the box does not jump inward when something covers another side.
+            // (Half a pixel: the tracker's rectangles differ from each other by rounding only.)
+            if visibleRect.minX <= rect.minX + 0.5 { part.minX = min(part.minX, backdrop.minX) }
+            if visibleRect.minY <= rect.minY + 0.5 { part.minY = min(part.minY, backdrop.minY) }
+            if visibleRect.maxX >= rect.maxX - 0.5 { part.maxX = max(part.maxX, backdrop.maxX) }
+            if visibleRect.maxY >= rect.maxY - 0.5 { part.maxY = max(part.maxY, backdrop.maxY) }
             area = area.intersection(part)
             visible = part
         }
