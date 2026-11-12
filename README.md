@@ -74,9 +74,10 @@ appears next to it; right-click shows every function.
 - **Android:** over USB debugging, by cable or Wi-Fi, with the [scrcpy](https://github.com/Genymobile/scrcpy) server on the phone: video decoded without buffering, sound from Android 11, control with mouse, trackpad and keyboard, clipboard in both directions; see [Controlling an Android phone](#controlling-an-android-phone).
 - **iPhone and iPad control** (optional, for developers): mouse, trackpad and keyboard through a test agent on the device (WebDriverAgent), by cable or wirelessly; see [Controlling an iPhone or iPad](#controlling-an-iphone-or-ipad).
 - **Device frames** drawn for each model: notch, Dynamic Island, home button, iPad, iPhone Duo closed and open, Android with punch-hole camera (position and corner radius read from the phone), portrait and landscape. Seven frame colors.
-- **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: record, screenshot, sound, keep on top, full screen, style. Right-click shows every function.
+- **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: record, screenshot, text, translate, sound, keep on top, full screen, style. Right-click shows every function.
 - **Style panel:** size (life-size, pixel-perfect, point-perfect, fit), frame on/off, frame color, background (transparent, gradients, color, image), padding, shadow, aspect ratio (1:1, 16:9, 9:16, 4:3).
 - **Screenshots and recordings** with or without frame and background. Transparent backgrounds produce PNG or HEVC with alpha for Keynote and video editors, otherwise H.264. Drag screenshots straight out of the window.
+- **Text on the screen:** "Text" copies everything written on the device screen to the clipboard (text recognition with Apple's Vision, on your Mac). "Translate" shows the translation in place of the text: it is drawn into the picture, stays on its text while you scroll, new parts are translated as they come into view, and screenshots, recordings and the presentation show it too. Several languages on one screen work; text that already is in your language stays as it is. Under Settings → Text you choose the language and what translates: your Mac (Apple's Translation framework; macOS asks once before it downloads a language) or a language model service with your own API key (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, a local server such as Ollama or LM Studio, or any OpenAI-compatible address). The key is kept in your keychain.
 - **Presentation mode:** device centered on your background, full screen, without Dock; the menu bar slides in at the top edge. End it with Esc, ⌃⌘F or "Exit Presentation" at the top left.
 - **Editor:** frame existing screenshots and screen recordings afterwards, trim videos, two screenshots as a **duo** (side by side, staggered, tilted, perspective).
 - **Shortcuts:** "Frame screenshot" (usable as a Finder Quick Action), "Screenshot from iPhone", "Start or stop recording".
@@ -85,8 +86,8 @@ The user interface is available in English and German; choose the language under
 
 ## Keyboard and settings
 
-⌘R record, ⌘S screenshot, ⇧⌘C copy screenshot, ⌘K style panel, ⌃⌘F present, ⌘T keep on top,
-⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor.
+⌘R record, ⌘S screenshot, ⇧⌘C copy screenshot, ⌥⌘T copy text, ⇧⌘T translate, ⌘K style panel,
+⌃⌘F present, ⌘T keep on top, ⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor.
 
 Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct.log`.
 
@@ -155,7 +156,11 @@ not follow the mouse live. A device with a passcode cannot be unlocked this way.
 MirrorAct works locally. It does not send any data anywhere and has no telemetry. Network access
 is limited to the AirPlay receiver on your local network and over AWDL, to adb for Android phones
 (by cable, or on your local network when you use Wi-Fi), and, while you control an iPhone or iPad,
-to the agent on that device.
+to the agent on that device. Text recognition runs on your Mac. Translating runs on your Mac too
+by default; macOS then downloads the languages from Apple after you agree. Only if you choose a
+language model service under Settings → Text is the text recognized on the screen sent to that
+service, with your own API key and only while "Translate" is on; a local server (Ollama, LM Studio)
+keeps it on your Mac or in your network.
 
 ## Legal
 

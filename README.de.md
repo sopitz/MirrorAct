@@ -76,9 +76,10 @@ Die Bilder zeigen die englische Oberfläche.
 - **Android:** über USB-Debugging, per Kabel oder WLAN, mit dem Server von [scrcpy](https://github.com/Genymobile/scrcpy) auf dem Telefon: Video ohne Puffer dekodiert, Ton ab Android 11, Bedienen mit Maus, Trackpad und Tastatur, Zwischenablage in beide Richtungen; siehe [Android-Telefon bedienen](#android-telefon-bedienen).
 - **iPhone und iPad bedienen** (optional, für Entwickler): Maus, Trackpad und Tastatur über einen Test-Agent auf dem Gerät (WebDriverAgent), per Kabel oder kabellos; siehe [iPhone oder iPad bedienen](#iphone-oder-ipad-bedienen).
 - **Gerätrahmen** pro Modell gezeichnet: Notch, Dynamic Island, Home-Button, iPad, iPhone Duo zu- und aufgeklappt, Android mit Kameraloch (Lage und Eckenradius liest MirrorAct vom Telefon), hoch und quer. Sieben Rahmenfarben.
-- **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Ton, Oben, Vollbild, Stil. Ein Rechtsklick zeigt alle Funktionen.
+- **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Text, Übersetzen, Ton, Oben, Vollbild, Stil. Ein Rechtsklick zeigt alle Funktionen.
 - **Stil-Panel:** Grösse (lebensgross, pixelgenau, punktgenau, Bildschirm füllen), Rahmen an/aus, Rahmenfarbe, Hintergrund (transparent, Verläufe, Farbe, Bild), Abstand, Schatten, Format (1:1, 16:9, 9:16, 4:3).
 - **Screenshots und Aufnahmen** mit oder ohne Rahmen und Hintergrund. Mit transparentem Hintergrund entstehen PNG bzw. HEVC mit Alpha für Keynote und Schnittprogramme, sonst H.264. Screenshots lassen sich direkt aus dem Fenster ziehen.
+- **Text auf dem Bildschirm:** «Text» kopiert alles, was auf dem Gerätebildschirm steht, in die Zwischenablage (Texterkennung mit Apples Vision, auf dem Mac). «Übersetzen» zeigt die Übersetzung an der Stelle des Textes: Sie wird ins Bild gezeichnet, bleibt beim Scrollen auf ihrem Text, neue Bereiche werden übersetzt, sobald sie ins Bild kommen, und Screenshots, Aufnahmen und die Präsentation zeigen sie ebenfalls. Mehrere Sprachen auf einem Bildschirm funktionieren; Text, der schon in der eigenen Sprache ist, bleibt stehen. Unter Einstellungen → Text wählt man die Sprache und was übersetzt: der Mac (Apples Translation-Framework; macOS fragt einmal, bevor es eine Sprache lädt) oder ein Sprachmodell-Dienst mit eigenem API-Schlüssel (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, ein lokaler Server wie Ollama oder LM Studio oder jede OpenAI-kompatible Adresse). Der Schlüssel liegt im Schlüsselbund.
 - **Präsentieren:** Gerät mittig auf dem Hintergrund, im Vollbild ohne Dock; die Menüleiste erscheint am oberen Rand. Beenden mit Esc, ⌃⌘F oder «Präsentation beenden» oben links.
 - **Editor:** vorhandene Screenshots und Bildschirmaufnahmen nachträglich rahmen, Videos kürzen, zwei Screenshots als **Duo** (nebeneinander, versetzt, gekippt, perspektivisch).
 - **Kurzbefehle:** «Screenshot einrahmen» (auch als Finder-Schnellaktion), «Screenshot vom iPhone», «Aufnahme starten oder beenden».
@@ -87,8 +88,8 @@ Die Oberfläche gibt es auf Englisch und Deutsch; die Sprache lässt sich unter 
 
 ## Tastatur und Einstellungen
 
-⌘R Aufnahme, ⌘S Screenshot, ⇧⌘C Screenshot kopieren, ⌘K Stil-Panel, ⌃⌘F Präsentieren,
-⌘T immer im Vordergrund, ⌘1 lebensgross, ⌘2 pixelgenau, ⌘0 punktgenau, ⌘E Editor.
+⌘R Aufnahme, ⌘S Screenshot, ⇧⌘C Screenshot kopieren, ⌥⌘T Text kopieren, ⇧⌘T Übersetzen,
+⌘K Stil-Panel, ⌃⌘F Präsentieren, ⌘T immer im Vordergrund, ⌘1 lebensgross, ⌘2 pixelgenau, ⌘0 punktgenau, ⌘E Editor.
 
 Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/MirrorAct.log`.
 
@@ -160,7 +161,11 @@ nicht live. Ein Gerät mit Code lässt sich so nicht entsperren. Die Ausgabe von
 MirrorAct arbeitet lokal, sendet keine Daten und hat keine Telemetrie. Netzwerkzugriff gibt es nur
 für den AirPlay-Empfänger im lokalen Netz und über AWDL, für adb zu Android-Telefonen (per Kabel
 oder, bei WLAN, im lokalen Netz) sowie, während ein iPhone oder iPad bedient wird, zum Agent auf
-diesem Gerät.
+diesem Gerät. Die Texterkennung läuft auf dem Mac. Auch das Übersetzen läuft standardmässig auf dem
+Mac; die Sprachen lädt macOS dann nach Zustimmung von Apple. Nur wer unter Einstellungen → Text einen
+Sprachmodell-Dienst wählt, sendet den auf dem Bildschirm erkannten Text an diesen Dienst, mit dem
+eigenen API-Schlüssel und nur, solange «Übersetzen» an ist; ein lokaler Server (Ollama, LM Studio)
+behält ihn auf dem Mac oder im eigenen Netz.
 
 ## Rechtliches
 
