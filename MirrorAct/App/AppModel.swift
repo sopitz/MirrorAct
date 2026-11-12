@@ -356,6 +356,8 @@ final class AppModel: ObservableObject {
             self.androidAudio[key]?.stop()
             session.stopRecording()
             session.control = nil
+            // the window mirrors on over the other connection, or when the device is back
+            session.keepTranslatingAcrossReconnect()
             session.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
             // Cable unplugged, Wi-Fi still there (or vice versa): continue over the other connection
             if let other = self.android.devices.first(where: {

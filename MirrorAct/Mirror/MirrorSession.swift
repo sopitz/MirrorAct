@@ -25,10 +25,22 @@ final class MirrorSession: ObservableObject, Identifiable {
         didSet {
             // The device went away or connects anew: Translate ends here, before AirPlay and
             // Android clear the sink, while the device's last frame is still there to be shown
-            // again without the translations. A new stream starts without the old ones.
-            if state != .live { translator.stop() }
+            // again without the translations. A new stream starts without the old ones, and
+            // translates again only if the app connected it by itself.
+            if state != .live {
+                endingTranslation = true
+                translator.stop()
+                endingTranslation = false
+            } else if translatesWhenLive {
+                translatesWhenLive = false
+                translator.start()
+            }
         }
     }
+    /// Translate was on when the stream ended and the app connects this window again by itself:
+    /// it goes on once the new stream is live
+    private var translatesWhenLive = false
+    private var endingTranslation = false
     @Published private(set) var frameSize: CGSize = .zero
     @Published private(set) var profile: DeviceProfile
     @Published var muted: Bool { didSet { onMuteChange?(muted) } }
@@ -66,6 +78,7 @@ final class MirrorSession: ObservableObject, Identifiable {
     var onClose: (() -> Void)?
 
     private var toastTask: Task<Void, Never>?
+    private var translatorChanges: AnyCancellable?
 
     init(id: String, kind: Kind, deviceName: String, modelIdentifier: String?, muted: Bool) {
         self.id = id
@@ -87,6 +100,19 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
         translator.onMessage = { [weak self] message in self?.showToast(message) }
         translator.$isActive.assign(to: &$isTranslating)
+        // Turned on or off by hand while the stream is away (the last picture is still there):
+        // that is what the next stream does
+        translatorChanges = translator.$isActive.sink { [weak self] active in
+            guard let self, self.state != .live, !self.endingTranslation else { return }
+            self.translatesWhenLive = active
+        }
+    }
+
+    /// The stream is about to end and the app connects this window again by itself, to the
+    /// same device (Android: over the other connection, or when the device is back): if
+    /// Translate is on, it goes on once the new stream is live. Call before the state changes.
+    func keepTranslatingAcrossReconnect() {
+        if translator.isActive { translatesWhenLive = true }
     }
 
     private func updateProfile() {

@@ -4,7 +4,7 @@ import CoreVideo
 import XCTest
 @testable import MirrorAct
 
-/// What a mirror session does with Translate when its device goes away
+/// What a mirror session does with Translate when its device goes away or connects again
 @MainActor
 final class MirrorSessionTests: XCTestCase {
     private final class InstantEngine: TranslationEngine {
@@ -90,6 +90,69 @@ final class MirrorSessionTests: XCTestCase {
     func testTranslateStaysOnWhileTheSessionIsLive() async throws {
         let (session, _, _) = try await translatingSession(kind: .cable)
         session.state = .live
+        XCTAssertTrue(session.isTranslating)
+        session.translator.stop()
+        session.sink.recording = nil
+    }
+
+    /// The new stream after the app connected the window again by itself
+    private func reconnect(_ session: MirrorSession) throws {
+        session.state = .connecting
+        session.sink.clear()
+        let (next, _) = try TestFrames.text(lines, width: 1170, height: 800, format: kCVPixelFormatType_32BGRA)
+        session.sink.push(next)
+        session.state = .live
+    }
+
+    /// Android from the cable to Wi-Fi or back, or the device back after a moment: the app
+    /// connects the window again by itself, and Translate goes on with the new stream
+    func testTranslateGoesOnWhenTheAppConnectsTheWindowAgain() async throws {
+        let (session, frame, shown) = try await translatingSession(kind: .android)
+        session.keepTranslatingAcrossReconnect()
+        session.state = .disconnected(nil)
+        XCTAssertFalse(session.isTranslating, "the button must not stay lit while the stream is away")
+        XCTAssertTrue(shown.last === frame, "the last picture must be the device's own")
+        try reconnect(session)
+        XCTAssertTrue(session.isTranslating, "Translate must go on with the new stream")
+        XCTAssertTrue(session.sink.processor === session.translator)
+        // once only: a stream that connects again later starts without it
+        session.state = .disconnected(nil)
+        try reconnect(session)
+        XCTAssertFalse(session.isTranslating)
+        session.sink.recording = nil
+    }
+
+    /// The device went away and comes back of its own accord: Translate stays off
+    func testTranslateStaysOffWhenTheDeviceConnectsAgainByItself() async throws {
+        let (session, _, _) = try await translatingSession(kind: .wireless)
+        session.state = .disconnected(nil)
+        try reconnect(session)
+        XCTAssertFalse(session.isTranslating)
+        XCTAssertNil(session.sink.processor)
+        session.sink.recording = nil
+    }
+
+    /// Turned off by hand while the stream is away: the new stream does not translate
+    func testTranslateTurnedOffWhileAwayStaysOff() async throws {
+        let (session, _, _) = try await translatingSession(kind: .android)
+        session.keepTranslatingAcrossReconnect()
+        session.state = .disconnected(nil)
+        // the last picture is still there: on and off again
+        session.translator.start()
+        XCTAssertTrue(session.isTranslating)
+        session.translator.stop()
+        try reconnect(session)
+        XCTAssertFalse(session.isTranslating)
+        session.sink.recording = nil
+    }
+
+    /// Turned on by hand while the stream is away: the new stream translates
+    func testTranslateTurnedOnWhileAwayGoesOnWithTheNewStream() async throws {
+        let (session, _, _) = try await translatingSession(kind: .android)
+        session.state = .disconnected(nil)
+        session.translator.start()
+        XCTAssertTrue(session.isTranslating)
+        try reconnect(session)
         XCTAssertTrue(session.isTranslating)
         session.translator.stop()
         session.sink.recording = nil
