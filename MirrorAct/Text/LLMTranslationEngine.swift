@@ -203,9 +203,8 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         var results: [String?] = []
         for batch in TranslationPrompt.batches(texts) {
             do {
-                var budget = Self.requestBudget(for: batch.count)
-                let translations = try await translate(batch, system: system, budget: &budget)
-                results += translations.map { Optional($0) }
+                var portion = Portion(budget: Self.requestBudget(for: batch.count))
+                results += try await translate(batch, system: system, portion: &portion)
                 locked { failuresInARow = 0 }
             } catch {
                 // translating was turned off meanwhile: "not now" for what is left
@@ -283,20 +282,46 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         return 2 * halvings + 2
     }
 
-    /// The translations of one portion of texts, in their order.
+    /// Requests in a row that time out, with no answer between them in the same portion, after
+    /// which the server is taken for one that does not answer at all: the whole portion, a half
+    /// and a quarter
+    static let timeoutsBeforeGivingUp = 3
+
+    /// What the requests for one portion of texts have shown so far
+    private struct Portion {
+        /// requests left (`requestBudget`)
+        var budget: Int
+        /// a request of this portion was answered: the server is there
+        var answered = false
+        /// a request of this portion timed out
+        var timedOut = false
+        /// requests in a row that timed out
+        var timeoutsInARow = 0
+    }
+
+    /// The translations of one portion of texts, in their order; nil = not now, ask again later.
     ///
     /// An answer that cannot be used (another number of items than texts, cut off, declined)
     /// is asked for again in two halves, so that one troublesome text does not keep the others
     /// from being translated. A single text is left as it is then, and so are the texts that
     /// are left when the portion has used up its `budget` of requests.
-    private func translate(_ texts: [String], system: String, budget: inout Int) async throws -> [String] {
-        guard budget > 0 else {
-            Log.info("Translation: \(name): \(texts.count) texts stay as they are (no more requests for this portion)")
-            return texts
+    ///
+    /// A request that times out is asked for in two halves as well. Once the server has answered
+    /// a request of the portion, a text that still times out on its own is put off; before that,
+    /// `timeoutsBeforeGivingUp` time-outs in a row fail the portion.
+    private func translate(_ texts: [String], system: String, portion: inout Portion) async throws -> [String?] {
+        guard portion.budget > 0 else {
+            // after a time-out the model may be quicker the next time: not left as they are
+            let later = portion.timedOut
+            Log.info("Translation: \(name): \(texts.count) texts " + (later ? "are asked for later" : "stay as they are")
+                     + " (no more requests for this portion)")
+            return later ? [String?](repeating: nil, count: texts.count) : texts
         }
-        budget -= 1
+        portion.budget -= 1
         do {
             let answer = try await ask(texts, system: system)
+            portion.answered = true
+            portion.timeoutsInARow = 0
             let translations = try TranslationPrompt.parse(answer, count: texts.count)
             locked {
                 hadUsableAnswer = true
@@ -304,6 +329,8 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             }
             return TranslationPrompt.usable(translations, for: texts)
         } catch let error as LLMError where Self.isAboutTheAnswer(error) {
+            portion.answered = true
+            portion.timeoutsInARow = 0
             let isHopeless: Bool = locked {
                 unusableAnswers += 1
                 return !hadUsableAnswer && unusableAnswers >= Self.patience
@@ -320,20 +347,44 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
                 return texts
             }
             Log.info("Translation: \(name): asking again for \(texts.count) texts in two halves (\(Self.kind(of: error)))")
-            let half = (texts.count + 1) / 2
-            let first = try await translate(Array(texts[..<half]), system: system, budget: &budget)
-            let second = try await translate(Array(texts[half...]), system: system, budget: &budget)
-            return first + second
-        } catch let error as URLError where error.code == .timedOut && texts.count > 1 && !isCancellation(error) {
+            return try await halves(of: texts, system: system, portion: &portion)
+        } catch let error as URLError where error.code == .timedOut && !isCancellation(error) {
             // The model did not finish in time. Sent again whole, it would not finish the next
             // time either; half as many texts take about half as long. Says nothing about
             // whether the model can be used, so it does not count against its patience.
+            portion.timedOut = true
+            portion.timeoutsInARow += 1
+            note(name + ": " + String(localized: "the model takes longer than \(Int(Self.timeout(for: connection))) s to answer – MirrorAct asks for fewer texts at a time"))
+            if portion.answered {
+                // the server answers, only not this text in time
+                guard texts.count > 1 else {
+                    Log.info("Translation: \(name): one text is asked for later (timed out)")
+                    return [nil]
+                }
+            } else if texts.count == 1 || portion.timeoutsInARow >= Self.timeoutsBeforeGivingUp {
+                // Nothing has come back: a server that does not answer at all is not asked on
+                // and on. The caller tells the user and waits before the next request.
+                throw error
+            }
             Log.info("Translation: \(name): asking again for \(texts.count) texts in two halves (timed out)")
-            let half = (texts.count + 1) / 2
-            let first = try await translate(Array(texts[..<half]), system: system, budget: &budget)
-            let second = try await translate(Array(texts[half...]), system: system, budget: &budget)
-            return first + second
+            return try await halves(of: texts, system: system, portion: &portion)
         }
+    }
+
+    /// The translations of `texts` asked for in two halves. A half that times out before any
+    /// request of the portion was answered does not cost the other half: when that one is
+    /// answered, the first is put off.
+    private func halves(of texts: [String], system: String, portion: inout Portion) async throws -> [String?] {
+        let half = (texts.count + 1) / 2
+        let first: [String?]
+        do {
+            first = try await translate(Array(texts[..<half]), system: system, portion: &portion)
+        } catch let error as URLError where error.code == .timedOut && !isCancellation(error) {
+            guard portion.timeoutsInARow < Self.timeoutsBeforeGivingUp else { throw error }
+            let second = try await translate(Array(texts[half...]), system: system, portion: &portion)
+            return [String?](repeating: nil, count: half) + second
+        }
+        return first + (try await translate(Array(texts[half...]), system: system, portion: &portion))
     }
 
     /// Says nothing against the service or the key, only against this very request: with fewer

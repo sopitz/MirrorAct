@@ -226,9 +226,55 @@ final class LLMTranslationEngineTests: XCTestCase {
             return openAIReply(translated(request))
         }
         let engine = makeEngine(transport: transport)
+        let notices = Collected<String>()
+        engine.notify = { notices.add($0) }
         let translations = try await engine.translate(texts, into: german)
         XCTAssertEqual(translations, texts.map { Optional("de:" + $0) })
         XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [25, 13, 7, 6, 12, 6, 6])
+        // the user learns at the first time-out that the model is slow, and only once
+        XCTAssertEqual(notices.all, ["Mistral: " + String(localized: "the model takes longer than \(60) s to answer – MirrorAct asks for fewer texts at a time")])
+    }
+
+    func testATextThatKeepsTimingOutIsAskedForLaterAndTheOthersAreKept() async throws {
+        let texts = (1...40).map { "Text \($0)" }
+        // one long paragraph the model cannot finish in time, wherever it travels
+        let transport = ScriptedTransport { request, _ in
+            if sentTexts(request).contains("Text 30") { throw URLError(.timedOut) }
+            return openAIReply(translated(request))
+        }
+        let engine = makeEngine(transport: transport)
+        let translations = try await engine.translate(texts, into: german)
+        // "not now" for that text alone: the next time the model may be quicker
+        XCTAssertEqual(translations, texts.map { $0 == "Text 30" ? nil : "de:" + $0 })
+        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [40, 20, 20, 10, 5, 5, 3, 2, 1, 1, 10])
+    }
+
+    func testAHalfThatTimesOutDoesNotCostTheOtherHalf() async throws {
+        let texts = (1...8).map { "Text \($0)" }
+        // the model answers the first four texts in time, but none of the second four
+        let slow = Set(texts[4...])
+        let transport = ScriptedTransport { request, _ in
+            if !slow.isDisjoint(with: sentTexts(request)) { throw URLError(.timedOut) }
+            return openAIReply(translated(request))
+        }
+        let translations = try await makeEngine(transport: transport).translate(texts, into: german)
+        // "not now" for the second four, also for those the portion had no request left for
+        XCTAssertEqual(translations, texts.map { slow.contains($0) ? nil : "de:" + $0 })
+        XCTAssertLessThanOrEqual(transport.requests.count, LLMTranslationEngine.requestBudget(for: 8))
+    }
+
+    func testAServerThatDoesNotAnswerAtAllIsNotAskedOnAndOn() async {
+        let transport = ScriptedTransport { _, _ in throw URLError(.timedOut) }
+        let engine = makeEngine(.ollama, model: "gemma4", transport: transport)
+        let notices = Collected<String>()
+        engine.notify = { notices.add($0) }
+        let failure = await failure { try await engine.translate((1...40).map { "Text \($0)" }, into: self.german) }
+        // not given up for good: the next time the model may be loaded
+        XCTAssertEqual(failure?.isPermanent, false)
+        XCTAssertNotNil(failure?.retryAfter)
+        // the whole portion, a half and a quarter; told at the first time-out
+        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [40, 20, 10])
+        XCTAssertEqual(notices.all, ["Ollama: " + String(localized: "the model takes longer than \(300) s to answer – MirrorAct asks for fewer texts at a time")])
     }
 
     func testASingleTextThatTimesOutIsAskedForLater() async {
@@ -237,7 +283,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let failure = await failure { try await engine.translate(["Settings", "General"], into: self.german) }
         // not left as it is: the next time the model may be quicker
         XCTAssertEqual(failure?.isPermanent, false)
-        XCTAssertEqual(transport.requests.map { sentTexts($0) }, [["Settings", "General"], ["Settings"]])
+        XCTAssertEqual(transport.requests.map { sentTexts($0) }, [["Settings", "General"], ["Settings"], ["General"]])
     }
 
     func testAServerOnThisMacOrInTheNetworkHasMoreTimeToAnswer() {
