@@ -20,6 +20,9 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     /// short notices for the user, called on the main thread
     var onMessage: ((String) -> Void)?
 
+    /// What translates a turn, the way the settings say; the tests hand in a stand-in
+    var makeEngine: @MainActor (AppSettings) throws -> TranslationEngine = { try TranslationEngines.make(for: $0) }
+
     private let sink: FrameSink
     private let compositor = TranslationCompositor()
 
@@ -81,7 +84,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         let settings = AppSettings.shared
         let engine: TranslationEngine
         do {
-            engine = try TranslationEngines.make(for: settings)
+            engine = try makeEngine(settings)
         } catch {
             NSSound.beep()
             onMessage?(error.localizedDescription)
