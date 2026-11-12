@@ -15,66 +15,39 @@ struct TextSettingsView: View {
     /// that they never touch the user's keys
     struct KeyStore {
         var hasKey: (_ providerID: String) -> Bool
+        /// the key itself; nil when there is none or macOS did not hand it out
+        var key: (_ providerID: String) -> String?
         var set: (_ key: String?, _ providerID: String) -> Bool
 
         static let keychain = KeyStore(hasKey: { KeychainStore.hasKey(for: $0) },
+                                       key: { KeychainStore.key(for: $0) },
                                        set: { KeychainStore.set($0, for: $1) })
     }
 
-    private let keys: KeyStore
+    /// what is typed, loaded and tested on the page, and what its buttons do
+    @StateObject private var page: Page
 
     init(keys: KeyStore = .keychain) {
-        self.keys = keys
+        _page = StateObject(wrappedValue: Page(keys: keys))
+    }
+
+    /// The page with a model the caller keeps, so that the tests can press its buttons
+    init(page: Page) {
+        _page = StateObject(wrappedValue: page)
     }
 
     /// the rows of the languages the Mac can translate into (loaded when the page appears)
     @State private var translationLanguages: [LanguageRow] = []
 
-    /// a key that is being typed and is not stored yet
-    @State private var enteredKey = ""
-    @State private var hasStoredKey = false
-    /// what became of the last Save or Remove, when it did not work
-    @State private var keyProblem: String?
-
-    @State private var loadedModels: [String] = []
-    @State private var modelsProblem: String?
-    @State private var isLoadingModels = false
-
-    /// What is typed into Address and Model. It goes into the settings on Return, when the
-    /// field is left and when the page goes away: every change there makes a running translation
-    /// start over, and a half-typed address would get the screen's text and the key.
-    @State private var addressDraft = ""
-    @State private var modelDraft = ""
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
         case address, model
     }
 
-    @State private var testOutcome: Outcome?
-    @State private var isTesting = false
-
-    /// the request of “Load the list” or “Test” that is on its way
-    @State private var work: Task<Void, Never>?
-
-    private struct Outcome: Equatable {
-        let text: String
-        let failed: Bool
-    }
-
     /// the language the app shows its own texts in
     private static var appLocale: Locale {
         Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")
-    }
-
-    private var provider: LLMProvider {
-        TranslationEngines.llmProvider(id: settings.llmProvider)
-    }
-
-    /// The service as it is set up, without asking the keychain (that may make macOS ask the
-    /// user); for what the page shows
-    private var shownConnection: LLMConnection {
-        LLMConnection(provider: provider, baseURL: addressDraft, model: modelDraft)
     }
 
     var body: some View {
@@ -112,25 +85,17 @@ struct TextSettingsView: View {
             let languages = await LanguageAvailability().supportedLanguages
             translationLanguages = Self.languageRows(for: languages, in: Self.appLocale)
         }
-        .onAppear {
-            loadDrafts()
-            refreshKeyState()
-        }
-        .onDisappear {
-            commitDrafts()
-            storeEnteredKey()
-            stopWork()
-        }
-        .onChange(of: focusedField) { commitDrafts() }
+        .onAppear { page.appear() }
+        .onDisappear { page.disappear() }
+        .onChange(of: focusedField) { page.commitDrafts() }
     }
 
     // MARK: The service
 
     @ViewBuilder
     private var serviceSection: some View {
-        let provider = self.provider
-        let connection = shownConnection
-        let notice = Self.serviceNotice(for: connection)
+        let provider = page.provider
+        let notice = Self.serviceNotice(for: page.shownConnection)
         Section("Language model service") {
             Picker("Service", selection: providerSelection) {
                 ForEach(LLMProvider.all) { provider in
@@ -153,28 +118,28 @@ struct TextSettingsView: View {
             .foregroundStyle(.secondary)
 
             if provider.baseURLRule != .fixed {
-                TextField("Address", text: $addressDraft, prompt: Text(verbatim: provider.baseURLExample))
+                TextField("Address", text: $page.addressDraft, prompt: Text(verbatim: provider.baseURLExample))
                     .focused($focusedField, equals: .address)
-                    .onSubmit { commitDrafts() }
+                    .onSubmit { page.commitDrafts() }
             }
 
             LabeledContent("Model") {
                 HStack {
-                    TextField("Model", text: $modelDraft, prompt: Text(verbatim: provider.defaultModel))
+                    TextField("Model", text: $page.modelDraft, prompt: Text(verbatim: provider.defaultModel))
                         .labelsHidden()
                         .focused($focusedField, equals: .model)
-                        .onSubmit { commitDrafts() }
+                        .onSubmit { page.commitDrafts() }
                     Menu("Models") {
-                        ForEach(modelChoices, id: \.self) { model in
-                            Button(model) { setModel(model) }
+                        ForEach(page.modelChoices, id: \.self) { model in
+                            Button(model) { page.setModel(model) }
                         }
                     }
-                    .disabled(modelChoices.isEmpty)
+                    .disabled(page.modelChoices.isEmpty)
                     .fixedSize()
                 }
             }
             HStack {
-                if let modelsProblem {
+                if let modelsProblem = page.modelsProblem {
                     Text(verbatim: modelsProblem)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -183,11 +148,11 @@ struct TextSettingsView: View {
                         .help(modelsProblem)
                 }
                 Spacer()
-                if isLoadingModels {
+                if page.isLoadingModels {
                     ProgressView().controlSize(.small)
                 }
-                Button("Load the list") { loadModels() }
-                    .disabled(isLoadingModels)
+                Button("Load the list") { page.loadModels() }
+                    .disabled(page.isLoadingModels)
             }
 
             if provider.needsAPIKey || provider.id == LLMProvider.custom.id {
@@ -195,12 +160,12 @@ struct TextSettingsView: View {
             }
 
             HStack {
-                Button("Test") { runTest() }
-                    .disabled(isTesting)
-                if isTesting {
+                Button("Test") { page.runTest() }
+                    .disabled(page.isTesting)
+                if page.isTesting {
                     ProgressView().controlSize(.small)
                 }
-                if let testOutcome {
+                if let testOutcome = page.testOutcome {
                     Group {
                         if testOutcome.failed {
                             Text(verbatim: testOutcome.text)
@@ -220,14 +185,14 @@ struct TextSettingsView: View {
 
     @ViewBuilder
     private func keyRows(for provider: LLMProvider) -> some View {
-        SecureField("API key", text: $enteredKey)
-            .onSubmit { storeEnteredKey() }
+        SecureField("API key", text: $page.enteredKey)
+            .onSubmit { page.saveEnteredKey() }
         HStack {
             Group {
-                if let keyProblem {
+                if let keyProblem = page.keyProblem {
                     Text(verbatim: keyProblem)
                         .foregroundStyle(.red)
-                } else if hasStoredKey {
+                } else if page.hasStoredKey {
                     Text("A key is stored in the keychain.")
                         .foregroundStyle(.secondary)
                 } else if provider.needsAPIKey {
@@ -241,13 +206,13 @@ struct TextSettingsView: View {
             .font(.caption)
             .lineLimit(2)
             Spacer()
-            if let page = URL(string: provider.keyPage), !provider.keyPage.isEmpty {
-                Link("Get a key", destination: page)
+            if let keyPage = URL(string: provider.keyPage), !provider.keyPage.isEmpty {
+                Link("Get a key", destination: keyPage)
             }
-            Button("Remove") { storeKey(nil) }
-                .disabled(!hasStoredKey)
-            Button("Save") { storeKey(enteredKey) }
-                .disabled(enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Remove") { page.removeKey() }
+                .disabled(!page.hasStoredKey)
+            Button("Save") { page.saveEnteredKey() }
+                .disabled(page.enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 
@@ -281,153 +246,8 @@ struct TextSettingsView: View {
                 set: { settings.translationEngine = $0 })
     }
 
-    /// Another service: what was typed, loaded or tested belongs to the one before
     private var providerSelection: Binding<String> {
-        Binding(get: { provider.id }, set: { id in
-            guard id != provider.id else { return }
-            stopWork()
-            commitDrafts()
-            storeEnteredKey()
-            settings.llmProvider = id
-            loadDrafts()
-            enteredKey = ""
-            keyProblem = nil
-            loadedModels = []
-            modelsProblem = nil
-            testOutcome = nil
-            refreshKeyState()
-        })
-    }
-
-    /// A model picked from the menu counts at once
-    private func setModel(_ model: String) {
-        modelDraft = model
-        commitDrafts()
-    }
-
-    /// The address and model of the service as they are set up
-    private func loadDrafts() {
-        addressDraft = settings.llmBaseURLs[provider.id] ?? ""
-        modelDraft = settings.llmModels[provider.id] ?? ""
-    }
-
-    /// Puts what is typed into the settings; a value that is already there is not written again,
-    /// so that leaving a field unchanged does not make translating start over
-    private func commitDrafts() {
-        let id = provider.id
-        let address = Self.stored(addressDraft), model = Self.stored(modelDraft)
-        // assigned only on a change: each assignment publishes, even of the same value
-        if provider.baseURLRule != .fixed, settings.llmBaseURLs[id] != address {
-            settings.llmBaseURLs[id] = address
-        }
-        if settings.llmModels[id] != model {
-            settings.llmModels[id] = model
-        }
-    }
-
-    /// what a field's text is stored as; nil for an empty field
-    private static func stored(_ text: String) -> String? {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-
-    /// The models the app suggests, then those the service listed
-    private var modelChoices: [String] {
-        let known = provider.knownModels
-        return known + loadedModels.filter { !known.contains($0) }
-    }
-
-    // MARK: Actions
-
-    private func refreshKeyState() {
-        hasStoredKey = keys.hasKey(provider.id)
-    }
-
-    private func storeKey(_ key: String?) {
-        let stored = keys.set(key, provider.id)
-        if stored {
-            keyProblem = nil
-        } else if key == nil {
-            keyProblem = String(localized: "The key could not be removed from the keychain.")
-        } else {
-            keyProblem = String(localized: "The key could not be stored in the keychain. It is used until MirrorAct quits.")
-        }
-        enteredKey = ""
-        testOutcome = nil
-        refreshKeyState()
-    }
-
-    /// Saves a key that was typed and not saved yet, for the service shown
-    private func storeEnteredKey() {
-        guard !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        storeKey(enteredKey)
-    }
-
-    private func stopWork() {
-        work?.cancel()
-        work = nil
-        isLoadingModels = false
-        isTesting = false
-    }
-
-    /// The service with what is entered on the page; a typed key that is not saved yet counts
-    private func enteredConnection() -> LLMConnection {
-        TranslationEngines.llmConnection(for: settings, enteredKey: enteredKey)
-    }
-
-    private func loadModels() {
-        stopWork()
-        commitDrafts()
-        modelsProblem = nil
-        let connection = enteredConnection()
-        // the list needs no model; the address and the key it does need
-        if let missing = connection.missing, missing != .model {
-            modelsProblem = TranslationEngines.failure(for: missing, in: connection).message
-            return
-        }
-        isLoadingModels = true
-        work = Task { @MainActor in
-            let engine = LLMTranslationEngine(connection: connection)
-            defer { engine.cancel() }
-            do {
-                let models = try await engine.models()
-                guard !Task.isCancelled else { return }
-                loadedModels = models
-                if models.isEmpty {
-                    modelsProblem = String(localized: "The service lists no models for translating.")
-                }
-            } catch {
-                guard !Task.isCancelled else { return }
-                modelsProblem = error.localizedDescription
-            }
-            isLoadingModels = false
-        }
-    }
-
-    private func runTest() {
-        stopWork()
-        commitDrafts()
-        testOutcome = nil
-        let connection = enteredConnection()
-        if let missing = connection.missing {
-            testOutcome = Outcome(text: TranslationEngines.failure(for: missing, in: connection).message, failed: true)
-            return
-        }
-        let target = settings.translationTarget
-        isTesting = true
-        work = Task { @MainActor in
-            let engine = LLMTranslationEngine(connection: connection)
-            defer { engine.cancel() }
-            do {
-                let translation = try await engine.test("Hello", into: target)
-                guard !Task.isCancelled else { return }
-                testOutcome = Outcome(text: translation, failed: false)
-            } catch {
-                guard !Task.isCancelled else { return }
-                testOutcome = Outcome(text: error.localizedDescription, failed: true)
-            }
-            isTesting = false
-        }
+        Binding(get: { page.provider.id }, set: { page.selectProvider($0) })
     }
 
     /// One row of “Translate into”
@@ -462,5 +282,235 @@ struct TextSettingsView: View {
         guard withRegion, let region = language.region?.identifier,
               let place = locale.localizedString(forRegionCode: region) else { return name }
         return "\(name) (\(place))"
+    }
+}
+
+extension TextSettingsView {
+    /// What the page holds besides the settings themselves: what is typed and not applied yet,
+    /// the models loaded and the outcome of Test, and what its buttons do
+    @MainActor
+    final class Page: ObservableObject {
+        private let settings: AppSettings
+        private let keys: KeyStore
+        /// what Test and Load the list send their requests over; nil = the network
+        private let transport: LLMTransport?
+
+        init(settings: AppSettings = .shared, keys: KeyStore = .keychain, transport: LLMTransport? = nil) {
+            self.settings = settings
+            self.keys = keys
+            self.transport = transport
+        }
+
+        /// a key that is being typed and is not stored yet
+        @Published var enteredKey = ""
+        @Published private(set) var hasStoredKey = false
+        /// what became of the last Save or Remove, when it did not work
+        @Published private(set) var keyProblem: String?
+
+        @Published private(set) var loadedModels: [String] = []
+        @Published private(set) var modelsProblem: String?
+        @Published private(set) var isLoadingModels = false
+
+        /// What is typed into Address and Model. It goes into the settings on Return, when the
+        /// field is left and when the page goes away: every change there makes a running
+        /// translation start over, and a half-typed address would get the screen's text and the key.
+        @Published var addressDraft = ""
+        @Published var modelDraft = ""
+
+        @Published private(set) var testOutcome: Outcome?
+        @Published private(set) var isTesting = false
+
+        /// the request of “Load the list” or “Test” that is on its way
+        private var work: Task<Void, Never>?
+
+        struct Outcome: Equatable {
+            let text: String
+            let failed: Bool
+        }
+
+        var provider: LLMProvider {
+            TranslationEngines.llmProvider(id: settings.llmProvider)
+        }
+
+        /// The service as it is set up, without asking the keychain (that may make macOS ask the
+        /// user); for what the page shows
+        var shownConnection: LLMConnection {
+            LLMConnection(provider: provider, baseURL: addressDraft, model: modelDraft)
+        }
+
+        /// The models the app suggests, then those the service listed
+        var modelChoices: [String] {
+            let known = provider.knownModels
+            return known + loadedModels.filter { !known.contains($0) }
+        }
+
+        func appear() {
+            loadDrafts()
+            refreshKeyState()
+        }
+
+        func disappear() {
+            commitDrafts()
+            storeEnteredKey()
+            stopWork()
+        }
+
+        /// Another service: what was typed, loaded or tested belongs to the one before
+        func selectProvider(_ id: String) {
+            guard id != provider.id else { return }
+            stopWork()
+            commitDrafts()
+            storeEnteredKey()
+            settings.llmProvider = id
+            loadDrafts()
+            enteredKey = ""
+            keyProblem = nil
+            loadedModels = []
+            modelsProblem = nil
+            testOutcome = nil
+            refreshKeyState()
+        }
+
+        /// A model picked from the menu counts at once
+        func setModel(_ model: String) {
+            modelDraft = model
+            commitDrafts()
+        }
+
+        /// The address and model of the service as they are set up
+        private func loadDrafts() {
+            addressDraft = settings.llmBaseURLs[provider.id] ?? ""
+            modelDraft = settings.llmModels[provider.id] ?? ""
+        }
+
+        /// Puts what is typed into the settings; a value that is already there is not written
+        /// again, so that leaving a field unchanged does not make translating start over
+        func commitDrafts() {
+            let id = provider.id
+            let address = Self.stored(addressDraft), model = Self.stored(modelDraft)
+            // assigned only on a change: each assignment publishes, even of the same value
+            if provider.baseURLRule != .fixed, settings.llmBaseURLs[id] != address {
+                settings.llmBaseURLs[id] = address
+            }
+            if settings.llmModels[id] != model {
+                settings.llmModels[id] = model
+            }
+        }
+
+        /// what a field's text is stored as; nil for an empty field
+        private static func stored(_ text: String) -> String? {
+            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+
+        // MARK: The key
+
+        /// Save, and Return in the key field
+        func saveEnteredKey() {
+            storeKey(enteredKey)
+        }
+
+        func removeKey() {
+            storeKey(nil)
+        }
+
+        private func refreshKeyState() {
+            hasStoredKey = keys.hasKey(provider.id)
+        }
+
+        private func storeKey(_ key: String?) {
+            let stored = keys.set(key, provider.id)
+            if stored {
+                keyProblem = nil
+            } else if key == nil {
+                keyProblem = String(localized: "The key could not be removed from the keychain.")
+            } else {
+                keyProblem = String(localized: "The key could not be stored in the keychain. It is used until MirrorAct quits.")
+            }
+            enteredKey = ""
+            testOutcome = nil
+            refreshKeyState()
+        }
+
+        /// Saves a key that was typed and not saved yet, for the service shown
+        private func storeEnteredKey() {
+            guard !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            storeKey(enteredKey)
+        }
+
+        // MARK: Requests
+
+        private func stopWork() {
+            work?.cancel()
+            work = nil
+            isLoadingModels = false
+            isTesting = false
+        }
+
+        /// The service with what is entered on the page; a typed key that is not saved yet
+        /// counts. Like `TranslationEngines.llmConnection`, but with the page's key store.
+        private func enteredConnection() -> LLMConnection {
+            let entered = enteredKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            return LLMConnection(provider: provider, baseURL: settings.llmBaseURLs[provider.id],
+                                 model: settings.llmModels[provider.id],
+                                 apiKey: entered.isEmpty ? keys.key(provider.id) : entered)
+        }
+
+        func loadModels() {
+            stopWork()
+            commitDrafts()
+            modelsProblem = nil
+            let connection = enteredConnection()
+            // the list needs no model; the address and the key it does need
+            if let missing = connection.missing, missing != .model {
+                modelsProblem = TranslationEngines.failure(for: missing, in: connection).message
+                return
+            }
+            isLoadingModels = true
+            let transport = self.transport
+            work = Task { @MainActor in
+                let engine = LLMTranslationEngine(connection: connection, transport: transport)
+                defer { engine.cancel() }
+                do {
+                    let models = try await engine.models()
+                    guard !Task.isCancelled else { return }
+                    loadedModels = models
+                    if models.isEmpty {
+                        modelsProblem = String(localized: "The service lists no models for translating.")
+                    }
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    modelsProblem = error.localizedDescription
+                }
+                isLoadingModels = false
+            }
+        }
+
+        func runTest() {
+            stopWork()
+            commitDrafts()
+            testOutcome = nil
+            let connection = enteredConnection()
+            if let missing = connection.missing {
+                testOutcome = Outcome(text: TranslationEngines.failure(for: missing, in: connection).message, failed: true)
+                return
+            }
+            let target = settings.translationTarget
+            isTesting = true
+            let transport = self.transport
+            work = Task { @MainActor in
+                let engine = LLMTranslationEngine(connection: connection, transport: transport)
+                defer { engine.cancel() }
+                do {
+                    let translation = try await engine.test("Hello", into: target)
+                    guard !Task.isCancelled else { return }
+                    testOutcome = Outcome(text: translation, failed: false)
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    testOutcome = Outcome(text: error.localizedDescription, failed: true)
+                }
+                isTesting = false
+            }
+        }
     }
 }

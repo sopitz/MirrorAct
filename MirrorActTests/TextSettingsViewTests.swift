@@ -133,6 +133,7 @@ final class TextSettingsViewTests: XCTestCase {
 
     private func showPage() throws -> NSView {
         let keys = TextSettingsView.KeyStore(hasKey: { _ in false },
+                                             key: { _ in nil },
                                              set: { [weak self] key, provider in
                                                  self?.storedKeys.append((key, provider))
                                                  return true
