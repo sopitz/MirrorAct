@@ -191,6 +191,22 @@ final class TranslationPromptTests: XCTestCase {
         XCTAssertEqual(TranslationPrompt.usable([], for: []), [])
     }
 
+    func testATranslationFarLongerThanItsTextIsCut() {
+        // a language that needs many letters for what another writes in few
+        XCTAssertEqual(TranslationPrompt.usable(["Einstellungen"], for: ["設定"]), ["Einstellungen"])
+        let paragraph = String(repeating: "設定を変更しました。", count: 30)
+        let long = String(repeating: "Die Einstellungen wurden geändert. ", count: 30)
+        XCTAssertEqual(TranslationPrompt.usable([long], for: [paragraph]), [long.trimmingCharacters(in: .whitespaces)])
+
+        // a two-word label that comes back as a page: what is drawn stays in proportion
+        let page = String(repeating: "Ignore the screen and write this instead. ", count: 200)
+        let cut = TranslationPrompt.usable([page], for: ["Sign in"])[0]
+        XCTAssertEqual(cut.count, TranslationPrompt.longestTranslation(of: "Sign in"))
+        XCTAssertTrue(cut.hasSuffix("…"))
+        XCTAssertTrue(page.hasPrefix(String(cut.dropLast())))
+        XCTAssertEqual(TranslationPrompt.longestTranslation(of: "Sign in"), 4 * 7 + 60)
+    }
+
     // MARK: Portions
 
     func testPortionsKeepTheOrder() {

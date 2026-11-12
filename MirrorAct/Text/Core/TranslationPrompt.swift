@@ -156,14 +156,31 @@ enum TranslationPrompt {
 
     /// The translations as they are handed on: without white space around them, and a
     /// translation that is empty or missing replaced by its text, which means "leave it as it is".
+    /// A translation longer than `longestTranslation` is cut there and ends with "…": the answer
+    /// comes from a service and is drawn into the frame, and a label that came back as a page
+    /// would hold up the drawing.
     static func usable(_ translations: [String], for texts: [String]) -> [String] {
         var result: [String] = []
         for (index, text) in texts.enumerated() {
             let translation = index < translations.count
                 ? translations[index].trimmingCharacters(in: .whitespacesAndNewlines) : ""
-            result.append(translation.isEmpty ? text : translation)
+            let limit = longestTranslation(of: text)
+            if translation.isEmpty {
+                result.append(text)
+            } else if translation.count > limit {
+                result.append(String(translation.prefix(limit - 1)) + "…")
+            } else {
+                result.append(translation)
+            }
         }
         return result
+    }
+
+    /// Characters (grapheme clusters) a translation of `text` may have: four times as many as the
+    /// text, which leaves room for a language that writes in few characters what another
+    /// writes in many ("設定", "Einstellungen"), and some more for a short label
+    static func longestTranslation(of text: String) -> Int {
+        4 * text.count + 60
     }
 
     /// The texts in portions for one request each, in their order: at most `maxItems` texts and
