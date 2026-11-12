@@ -161,27 +161,55 @@ final class OverlayTrackerStressTests: XCTestCase {
         var top = 0
         var direction = 3
         // What the tracker holds must not grow with time. It is counted rather than timed: a
-        // count does not depend on the load of the machine, and it means the same in a debug
-        // build, which plays fewer frames. Besides the one block, the areas to read are the
-        // largest part. They are capped, but moving them can cut a few in two until the next
-        // area that is added merges them again (about 60 at most over 30 000 frames of this).
+        // count does not depend on the load of the machine. Besides the one block, the areas to
+        // read are the largest part. They are capped, but moving them can cut a few in two until
+        // the next area that is added merges them again (about 60 at most over 30 000 frames of
+        // this).
         let bound = 2 * tracker.configuration.maxUnreadAreas
+        // A debug build plays a hundred frames only. There the scroll turns every twelve frames
+        // or so, and every round trip has a noisy frame at the same point: each round trip is
+        // the same as the one before. Whatever a turn or a change leaves behind for good would
+        // make each round trip hold more than the one before, long before it reached the bound.
+        let release = OverlayTrackerStressTests.length > 1
+        let count = release ? 2000 : 100
+        let turnAt = release ? 1400 : 30
         var mostHeld = 0
-        let count = OverlayTrackerStressTests.length > 1 ? 2000 : 100
+        // the most held in each round trip, from one turn at the top of the page to the next
+        var mostPerRoundTrip: [Int] = [0]
+        var sinceTurn = 0
         for index in 0..<count {
             time += 1.0 / 60
             top += direction
-            if top > 1400 || top < 0 { direction = -direction }
+            sinceTurn += 1
+            if top > turnAt || top < 0 {
+                direction = -direction
+                if direction > 0 {
+                    mostPerRoundTrip.append(0)
+                    sinceTurn = 0
+                }
+            }
             var image = OverlayTrackerStressTests.frame(page, pageWidth: width, top: max(0, top), width: width, height: height,
                                                         scale: 1)
-            if index % 97 == 0 { image = Page.noisy(image, amount: 40, seed: UInt64(index)) }
+            if release ? index % 97 == 0 : sinceTurn == 12 {
+                image = Page.noisy(image, amount: 40, seed: UInt64(release ? index : 1))
+            }
             _ = tracker.advance(image, scale: 1, time: time)
             mostHeld = max(mostHeld, tracker.heldItemCount)
+            mostPerRoundTrip[mostPerRoundTrip.count - 1] = max(mostPerRoundTrip[mostPerRoundTrip.count - 1],
+                                                              tracker.heldItemCount)
         }
         XCTAssertLessThanOrEqual(tracker.blocks.count, 1, "no blocks are made up without reading")
         XCTAssertNotNil(tracker.recognitionDue, "something is due after all that moving")
         XCTAssertGreaterThan(mostHeld, 0)
         XCTAssertLessThanOrEqual(mostHeld, bound, "what the tracker holds stays bounded however long it runs")
+        if !release {
+            // the first round trip starts with the first frame, the last one is cut short
+            let complete = Array(mostPerRoundTrip.dropFirst().dropLast())
+            XCTAssertGreaterThanOrEqual(complete.count, 3, "the scroll must turn often enough")
+            for most in complete.dropFirst() {
+                XCTAssertLessThanOrEqual(most, complete[0], "a round trip holds more than the first: \(complete)")
+            }
+        }
     }
 
     func testTimeGoingBackwardsOrStandingStill() {
