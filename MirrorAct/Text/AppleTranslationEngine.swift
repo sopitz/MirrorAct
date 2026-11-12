@@ -39,6 +39,13 @@ final class AppleTranslationEngine: ObservableObject {
     /// seconds to wait for languages that macOS is loading
     var loadingLimit: TimeInterval = 1800
 
+    /// What macOS says about its languages. The tests answer in its place, so that they depend
+    /// neither on the languages of this Mac nor on a download.
+    var availability = AppleTranslationAvailability.system
+    /// Makes the window for the views that are given the sessions. The tests make none and run
+    /// `serve` themselves, so that macOS never hands them a session.
+    var makeWindow: @MainActor (AppleTranslationEngine) -> NSWindow? = { AppleTranslationHostWindow.make(for: $0) }
+
     private var window: NSWindow?
     /// The window normally lies outside of all screens. Should the views not start there, it is
     /// moved onto the main screen for good (it is not to be seen there either).
@@ -53,6 +60,10 @@ final class AppleTranslationEngine: ObservableObject {
     private var ending: Set<UUID> = []
     /// hosts that wait for macOS to load their languages
     private var loading: Set<UUID> = []
+    /// the host that asks macOS to load its languages right now, and those that wait for their
+    /// turn, oldest first
+    private var loadingTurn: UUID?
+    private var waitingForTurn: [(id: UUID, continuation: CheckedContinuation<Bool, Never>)] = []
 
     /// jobs no session has taken yet, oldest first
     private var waiting: [AppleTranslationJob] = []
@@ -197,7 +208,8 @@ final class AppleTranslationEngine: ObservableObject {
     private func supportedLanguages() async -> [Locale.Language]? {
         if supported.isEmpty {
             // an empty answer is not kept: the next request asks again
-            guard let languages = await inTime({ await LanguageAvailability().supportedLanguages }) else {
+            let availability = self.availability
+            guard let languages = await inTime({ await availability.supportedLanguages() }) else {
                 Log.error("Translation: macOS did not say within \(Int(questionLimit)) s which languages it translates")
                 return nil
             }
@@ -210,7 +222,8 @@ final class AppleTranslationEngine: ObservableObject {
     /// macOS knows both languages, but not every pair of them. nil = it did not answer in time.
     private func isSupported(_ pair: String, from source: Locale.Language, to target: Locale.Language) async -> Bool? {
         if let known = pairSupport[pair] { return known }
-        guard let status = await inTime({ await LanguageAvailability().status(from: source, to: target) }) else {
+        let availability = self.availability
+        guard let status = await inTime({ await availability.status(source, target) }) else {
             Log.error("Translation: macOS did not say within \(Int(questionLimit)) s whether it translates \(pair)")
             return nil
         }
@@ -320,7 +333,7 @@ final class AppleTranslationEngine: ObservableObject {
     /// Makes sure the pair of a job has a host that takes jobs, and wakes it.
     private func wakeHost(for job: AppleTranslationJob) {
         if !hosts.contains(where: { $0.pair == job.pair && !ending.contains($0.id) }) {
-            if window == nil { window = AppleTranslationHostWindow.make(for: self) }
+            if window == nil { window = makeWindow(self) }
             let host = AppleTranslationHost(pair: job.pair, source: job.source, target: job.target)
             let (stream, wake) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
             signals[host.id] = AppleTranslationSignal(stream: stream, wake: wake)
@@ -336,6 +349,7 @@ final class AppleTranslationEngine: ObservableObject {
     private func end(_ host: AppleTranslationHost) {
         ending.insert(host.id)
         signals[host.id]?.wake.finish()
+        leaveLineToLoad(host)
     }
 
     /// Takes a host out of the list, which ends its view and with it the session. Never while the
@@ -345,6 +359,8 @@ final class AppleTranslationEngine: ObservableObject {
         signals.removeValue(forKey: host.id)?.wake.finish()
         serving.remove(host.id)
         ending.remove(host.id)
+        leaveLineToLoad(host)
+        passOnTurnToLoad(from: host)
         setLoading(false, for: host)
         hosts.removeAll { $0.id == host.id }
     }
@@ -367,15 +383,52 @@ final class AppleTranslationEngine: ObservableObject {
         }
     }
 
+    /// macOS asks about one pair at a time. A `prepareTranslation` that starts while the question
+    /// for another pair is up returns at once, with nothing loaded. true = it is this host's turn;
+    /// false = the host has to end before that.
+    private func waitForTurnToLoad(_ host: AppleTranslationHost) async -> Bool {
+        if loadingTurn == nil {
+            loadingTurn = host.id
+            return true
+        }
+        return await withCheckedContinuation { continuation in
+            waitingForTurn.append((id: host.id, continuation: continuation))
+        }
+    }
+
+    private func passOnTurnToLoad(from host: AppleTranslationHost) {
+        guard loadingTurn == host.id else { return }
+        loadingTurn = nil
+        guard !waitingForTurn.isEmpty else { return }
+        let next = waitingForTurn.removeFirst()
+        loadingTurn = next.id
+        next.continuation.resume(returning: true)
+    }
+
+    /// A host that ends does not keep the others waiting
+    private func leaveLineToLoad(_ host: AppleTranslationHost) {
+        guard let index = waitingForTurn.firstIndex(where: { $0.id == host.id }) else { return }
+        waitingForTurn.remove(at: index).continuation.resume(returning: false)
+    }
+
+    /// hosts that wait for their turn to ask macOS to load their languages (for the tests)
+    var hostsWaitingToLoad: Int { waitingForTurn.count }
+
     /// Runs inside the `translationTask` of the host's view, on its session, and returns when the
     /// pair is no longer needed. Only in here the session is valid, and the view has to stay
     /// until this returns; that is why nobody else removes a host that is served.
     func serve(_ host: AppleTranslationHost, with session: TranslationSession) async {
+        await serve(host, prepare: { try await session.prepareTranslation() },
+                    work: { await self.work(for: host, with: session) })
+    }
+
+    /// `serve` with what it does on the session handed in, so that the tests can run it without one
+    func serve(_ host: AppleTranslationHost, prepare: () async throws -> Void, work: () async -> Void) async {
         // a host that was given up meanwhile, or a second session for the same view
-        guard let signal = signals[host.id], !serving.contains(host.id) else { return }
+        guard signals[host.id] != nil, !serving.contains(host.id) else { return }
         serving.insert(host.id)
-        if await load(host, with: session) {
-            await work(for: host, on: signal, with: session)
+        if await load(host, prepare: prepare) {
+            await work()
         }
         remove(host)
         Log.info("Translation: session for \(host.pair) ended")
@@ -385,8 +438,8 @@ final class AppleTranslationEngine: ObservableObject {
 
     /// Makes sure the languages of the pair are on this Mac. macOS asks the user before it loads
     /// them. false = this host cannot translate.
-    private func load(_ host: AppleTranslationHost, with session: TranslationSession) async -> Bool {
-        var status = await LanguageAvailability().status(from: host.source, to: host.target)
+    private func load(_ host: AppleTranslationHost, prepare: () async throws -> Void) async -> Bool {
+        var status = await availability.status(host.source, host.target)
         if status == .supported, !isEnding(host) {
             setLoading(true, for: host)
             // loading takes minutes: those who wait for this pair ask again later
@@ -394,39 +447,49 @@ final class AppleTranslationEngine: ObservableObject {
             let language = LanguageMatching.name(of: host.source, in: Self.noticeLocale)
             note("loading " + host.pair, String(localized: "Loading \(language) for translating …"),
                  to: clients(using: host.pair))
-            Log.info("Translation: asking macOS to load the languages for \(host.pair)")
-            do {
-                try await session.prepareTranslation()
-            } catch {
+            guard await waitForTurnToLoad(host) else {
                 setLoading(false, for: host)
-                // translating was turned off meanwhile: what became of the question no longer matters
-                if isEnding(host) { return false }
-                if Self.isCancellation(error) {
-                    declinedLoading(for: host)
-                } else {
+                return false
+            }
+            defer { passOnTurnToLoad(from: host) }
+            // the pair before may have brought these languages along
+            status = await availability.status(host.source, host.target)
+            if status == .supported, !isEnding(host) {
+                Log.info("Translation: asking macOS to load the languages for \(host.pair)")
+                do {
+                    try await prepare()
+                } catch {
+                    setLoading(false, for: host)
+                    // translating was turned off meanwhile: what became of the question no longer matters
+                    if isEnding(host) { return false }
+                    if Self.isCancellation(error) {
+                        declinedLoading(for: host)
+                    } else {
+                        blockedUntil[host.pair] = Self.clock + retryPause
+                        Log.error("Translation: loading the languages for \(host.pair) failed: \(Self.describe(error))")
+                        note("not loaded " + host.pair, String(localized: "Loading \(language) failed"),
+                             to: clients(using: host.pair))
+                    }
+                    return false
+                }
+                // prepareTranslation also returns while the languages are still on their way
+                let start = Self.clock
+                status = await availability.status(host.source, host.target)
+                while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    status = await availability.status(host.source, host.target)
+                }
+                if status == .supported, !isEnding(host) {
+                    setLoading(false, for: host)
                     blockedUntil[host.pair] = Self.clock + retryPause
-                    Log.error("Translation: loading the languages for \(host.pair) failed: \(Self.describe(error))")
+                    Log.error("Translation: the languages for \(host.pair) are not there after \(Int(loadingLimit)) s")
                     note("not loaded " + host.pair, String(localized: "Loading \(language) failed"),
                          to: clients(using: host.pair))
+                    return false
                 }
-                return false
-            }
-            // prepareTranslation also returns while the languages are still on their way
-            let start = Self.clock
-            status = await LanguageAvailability().status(from: host.source, to: host.target)
-            while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                status = await LanguageAvailability().status(from: host.source, to: host.target)
+                if status == .installed { Log.info("Translation: the languages for \(host.pair) are loaded") }
             }
             setLoading(false, for: host)
-            if status == .supported, !isEnding(host) {
-                blockedUntil[host.pair] = Self.clock + retryPause
-                Log.error("Translation: the languages for \(host.pair) are not there after \(Int(loadingLimit)) s")
-                note("not loaded " + host.pair, String(localized: "Loading \(language) failed"),
-                     to: clients(using: host.pair))
-                return false
-            }
-            if status == .installed { Log.info("Translation: the languages for \(host.pair) are loaded") }
         }
         if isEnding(host) { return false }
         if status == .installed { return true }
@@ -450,7 +513,8 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// Translates the jobs of the pair as they come, until the host has to end.
-    private func work(for host: AppleTranslationHost, on signal: AppleTranslationSignal, with session: TranslationSession) async {
+    private func work(for host: AppleTranslationHost, with session: TranslationSession) async {
+        guard let signal = signals[host.id] else { return }
         var idle = idleTimer(for: host)
         // woken once when the host was made, so jobs that were queued before the view started are seen
         for await _ in signal.stream {
@@ -679,6 +743,18 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
         } else {
             Task { @MainActor in engine.cancel(self) }
         }
+    }
+}
+
+/// What `AppleTranslationEngine` asks macOS about its languages
+struct AppleTranslationAvailability {
+    var supportedLanguages: () async -> [Locale.Language]
+    var status: (_ source: Locale.Language, _ target: Locale.Language) async -> LanguageAvailability.Status
+
+    /// the answers of macOS
+    static var system: AppleTranslationAvailability {
+        AppleTranslationAvailability(supportedLanguages: { await LanguageAvailability().supportedLanguages },
+                                     status: { await LanguageAvailability().status(from: $0, to: $1) })
     }
 }
 

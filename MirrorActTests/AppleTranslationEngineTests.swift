@@ -108,6 +108,115 @@ final class AppleTranslationEngineTests: XCTestCase {
         XCTAssertFalse(NSScreen.screens.contains { $0.frame.intersects(window.frame) })
     }
 
+    // MARK: Loading languages (macOS answered by FakeMacOS: no session, no download)
+
+    private static let english = "This is an ordinary English sentence about the weather today and tomorrow."
+    private static let french = "Ceci est une phrase française tout à fait ordinaire sur le temps qu’il fait aujourd’hui."
+
+    private func engine(answeredBy macOS: FakeMacOS) -> AppleTranslationEngine {
+        let engine = AppleTranslationEngine()
+        engine.availability = macOS.availability
+        engine.makeWindow = { _ in nil }
+        return engine
+    }
+
+    private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        let deadline = Date().addingTimeInterval(10)
+        while !condition() {
+            guard Date() < deadline else {
+                XCTFail("not within 10 s", file: file, line: line)
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    /// Two pairs whose languages are missing: macOS shows one question at a time, and a
+    /// second prepareTranslation that starts meanwhile returns at once without loading anything.
+    /// So the second pair is asked for only after the first.
+    func testMacOSIsAskedToLoadOnePairAtATime() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let request = Task { try await client.translate([Self.english, Self.french], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 2 }
+        let hosts = engine.hosts
+        // both views start in the same turn
+        var served: [Task<Void, Never>] = []
+        for host in hosts {
+            served.append(Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) })
+        }
+        // while the languages load, the texts are "not now"
+        let first = try await request.value
+        XCTAssertEqual(first, [nil, nil])
+        try await waitUntil { macOS.preparing.count == 2 || engine.hostsWaitingToLoad == 1 }
+        XCTAssertEqual(macOS.preparing.count, 1)
+        let asked = try XCTUnwrap(macOS.preparing.first)
+        macOS.finish(asked, installing: true)
+        try await waitUntil { macOS.asked.count == 2 }
+        XCTAssertNotEqual(macOS.asked[0], macOS.asked[1])
+        XCTAssertEqual(Set(macOS.asked), Set(hosts.map(\.id)))
+        let second = try XCTUnwrap(macOS.preparing.first)
+        macOS.finish(second, installing: true)
+        for task in served { await task.value }
+        XCTAssertTrue(engine.hosts.isEmpty)
+        XCTAssertEqual(engine.hostsWaitingToLoad, 0)
+        client.cancel()
+    }
+
+    /// The languages the first pair loaded may be all the second one needed: it is not asked for
+    func testAPairWhoseLanguagesCameMeanwhileIsNotAskedFor() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let request = Task { try await client.translate([Self.english, Self.french], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 2 }
+        let worked = Box<[UUID]>([])
+        var served: [Task<Void, Never>] = []
+        for host in engine.hosts {
+            served.append(Task {
+                await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: { worked.value.append(host.id) })
+            })
+        }
+        _ = try await request.value
+        try await waitUntil { engine.hostsWaitingToLoad == 1 }
+        let asked = try XCTUnwrap(macOS.preparing.first)
+        macOS.installEverything()
+        macOS.finish(asked, installing: true)
+        for task in served { await task.value }
+        XCTAssertEqual(macOS.asked, [asked])
+        XCTAssertEqual(worked.value.count, 2)
+        client.cancel()
+    }
+
+    /// Translating turned off while one pair is asked for and another waits for its turn: the one
+    /// that waits ends at once, and nothing is asked anymore
+    func testHostsThatWaitForTheirTurnEndWhenTranslatingIsTurnedOff() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let request = Task { try await client.translate([Self.english, Self.french], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 2 }
+        var served: [UUID: Task<Void, Never>] = [:]
+        for host in engine.hosts {
+            served[host.id] = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+        }
+        _ = try await request.value
+        try await waitUntil { engine.hostsWaitingToLoad == 1 }
+        let asked = try XCTUnwrap(macOS.preparing.first)
+        client.cancel()
+        // the one in line goes without asking
+        let other = try XCTUnwrap(served.keys.first { $0 != asked })
+        await served[other]?.value
+        XCTAssertEqual(engine.hostsWaitingToLoad, 0)
+        // the question that is up has to be answered (closing it is not up to the app)
+        XCTAssertEqual(engine.hosts.map(\.id), [asked])
+        macOS.finish(asked, installing: false)
+        await served[asked]?.value
+        XCTAssertEqual(macOS.asked, [asked])
+        XCTAssertTrue(engine.hosts.isEmpty)
+    }
+
     // MARK: Languages of the texts (the language recognizer of macOS; needs no download)
 
     func testTheLanguageOfWholeSentencesIsDecided() {
@@ -162,5 +271,67 @@ final class AppleTranslationEngineTests: XCTestCase {
         let found = languages(of: labels)
         XCTAssertTrue(found.findings.allSatisfy { $0.decided == nil })
         XCTAssertEqual(found.common?.languageCode?.identifier, "de")
+    }
+}
+
+/// A value the tasks of a test share (they all run on the main actor)
+@MainActor
+private final class Box<Value> {
+    var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+}
+
+/// Answers for macOS: which languages it translates, whether those of a pair are on this Mac,
+/// and prepareTranslation, which waits until the test answers the question in place of the user.
+@MainActor
+private final class FakeMacOS {
+    let supported: [Locale.Language]
+    /// hosts whose prepareTranslation was called, in that order
+    private(set) var asked: [UUID] = []
+    private var installed: Set<String> = []
+    private var everything = false
+    private var pending: [(id: UUID, source: String, continuation: CheckedContinuation<Void, Error>)] = []
+
+    init(supported: [String]) {
+        self.supported = supported.map { Locale.Language(identifier: $0) }
+    }
+
+    /// hosts whose question is up
+    var preparing: [UUID] { pending.map(\.id) }
+
+    var availability: AppleTranslationAvailability {
+        // the closures are made on the main actor and run there
+        AppleTranslationAvailability(supportedLanguages: { self.supported },
+                                     status: { source, _ in self.status(of: source) })
+    }
+
+    private func status(of source: Locale.Language) -> LanguageAvailability.Status {
+        everything || installed.contains(LanguageMatching.key(source)) ? .installed : .supported
+    }
+
+    func prepare(_ host: AppleTranslationHost) async throws {
+        asked.append(host.id)
+        try await withCheckedThrowingContinuation { continuation in
+            pending.append((id: host.id, source: LanguageMatching.key(host.source), continuation: continuation))
+        }
+    }
+
+    func installEverything() {
+        everything = true
+    }
+
+    /// The user answers the question of a host: prepareTranslation returns
+    func finish(_ id: UUID, installing: Bool) {
+        guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
+        let entry = pending.remove(at: index)
+        if installing { installed.insert(entry.source) }
+        entry.continuation.resume()
+    }
+
+    func finish(_ host: AppleTranslationHost, installing: Bool) {
+        finish(host.id, installing: installing)
     }
 }
