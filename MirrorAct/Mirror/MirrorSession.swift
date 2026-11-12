@@ -248,6 +248,7 @@ final class MirrorSession: ObservableObject, Identifiable {
     func copyText() {
         guard let buffer = sink.latestSource ?? sink.latest else {
             NSSound.beep()
+            showToast(String(localized: "No video to copy text from yet"))
             return
         }
         Task { [weak self] in

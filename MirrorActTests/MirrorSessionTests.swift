@@ -94,4 +94,12 @@ final class MirrorSessionTests: XCTestCase {
         session.translator.stop()
         session.sink.recording = nil
     }
+
+    /// Text before the first frame says why nothing happens, like Translate does
+    func testCopyTextWithoutAFrameSaysWhy() {
+        let session = MirrorSession(id: "test", kind: .wireless, deviceName: "iPhone", modelIdentifier: nil,
+                                    muted: true)
+        session.copyText()
+        XCTAssertEqual(session.toast, String(localized: "No video to copy text from yet"))
+    }
 }
