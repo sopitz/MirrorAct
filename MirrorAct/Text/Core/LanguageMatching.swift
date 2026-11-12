@@ -38,14 +38,25 @@ enum LanguageMatching {
     }
 
     /// The entry of `supported` that stands for `wanted`: an equivalent one ("zh-Hant" for
-    /// "zh-TW", "en-US" for "en"), otherwise one in the same language and script ("zh-TW" for
-    /// "zh-HK"), otherwise one in the same language ("pt-BR" for "pt-PT"). Never one for an
-    /// undetermined language.
+    /// "zh-TW", "en-US" for "en"), otherwise one for the same language, script and region
+    /// ("de-CH" for "de-Latn-CH"), otherwise the language as it is usually written in that script
+    /// ("de" for "de-AT", "zh-TW" for "zh-MO"), otherwise one in the same language and script
+    /// ("zh-TW" for "zh-HK"), otherwise one in the same language ("pt-BR" for "pt-PT"). Never one
+    /// for an undetermined language. The order of `supported` only decides among entries that are
+    /// equally good.
     static func match(_ wanted: Locale.Language, in supported: [Locale.Language]) -> Locale.Language? {
         guard let wantedCode = code(of: wanted) else { return nil }
         let known = supported.filter { !isUndetermined($0) }
         if let equivalent = known.first(where: { $0.isEquivalent(to: wanted) }) { return equivalent }
         let sameCode = known.filter { code(of: $0) == wantedCode }
+        if let region = wanted.region,
+           let sameRegion = sameCode.first(where: { $0.script == wanted.script && $0.region == region }) {
+            return sameRegion
+        }
+        // macOS lists the countries of a language before the language itself (en-IN before en,
+        // de-CH before de): the first entry in the script would be some other country's spelling
+        let usual = Locale.Language(identifier: wanted.script.map { wantedCode + "-" + $0.identifier } ?? wantedCode)
+        if let entry = sameCode.first(where: { $0.isEquivalent(to: usual) }) { return entry }
         if let script = wanted.script, let sameScript = sameCode.first(where: { $0.script == script }) {
             return sameScript
         }

@@ -53,7 +53,50 @@ final class LanguageMatchingTests: XCTestCase {
     func testOtherwiseTheSameLanguageInTheSameScriptIsMatched() {
         XCTAssertEqual(matched("de-CH"), "de-DE")
         XCTAssertEqual(matched("zh-HK"), "zh-TW")
-        XCTAssertEqual(matched("en-AU"), "en-GB")
+        // the language as it is usually written, not the first other country in the list
+        XCTAssertEqual(matched("en-AU"), "en-US")
+    }
+
+    /// The languages exactly as macOS 26 lists them (`LanguageAvailability().supportedLanguages`):
+    /// the countries of a language before the language itself, with or without a region
+    private let listedByMacOS: [Locale.Language] = [
+        "en-IN", "it-CH", "ko", "nb", "da", "en-CA", "en-SG", "es-MX", "uk", "fr-CA", "it", "zh-TW", "es", "nl",
+        "ar-AE", "zh-HK", "vi", "zh", "ru", "en-GB", "es-US", "fr", "hi", "en-ZA", "th", "en-AU", "de-CH", "de",
+        "en", "pt", "pl", "en-IE", "en-NZ", "sv", "id", "tr", "ja", "pt-PT",
+    ].map { Locale.Language(identifier: $0) }
+
+    private func matchedAsListed(_ identifier: String) -> String? {
+        LanguageMatching.match(language(identifier), in: listedByMacOS)?.minimalIdentifier
+    }
+
+    func testARegionMacOSDoesNotTranslateGetsTheLanguageAsItIsUsuallyWritten() {
+        // not the first country of the list: Austrian German is not Swiss German (no ß there)
+        XCTAssertEqual(matchedAsListed("de-AT"), "de")
+        XCTAssertEqual(matchedAsListed("de-LU"), "de")
+        XCTAssertEqual(matchedAsListed("en-DE"), "en")
+        XCTAssertEqual(matchedAsListed("en-150"), "en")
+        XCTAssertEqual(matchedAsListed("fr-BE"), "fr")
+        XCTAssertEqual(matchedAsListed("fr-CH"), "fr")
+        XCTAssertEqual(matchedAsListed("it-SM"), "it")
+        // Chinese in the script of the region
+        XCTAssertEqual(matchedAsListed("zh-MO"), "zh-TW")
+        XCTAssertEqual(matchedAsListed("zh-SG"), "zh")
+        XCTAssertEqual(matchedAsListed("zh-Hant"), "zh-TW")
+        XCTAssertEqual(matchedAsListed("zh-Hans"), "zh")
+    }
+
+    func testARegionMacOSTranslatesIsTakenAsItIs() {
+        XCTAssertEqual(matchedAsListed("de-CH"), "de-CH")
+        XCTAssertEqual(matchedAsListed("de-DE"), "de")
+        XCTAssertEqual(matchedAsListed("en-US"), "en")
+        XCTAssertEqual(matchedAsListed("en-IN"), "en-IN")
+        XCTAssertEqual(matchedAsListed("en-AU"), "en-AU")
+        XCTAssertEqual(matchedAsListed("fr-CA"), "fr-CA")
+        XCTAssertEqual(matchedAsListed("pt-PT"), "pt-PT")
+        XCTAssertEqual(matchedAsListed("zh-HK"), "zh-HK")
+        // the region in another script is another language
+        XCTAssertEqual(matchedAsListed("zh-Hans-HK"), "zh")
+        XCTAssertNil(matchedAsListed("fi-FI"))
     }
 
     func testOtherwiseTheSameLanguageIsMatched() {
