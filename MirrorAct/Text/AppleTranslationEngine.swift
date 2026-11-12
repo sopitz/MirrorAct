@@ -252,7 +252,9 @@ final class AppleTranslationEngine: ObservableObject {
             if Self.clock < until { return true }
             blockedUntil[pair] = nil
         }
-        return hosts.contains { $0.pair == pair && loading.contains($0.id) && !ending.contains($0.id) }
+        // also while a host that ends waits for the answer to its question: a new host would only
+        // ask a second time, and macOS would show the second question after the first
+        return hosts.contains { $0.pair == pair && loading.contains($0.id) }
     }
 
     // MARK: Jobs

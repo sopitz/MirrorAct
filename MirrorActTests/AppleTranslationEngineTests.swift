@@ -217,6 +217,41 @@ final class AppleTranslationEngineTests: XCTestCase {
         XCTAssertTrue(engine.hosts.isEmpty)
     }
 
+    /// Translating turned off and on again while macOS still asks about a pair: the question
+    /// stays, and no second one is queued behind it for the same pair
+    func testAPairWhoseQuestionIsStillUpIsNotAskedForAgain() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        let engine = engine(answeredBy: macOS)
+        // a job no view takes is not waited for long
+        engine.pickUpLimit = 3
+        let first = AppleTranslationClient(engine: engine)
+        let request = Task { try await first.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+        _ = try await request.value
+        try await waitUntil { macOS.preparing.count == 1 }
+        first.cancel()
+
+        let second = AppleTranslationClient(engine: engine)
+        let answered = Box<Bool>(false)
+        let again = Task {
+            defer { answered.value = true }
+            return try await second.translate([Self.english], into: self.language("de"))
+        }
+        try await waitUntil { answered.value || engine.hosts.count > 1 }
+        XCTAssertEqual(engine.hosts.map(\.id), [host.id])
+        // "not now": asked again once the question is answered
+        let translations = try await again.value
+        XCTAssertEqual(translations, [nil])
+        XCTAssertEqual(engine.hosts.map(\.id), [host.id])
+
+        macOS.finish(host, installing: false)
+        await served.value
+        XCTAssertTrue(engine.hosts.isEmpty)
+        second.cancel()
+    }
+
     // MARK: Languages of the texts (the language recognizer of macOS; needs no download)
 
     func testTheLanguageOfWholeSentencesIsDecided() {
