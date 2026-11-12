@@ -598,6 +598,20 @@ final class LLMTranslationEngineTests: XCTestCase {
                        "http://192.168.1.5:8080/v1")
     }
 
+    func testARedirectOnTheSameServerNamesTheAddressToEnter() async {
+        for (location, shown) in [("https://192.168.1.5/v1?token=sk-123", "https://192.168.1.5/v1"),
+                                  ("/api/v1", "http://192.168.1.5:8080/api/v1"),
+                                  ("http://other.example.com/v1", "other.example.com")] {
+            let transport = ScriptedTransport { _, _ in reply(301, "", headers: [LLMHeader("Location", location)]) }
+            let engine = makeEngine(.custom, baseURL: "http://192.168.1.5:8080/v1", model: "m", transport: transport)
+            let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
+            XCTAssertEqual(failure?.isPermanent, true)
+            XCTAssertEqual(failure?.message, "192.168.1.5: "
+                           + String(localized: "the service forwards the request to \(shown), which MirrorAct does not follow – check the address in the settings"),
+                           location)
+        }
+    }
+
     func testAServiceThatCannotBeReachedIsNamed() async {
         let transport = ScriptedTransport { _, _ in throw URLError(.notConnectedToInternet) }
         let engine = makeEngine(.openAI, transport: transport)

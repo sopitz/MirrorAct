@@ -560,7 +560,10 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         // a Location may be relative to the address that was asked
         let target = URL(string: location, relativeTo: URL(string: request.url))?.absoluteString ?? location
         let host = LLMConnection.host(of: target)
-        let shown = host.isEmpty ? Self.short(location) : host
+        // Another server is named by its host. On the same one (https instead of http, another
+        // path) the host says nothing new: the whole address, without what may hold a key.
+        let sameServer = host.lowercased() == LLMConnection.host(of: request.url).lowercased()
+        let shown = host.isEmpty || sameServer ? Self.short(LLMConnection.shown(target)) : host
         Log.error("Translation: \(name): the request was redirected to \(host.isEmpty ? "another address" : host)")
         return TranslationFailure(message: name + ": "
                                   + String(localized: "the service forwards the request to \(shown), which MirrorAct does not follow – check the address in the settings"),
