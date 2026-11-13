@@ -97,6 +97,10 @@ final class AppleTranslationEngine: ObservableObject {
     private var pairSupport: [String: Bool] = [:]
     /// pairs whose languages are on this Mac
     private var installedPairs: Set<String> = []
+    /// pairs whose languages were not on this Mac when macOS was last asked, and when that was
+    private var notInstalledSince: [String: TimeInterval] = [:]
+    /// seconds for which an answer that the languages of a pair are not on this Mac holds
+    var statusAge: TimeInterval = 5
     /// what this Mac says about Apple Intelligence; nil = not asked yet
     private var appleIntelligence: AppleIntelligence?
 
@@ -159,8 +163,15 @@ final class AppleTranslationEngine: ObservableObject {
         // one job per language; their sessions work side by side
         var pending: [(group: LanguageMatching.Plan.Group, answer: Task<[String?], Error>)] = []
         for group in plan.groups {
-            let pair = Self.pair(group.source, target)
-            let strategy = languages.strategy(from: group.source, to: target)
+            // the language of the system in a form whose pair with this language is on this Mac
+            // (not looked for where the pair needs Apple Intelligence and it is off)
+            var pairTarget = target
+            if !client.targetIsChosen, languages.strategy(from: group.source, to: target) == .lowLatency
+                || appleIntelligenceState() == .on {
+                pairTarget = await installedForm(of: target, from: group.source, in: languages)
+            }
+            let pair = Self.pair(group.source, pairTarget)
+            let strategy = languages.strategy(from: group.source, to: pairTarget)
             client.pairs.insert(pair)
             let groupTexts = group.indices.map { texts[$0] }
             if strategy == .highFidelity {
@@ -172,11 +183,11 @@ final class AppleTranslationEngine: ObservableObject {
                     // the language of these texts only the models that need Apple Intelligence
                     // know: they stay as they are
                     group.place(groupTexts.map { Optional($0) }, in: &results)
-                    noteNeedsAppleIntelligence(group.source, target, state, to: [client])
+                    noteNeedsAppleIntelligence(group.source, pairTarget, state, to: [client])
                     continue
                 }
             }
-            guard let translatable = await isSupported(pair, from: group.source, to: target, with: strategy) else {
+            guard let translatable = await isSupported(pair, from: group.source, to: pairTarget, with: strategy) else {
                 noteNoAnswer(to: client)
                 continue
             }
@@ -189,7 +200,7 @@ final class AppleTranslationEngine: ObservableObject {
             // A pair whose languages macOS would have to download first is asked for only when
             // enough of the text is in the language; until then its texts are "not now"
             if !group.mayAskForTheLanguage,
-               await !isInstalled(pair, from: group.source, to: target, with: strategy) {
+               await !isInstalled(pair, from: group.source, to: pairTarget, with: strategy) {
                 continue
             }
             // turned off meanwhile, or the languages are not on this Mac (yet): nil, the caller asks again
@@ -199,7 +210,7 @@ final class AppleTranslationEngine: ObservableObject {
                 if isLoading(pair) { updateStatuses() }
                 continue
             }
-            let job = AppleTranslationJob(client: client, pair: pair, source: group.source, target: target,
+            let job = AppleTranslationJob(client: client, pair: pair, source: group.source, target: pairTarget,
                                           strategy: strategy, texts: groupTexts)
             pending.append((group: group, answer: Task { try await self.answer(to: job) }))
         }
@@ -232,6 +243,7 @@ final class AppleTranslationEngine: ObservableObject {
             declined.removeAll()
             pairSupport.removeAll()
             installedPairs.removeAll()
+            notInstalledSince.removeAll()
             appleIntelligence = nil
             clients[key] = AppleTranslationClient.Reference(client: client)
         }
@@ -275,6 +287,7 @@ final class AppleTranslationEngine: ObservableObject {
         declined.removeAll()
         pairSupport.removeAll()
         installedPairs.removeAll()
+        notInstalledSince.removeAll()
         appleIntelligence = nil
     }
 
@@ -310,14 +323,52 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// Whether the languages of a pair are on this Mac. Once they are, macOS is not asked again
-    /// in this turn. false also when macOS does not answer in time.
+    /// in this turn, and while they are not, at most every `statusAge` seconds. false also when
+    /// macOS does not answer in time.
     private func isInstalled(_ pair: String, from source: Locale.Language, to target: Locale.Language,
                              with strategy: AppleTranslationStrategy) async -> Bool {
         if installedPairs.contains(pair) { return true }
+        if let asked = notInstalledSince[pair], Self.clock - asked < statusAge { return false }
         let availability = self.availability
         guard let status = await inTime({ await availability.status(source, target, strategy) }) else { return false }
-        if status == .installed { installedPairs.insert(pair) }
+        pairSupport[pair] = status != .unsupported
+        if status == .installed {
+            installedPairs.insert(pair)
+            notInstalledSince[pair] = nil
+        } else {
+            notInstalledSince[pair] = Self.clock
+        }
         return status == .installed
+    }
+
+    /// The form of `target` (the language of the system as the models know it: "en-GB" for
+    /// "en-DE") to translate `source` into: `target` itself if its pair with `source` is on this
+    /// Mac, otherwise the first other form of the same language and script in the same list of
+    /// languages whose pair is ("en" when German and English (US) are there), otherwise `target`.
+    /// A form the user chose in the settings is not looked for (see `translate`).
+    private func installedForm(of target: Locale.Language, from source: Locale.Language,
+                               in languages: AppleTranslationLanguages) async -> Locale.Language {
+        let list = languages.isOnDevice(target) ? languages.onDevice : languages.all
+        let others = Self.otherForms(of: target, in: list)
+        // nothing to choose from: macOS need not be asked here
+        guard !others.isEmpty else { return target }
+        for form in [target] + others {
+            let pair = Self.pair(source, form)
+            if await isInstalled(pair, from: source, to: form, with: languages.strategy(from: source, to: form)) {
+                return form
+            }
+        }
+        return target
+    }
+
+    /// The entries of `list` in the same language and script as `language`, but another form of it
+    private static func otherForms(of language: Locale.Language, in list: [Locale.Language]) -> [Locale.Language] {
+        let key = LanguageMatching.key(language)
+        let script = Locale.Language(identifier: language.maximalIdentifier).script
+        return list.filter {
+            LanguageMatching.sameLanguage($0, language) && LanguageMatching.key($0) != key
+                && Locale.Language(identifier: $0.maximalIdentifier).script == script
+        }
     }
 
     /// Asked once per turn of translating: the user may turn Apple Intelligence on meanwhile
@@ -801,9 +852,9 @@ final class AppleTranslationEngine: ObservableObject {
             let waiting = hosts.filter { loading.contains($0.id) && client.pairs.contains($0.pair) }
             var status: String?
             if let host = waiting.first(where: { !downloading.contains($0.id) }) {
-                status = Self.askingNotice(host.source, host.target)
+                status = askingNotice(for: host)
             } else if let host = waiting.first {
-                status = Self.downloadingNotice(host.source, host.target)
+                status = downloadingNotice(for: host)
             }
             guard status != client.status else { continue }
             client.status = status
@@ -812,17 +863,29 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// The lasting notice while macOS asks: until the user answers, nothing loads
-    static func askingNotice(_ source: Locale.Language, _ target: Locale.Language) -> String {
-        let sourceName = LanguageMatching.name(of: source, in: noticeLocale)
-        let targetName = LanguageMatching.name(of: target, in: noticeLocale)
+    func askingNotice(for host: AppleTranslationHost) -> String {
+        let (sourceName, targetName) = noticeNames(for: host)
         return String(localized: "macOS asks whether it may download \(sourceName) and \(targetName) – answer its question")
     }
 
     /// The lasting notice once the user has agreed
-    static func downloadingNotice(_ source: Locale.Language, _ target: Locale.Language) -> String {
-        let sourceName = LanguageMatching.name(of: source, in: noticeLocale)
-        let targetName = LanguageMatching.name(of: target, in: noticeLocale)
+    func downloadingNotice(for host: AppleTranslationHost) -> String {
+        let (sourceName, targetName) = noticeNames(for: host)
         return String(localized: "Downloading \(sourceName) and \(targetName) for translating …")
+    }
+
+    /// The languages of a pair as macOS names them in its question: with the region where its
+    /// models have another form of the language ("English (United Kingdom)" next to English (US))
+    func noticeNames(for host: AppleTranslationHost) -> (source: String, target: String) {
+        let list = host.strategy == .lowLatency ? languages.onDevice : languages.all
+        func name(_ language: Locale.Language) -> String {
+            let plain = LanguageMatching.name(of: language, in: Self.noticeLocale)
+            guard !Self.otherForms(of: language, in: list).isEmpty,
+                  let region = language.region ?? Locale.Language(identifier: language.maximalIdentifier).region,
+                  let place = Self.noticeLocale.localizedString(forRegionCode: region.identifier) else { return plain }
+            return "\(plain) (\(place))"
+        }
+        return (name(host.source), name(host.target))
     }
 
     private func noteNeedsAppleIntelligence(_ source: Locale.Language, _ target: Locale.Language,

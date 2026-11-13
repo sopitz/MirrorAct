@@ -311,10 +311,80 @@ final class AppleTranslationEngineTests: XCTestCase {
             XCTAssertEqual(host.target.minimalIdentifier, entry.target, label)
             XCTAssertEqual(host.strategy, entry.strategy, label)
             // macOS is asked about the pair for the same models
-            XCTAssertEqual(macOS.statusAsked.map(\.strategy), [entry.strategy], label)
+            XCTAssertFalse(macOS.statusAsked.isEmpty, label)
+            XCTAssertTrue(macOS.statusAsked.allSatisfy { $0.strategy == entry.strategy }, label)
             client.cancel()
             _ = try await request.value
             XCTAssertTrue(engine.hosts.isEmpty, label)
+        }
+    }
+
+    /// The language of the system goes into a form whose pair with the language on the screen is
+    /// on this Mac before the first form of the list: on a Mac set to English (Germany) with German
+    /// and English (US) installed into English (US), not into British English, which macOS would
+    /// have to download. A language chosen in the settings is taken as chosen.
+    func testTheLanguageOfTheSystemTakesAFormThatIsOnThisMac() async throws {
+        let cases: [(installed: [String], wanted: String, chosen: Bool, target: String)] = [
+            (["en"], "en-DE", false, "en"),
+            ([], "en-DE", false, "en-GB"),
+            (["en", "en-GB"], "en-DE", false, "en-GB"),
+            (["en-GB"], "en", false, "en-GB"),
+            (["en"], "en-GB", true, "en-GB"),
+            (["en"], "en-IN", false, "en"),
+            // a language with one form only
+            (["en"], "pt-PT", false, "pt"),
+        ]
+        for entry in cases {
+            let label = "\(entry.wanted) chosen: \(entry.chosen), installed: \(entry.installed)"
+            let macOS = FakeMacOS(onDevice: Self.onDevice, all: Self.onDevice + Self.onlyWithAppleIntelligence)
+            for target in entry.installed { macOS.installPair("de", target) }
+            let engine = engine(answeredBy: macOS)
+            let client = AppleTranslationClient(engine: engine, targetIsChosen: entry.chosen)
+            let request = Task { try await client.translate([Self.german], into: self.language(entry.wanted)) }
+            try await waitUntil { engine.hosts.count == 1 }
+            let host = engine.hosts[0]
+            XCTAssertEqual(host.target.minimalIdentifier, entry.target, label)
+            XCTAssertEqual(host.strategy, .lowLatency, label)
+            // a chosen form asks about no other
+            if entry.chosen { XCTAssertEqual(Set(macOS.targetsAsked), [entry.target], label) }
+            client.cancel()
+            _ = try await request.value
+        }
+    }
+
+    /// The notices name the region where the models have another form of the language, as the
+    /// question of macOS does: "English (United Kingdom)" next to English (US)
+    func testTheNoticesNameTheRegionWhereTheLanguageAloneIsAmbiguous() async throws {
+        let place = { (region: String) in
+            Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en").localizedString(forRegionCode: region) ?? region
+        }
+        let cases: [(lists: (onDevice: [String], all: [String]), wanted: String, text: String,
+                     source: String?, target: String?)] = [
+            ((Self.onDevice, Self.onDevice + Self.onlyWithAppleIntelligence), "en-DE", Self.german, nil, "GB"),
+            ((Self.onDevice, Self.onDevice + Self.onlyWithAppleIntelligence), "en", Self.german, nil, "US"),
+            ((Self.onDevice, Self.onDevice + Self.onlyWithAppleIntelligence), "de", Self.english, "US", nil),
+            ((Self.onDevice, Self.onDevice + Self.onlyWithAppleIntelligence), "de", Self.french, nil, nil),
+            // one kind of models: Swiss German is listed next to German
+            ((Self.onDevice + Self.onlyWithAppleIntelligence, Self.onDevice + Self.onlyWithAppleIntelligence), "en",
+             Self.german, "DE", "US"),
+        ]
+        for entry in cases {
+            let label = "\(entry.wanted) \(entry.text.prefix(10))"
+            let macOS = FakeMacOS(onDevice: entry.lists.onDevice, all: entry.lists.all)
+            let engine = engine(answeredBy: macOS)
+            let client = AppleTranslationClient(engine: engine)
+            let request = Task { try await client.translate([entry.text], into: self.language(entry.wanted)) }
+            try await waitUntil { engine.hosts.count == 1 }
+            let host = engine.hosts[0]
+            let names = engine.noticeNames(for: host)
+            let plain = (LanguageMatching.name(of: host.source, in: Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")),
+                         LanguageMatching.name(of: host.target, in: Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")))
+            XCTAssertEqual(names.source, entry.source.map { "\(plain.0) (\(place($0)))" } ?? plain.0, label)
+            XCTAssertEqual(names.target, entry.target.map { "\(plain.1) (\(place($0)))" } ?? plain.1, label)
+            XCTAssertTrue(engine.askingNotice(for: host).contains(names.target), label)
+            XCTAssertTrue(engine.downloadingNotice(for: host).contains(names.source), label)
+            client.cancel()
+            _ = try await request.value
         }
     }
 
@@ -715,7 +785,7 @@ final class AppleTranslationEngineTests: XCTestCase {
             try await waitUntil { macOS.preparing == [french.id] }
             if state == .downloading {
                 macOS.finish(french, installing: false)
-                let downloading = AppleTranslationEngine.downloadingNotice(french.source, french.target)
+                let downloading = engine.downloadingNotice(for: french)
                 try await waitUntil { statuses.value.last == downloading }
             }
         case .serving:
@@ -762,8 +832,8 @@ final class AppleTranslationEngineTests: XCTestCase {
         let request = Task { try await first.translate([Self.english], into: self.language("de")) }
         try await waitUntil { engine.hosts.count == 1 }
         let host = engine.hosts[0]
-        let asking = AppleTranslationEngine.askingNotice(host.source, host.target)
-        let downloading = AppleTranslationEngine.downloadingNotice(host.source, host.target)
+        let asking = engine.askingNotice(for: host)
+        let downloading = engine.downloadingNotice(for: host)
         XCTAssertNotEqual(asking, downloading)
         let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
         _ = try await request.value
@@ -813,7 +883,7 @@ final class AppleTranslationEngineTests: XCTestCase {
         try await waitUntil { macOS.preparing.count == 1 }
         macOS.decline(host.id)
         try await waitFor(served)
-        XCTAssertEqual(statuses.value, [AppleTranslationEngine.askingNotice(host.source, host.target), nil])
+        XCTAssertEqual(statuses.value, [engine.askingNotice(for: host), nil])
         XCTAssertEqual(notices.value.count, 1)
         client.cancel()
     }
@@ -947,7 +1017,11 @@ private final class FakeMacOS {
     private(set) var statusAsked: [(source: String, strategy: AppleTranslationStrategy)] = []
     var appleIntelligence = AppleIntelligence.on
     private(set) var appleIntelligenceAsked = 0
+    /// what the status of a pair was asked for: its targets
+    private(set) var targetsAsked: [String] = []
+    /// sources whose pairs into every target are on this Mac
     private var installed: Set<String> = []
+    private var installedPairs: Set<String> = []
     private var everything = false
     /// the language whose next status is held back until `releaseStatus`
     private var holdsStatus: String?
@@ -971,21 +1045,30 @@ private final class FakeMacOS {
     var availability: AppleTranslationAvailability {
         // the closures are made on the main actor and run there
         AppleTranslationAvailability(languages: { AppleTranslationLanguages(onDevice: self.onDevice, all: self.all) },
-                                     status: { source, _, strategy in
+                                     status: { source, target, strategy in
             self.statusAsked.append((source: source.minimalIdentifier, strategy: strategy))
+            self.targetsAsked.append(target.minimalIdentifier)
             if self.holdsStatus == LanguageMatching.key(source) {
                 self.holdsStatus = nil
                 await withCheckedContinuation { self.heldStatus = $0 }
             }
-            return self.status(of: source)
+            return self.status(of: source, to: target)
         }, appleIntelligence: {
             self.appleIntelligenceAsked += 1
             return self.appleIntelligence
         })
     }
 
-    private func status(of source: Locale.Language) -> LanguageAvailability.Status {
-        everything || installed.contains(LanguageMatching.key(source)) ? .installed : .supported
+    private func status(of source: Locale.Language, to target: Locale.Language) -> LanguageAvailability.Status {
+        let pair = LanguageMatching.key(source) + "→" + LanguageMatching.key(target)
+        return everything || installed.contains(LanguageMatching.key(source)) || installedPairs.contains(pair)
+            ? .installed : .supported
+    }
+
+    /// The languages of this pair alone are on this Mac
+    func installPair(_ source: String, _ target: String) {
+        installedPairs.insert(LanguageMatching.key(Locale.Language(identifier: source)) + "→"
+                              + LanguageMatching.key(Locale.Language(identifier: target)))
     }
 
     func prepare(_ host: AppleTranslationHost) async throws {
