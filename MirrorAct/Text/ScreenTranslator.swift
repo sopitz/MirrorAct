@@ -54,8 +54,12 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     /// longest wait for a scrolling picture to rest before a remote engine is asked anyway
     private static let longestWaitForRest: TimeInterval = 1.5
 
-    init(sink: FrameSink) {
+    /// how high the status bar of the device is, which is not translated
+    private let statusBar: TextLayout.StatusBar
+
+    init(sink: FrameSink, statusBar: TextLayout.StatusBar = .heightOfPicture) {
         self.sink = sink
+        self.statusBar = statusBar
     }
 
     /// seconds of a steady clock, for the tracker
@@ -232,7 +236,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             return true
         }
         let areas = locked { tracker.scrollingAreas }
-        let blocks = Self.recognizedBlocks(from: lines, in: frame, areas: areas)
+        let blocks = Self.recognizedBlocks(from: lines, in: frame, areas: areas, statusBar: statusBar)
         let finished: (wake: AsyncStream<Void>.Continuation?, known: [TrackedBlock])? = locked {
             guard isCurrent(turn) else { return nil }
             tracker.finishRecognition(request, blocks: blocks, time: Self.clock)
@@ -251,8 +255,8 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     /// Paragraphs worth translating, in frame pixels, with the colors to draw them in, of the
     /// lines below the status bar (`TextLayout.content`). No paragraph reaches across a known edge
     /// of a scrolling area: what lies on the other side is a bar that stays, or other content.
-    static func recognizedBlocks(from lines: [RecognizedLine], in frame: CVPixelBuffer,
-                                 areas: [ScrollingArea]) -> [RecognizedBlock] {
+    static func recognizedBlocks(from lines: [RecognizedLine], in frame: CVPixelBuffer, areas: [ScrollingArea],
+                                 statusBar: TextLayout.StatusBar = .heightOfPicture) -> [RecognizedBlock] {
         let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
         var edges: [(y: CGFloat, from: CGFloat, to: CGFloat)] = []
         for area in areas {
@@ -262,7 +266,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         // lines with the same known edges above them lie between the same edges
         var keys: [[Int]] = []
         var groups: [[Int]: [RecognizedLine]] = [:]
-        for line in TextLayout.content(lines, imageSize: size) {
+        for line in TextLayout.content(lines, imageSize: size, statusBar: statusBar) {
             let x = line.rect.midX * size.width, y = line.rect.midY * size.height
             let above = edges.indices.filter { edges[$0].y < y && edges[$0].from <= x && x <= edges[$0].to }
             if groups[above] == nil { keys.append(above) }

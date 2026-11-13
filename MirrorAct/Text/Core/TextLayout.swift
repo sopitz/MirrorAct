@@ -71,9 +71,10 @@ enum TextLayout {
     /// screen joined), in reading order. Left out: the status bar (`content`), lines cut off at
     /// the top or bottom edge of the picture (within `screenEdgeShare` of it), and lines read as
     /// garbage because only a part of them shows (`TextBlock.isGarbled`).
-    static func plainText(_ lines: [RecognizedLine], imageSize: CGSize) -> String {
+    static func plainText(_ lines: [RecognizedLine], imageSize: CGSize,
+                          statusBar: StatusBar = .heightOfPicture) -> String {
         let edge = Double(imageSize.height) * screenEdgeShare
-        let kept = content(lines, imageSize: imageSize).filter { line in
+        let kept = content(lines, imageSize: imageSize, statusBar: statusBar).filter { line in
             let top = Double(line.rect.minY * imageSize.height), bottom = Double(line.rect.maxY * imageSize.height)
             return top > edge && bottom < Double(imageSize.height) - edge
         }
@@ -81,11 +82,24 @@ enum TextLayout {
         return blocks(whole, imageSize: imageSize).map(\.text).joined(separator: "\n")
     }
 
+    /// How high the status bar of a device is, which `content` leaves out
+    enum StatusBar {
+        /// `statusBarShare` of the height of the picture: an iPhone or iPad, whose status bar is
+        /// lower in landscape, or which hides it there and shows a title in its place
+        case heightOfPicture
+        /// `statusBarShare` of the longer side of the picture, in either orientation: Android,
+        /// whose status bar has the same height in portrait and in landscape
+        case longerSide
+    }
+
     /// The lines that show what is on the screen, for copying and for translating: all but those
-    /// of the status bar (whose box ends within the top `statusBarShare` of the picture: a clock
-    /// and icons, read as letters)
-    static func content(_ lines: [RecognizedLine], imageSize: CGSize) -> [RecognizedLine] {
-        lines.filter { Double($0.rect.maxY * imageSize.height) > Double(imageSize.height) * statusBarShare }
+    /// of the status bar (whose box ends within the top `statusBarShare` of the picture's height,
+    /// or of its longer side for `StatusBar.longerSide`: a clock and icons, read as letters)
+    static func content(_ lines: [RecognizedLine], imageSize: CGSize,
+                        statusBar: StatusBar = .heightOfPicture) -> [RecognizedLine] {
+        let side = statusBar == .longerSide ? max(imageSize.width, imageSize.height) : imageSize.height
+        let limit = Double(side) * statusBarShare
+        return lines.filter { Double($0.rect.maxY * imageSize.height) > limit }
     }
 
     /// Joins the lines of a paragraph. `imageSize` in pixels, because x and y of the rects have
@@ -383,8 +397,9 @@ enum TextLayout {
     static let unsurePartHeight = 0.7
     /// … and a line of fewer than `shortUnits` (not mostly full-width) only by a box lower than this
     static let shortGarbledHeight = 0.5
-    /// `content`: the status bar lies in this top share of the height of the picture; `plainText`:
-    /// a line within this share of the top or bottom edge is cut off there
+    /// `content`: the status bar lies in this top share of the height of the picture (of its
+    /// longer side, `StatusBar.longerSide`); `plainText`: a line within `screenEdgeShare` of the
+    /// height of the top or bottom edge is cut off there
     static let statusBarShare = 0.04
     static let screenEdgeShare = 0.004
 

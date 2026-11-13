@@ -235,5 +235,35 @@ final class TextLayoutCutOffTests: XCTestCase {
             line("< Testlabor", 41, 103, 377, 66, in: android),
         ]
         XCTAssertEqual(TextLayout.content(lines, imageSize: android).map(\.text), ["< Testlabor"])
+        XCTAssertEqual(TextLayout.content(lines, imageSize: android, statusBar: .longerSide).map(\.text), ["< Testlabor"])
+    }
+
+    /// Android's status bar keeps its height in landscape (its lines end 52 to 57 pixels from the
+    /// top, in portrait as in landscape): for Android the band counts in the longer side of the
+    /// picture, so that the status bar is left out in landscape too, and the title of the app
+    /// bar below it stays. An iPhone hides its status bar in landscape and shows a title at the
+    /// top: there the band counts in the height, as in portrait.
+    func testTheStatusBarInLandscape() {
+        let androidLandscape = CGSize(width: 2400, height: 1080)
+        let android = [
+            line("10:56 L", 42, 17, 139, 37, in: androidLandscape),
+            line("V4D", 2210, 14, 80, 40, in: androidLandscape),
+            line("< Testlabor", 41, 84, 377, 66, in: androidLandscape),
+        ]
+        XCTAssertEqual(TextLayout.content(android, imageSize: androidLandscape, statusBar: .longerSide).map(\.text),
+                       ["< Testlabor"])
+        XCTAssertEqual(TextLayout.plainText(android, imageSize: androidLandscape, statusBar: .longerSide), "< Testlabor")
+        // (measured in the height, 43 pixels, the status bar would stay)
+        XCTAssertEqual(TextLayout.content(android, imageSize: androidLandscape).count, 3)
+
+        let iPhoneLandscape = CGSize(width: 2532, height: 1170)
+        let iPhone = [
+            line("Einstellungen", 1060, 30, 412, 58, in: iPhoneLandscape),
+            line("Allgemein", 180, 160, 290, 60, in: iPhoneLandscape),
+        ]
+        XCTAssertEqual(TextLayout.content(iPhone, imageSize: iPhoneLandscape).map(\.text), ["Einstellungen", "Allgemein"])
+        // (in portrait the status bar of an iPhone is left out as before)
+        let portrait = [line("09:41", 120, 48, 130, 50, in: self.iPhone), line("Allgemein", 52, 330, 290, 60, in: self.iPhone)]
+        XCTAssertEqual(TextLayout.content(portrait, imageSize: self.iPhone).map(\.text), ["Allgemein"])
     }
 }

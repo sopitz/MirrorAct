@@ -206,6 +206,23 @@ final class ScreenTranslatorTests: XCTestCase {
         XCTAssertEqual(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: []).count, 1)
     }
 
+    /// Android in landscape: the status bar has the height it has in portrait, so it is left out
+    /// with a band in the longer side of the picture, and the content below it is translated
+    func testTheStatusBarOfAndroidInLandscapeIsNotTranslated() throws {
+        let landscape = CGSize(width: 2400, height: 1080)
+        let lines = [("10:56 Uhr", 42.0, 17.0, 220.0, 37.0), ("Häufige Fragen zur App", 52.0, 206.0, 615.0, 52.0)]
+            .map { text, x, y, w, h in
+                RecognizedLine(text: text, rect: CGRect(x: x / landscape.width, y: y / landscape.height,
+                                                        width: w / landscape.width, height: h / landscape.height))
+            }
+        let frame = try TestFrames.blank(width: 2400, height: 1080, format: kCVPixelFormatType_32BGRA)
+        XCTAssertEqual(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: [], statusBar: .longerSide)
+            .map(\.text), ["Häufige Fragen zur App"])
+        XCTAssertEqual(MirrorSession.statusBar(of: .android), .longerSide)
+        XCTAssertEqual(MirrorSession.statusBar(of: .cable), .heightOfPicture)
+        XCTAssertEqual(MirrorSession.statusBar(of: .wireless), .heightOfPicture)
+    }
+
     func testWithoutAFrameTranslateDoesNotStart() {
         var messages: [String] = []
         translator.onMessage = { messages.append($0) }

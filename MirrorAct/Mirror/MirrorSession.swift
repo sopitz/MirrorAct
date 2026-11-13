@@ -113,7 +113,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         self.deviceName = deviceName
         self.modelIdentifier = modelIdentifier
         self.muted = muted
-        translator = ScreenTranslator(sink: sink)
+        translator = ScreenTranslator(sink: sink, statusBar: Self.statusBar(of: kind))
         profile = DeviceProfile.resolve(modelIdentifier: modelIdentifier, screenPixels: nil,
                                         frameSize: CGSize(width: 1170, height: 2532))
         sink.onSizeChange = { [weak self] size in
@@ -359,6 +359,12 @@ final class MirrorSession: ObservableObject, Identifiable {
 
     // MARK: Text
 
+    /// Android's status bar has the same height in both orientations; an iPhone or iPad shows a
+    /// lower one in landscape, or none
+    nonisolated static func statusBar(of kind: Kind) -> TextLayout.StatusBar {
+        kind == .android ? .longerSide : .heightOfPicture
+    }
+
     /// Reads the text on the screen (Vision, on this Mac) and copies it to the clipboard:
     /// the text of the device, also while its translation is shown, one paragraph per line
     /// (`TextLayout.plainText`)
@@ -368,6 +374,7 @@ final class MirrorSession: ObservableObject, Identifiable {
             showToast(String(localized: "No video to copy text from yet"))
             return
         }
+        let statusBar = Self.statusBar(of: kind)
         Task { [weak self] in
             guard let lines = await TextRecognizer.recognize(buffer) else {
                 self?.showToast(String(localized: "Text recognition failed"))
@@ -380,7 +387,8 @@ final class MirrorSession: ObservableObject, Identifiable {
             }
             NSPasteboard.general.clearContents()
             let size = CGSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
-            NSPasteboard.general.setString(TextLayout.plainText(lines, imageSize: size), forType: .string)
+            NSPasteboard.general.setString(TextLayout.plainText(lines, imageSize: size, statusBar: statusBar),
+                                           forType: .string)
             self?.showToast(String(localized: "Text copied to the clipboard"))
         }
     }
