@@ -399,7 +399,7 @@ final class TranslationCompositorTests: XCTestCase {
         ]
         // where a line may end, by the characters on both sides alone
         func breaksWord(_ before: String, _ after: String) -> Bool {
-            BlockTextMask.breaksWord(Array((before + after).utf16), at: before.utf16.count)
+            !BlockTextMask.wordKeepingLineEnds(in: before + after).contains(before.utf16.count)
         }
         XCTAssertFalse(breaksWord("プライバシ", "ーと"))
         XCTAssertFalse(breaksWord("セキ", "ュリティ"))
@@ -426,6 +426,133 @@ final class TranslationCompositorTests: XCTestCase {
                 XCTAssertEqual(mask.lines.joined(), item.text, label)
                 let lineHeight = CGFloat(item.height) / CGFloat(item.lineCount)
                 XCTAssertGreaterThan(mask.fontSize, BlockTextMask.smallestFontShare * lineHeight + 1, label)
+            }
+        }
+    }
+
+    /// Where a line may end, in every script the translations come in. `|` marks a line end
+    /// that must keep words whole (`breaks`) or that breaks one (`keeps`); `whole` must stay on
+    /// one line when the text is set in the box. Each text is set with its language and
+    /// without one, and a wider box never gets a smaller font than a slightly narrower one.
+    func testLineEndsKeepWordsAndPunctuationWhole() throws {
+        struct Case {
+            let text: String
+            let width: Int, height: Int, lineCount: Int
+            let language: String
+            /// line ends that keep words whole: Core Text may break there
+            var breaks: [String] = []
+            /// line ends that break a word or part a word from its punctuation
+            var keeps: [String] = []
+            /// must not be broken over two lines
+            var whole: [String] = []
+            /// also set without a language; Core Text then breaks it the way the languages of the
+            /// Mac say, which for a German closing quote differ between an English and a German Mac
+            var withoutLanguage = true
+        }
+        let cases: [Case] = [
+            // German and English compounds and words
+            Case(text: "Benachrichtigungseinstellungen", width: 222, height: 40, lineCount: 1, language: "de",
+                 keeps: ["Benachrichtigun|gseinstellungen"], whole: ["Benachrichtigungseinstellungen"]),
+            Case(text: "Datenschutzeinstellungen verwalten", width: 260, height: 80, lineCount: 2, language: "de",
+                 breaks: ["Datenschutzeinstellungen |verwalten"], whole: ["Datenschutzeinstellungen", "verwalten"]),
+            Case(text: "Notifications and accessibility settings", width: 150, height: 60, lineCount: 2,
+                 language: "en", breaks: ["and |accessibility"], keeps: ["accessi|bility"],
+                 whole: ["Notifications", "accessibility", "settings"]),
+            // punctuation stays with the word before it, never alone at the start of a line
+            Case(text: "Mitteilungen, Töne und Haptik", width: 90, height: 60, lineCount: 2, language: "de",
+                 breaks: ["Mitteilungen, |Töne"], keeps: ["Mitteilungen|, Töne"], whole: ["Mitteilungen,"]),
+            Case(text: "Mobilfunkdatennutzung.", width: 150, height: 60, lineCount: 2, language: "de",
+                 keeps: ["Mobilfunkdatennutzung|."], whole: ["Mobilfunkdatennutzung."]),
+            Case(text: "Ist das erlaubt? Ja!", width: 70, height: 40, lineCount: 2, language: "de",
+                 breaks: ["erlaubt? |Ja"], keeps: ["erlaubt|?", "Ja|!"], whole: ["erlaubt?", "Ja!"]),
+            Case(text: "Bildschirmzeit (Einstellungen)", width: 110, height: 60, lineCount: 2, language: "de",
+                 breaks: ["Bildschirmzeit |(Einstellungen"], keeps: ["Einstellungen|)"], whole: ["Einstellungen)"]),
+            Case(text: "Привет, мир", width: 60, height: 40, lineCount: 1, language: "ru",
+                 keeps: ["Привет|, мир", "При|вет"], whole: ["Привет,"]),
+            // an opening bracket or quote stays with the word after it, never alone at a line end
+            Case(text: "Tippe auf „Allgemein“ und dann auf (Info)", width: 120, height: 80, lineCount: 2,
+                 language: "de", breaks: ["auf |„Allgemein", "auf |(Info"],
+                 keeps: ["„|Allgemein", "Allgemein|“", "(|Info", "Info|)"], whole: ["„Allgemein“", "(Info)"],
+                 withoutLanguage: false),
+            Case(text: "Tap “Allow” to continue", width: 90, height: 60, lineCount: 2, language: "en",
+                 breaks: ["Tap |“Allow", "Allow” |to"], keeps: ["“|Allow", "Allow|”"], whole: ["“Allow”"]),
+            Case(text: "Tap \"Allow\" to continue", width: 90, height: 60, lineCount: 2, language: "en",
+                 keeps: ["\"|Allow", "Allow|\""], whole: ["\"Allow\""]),
+            // hyphens and soft hyphens are places to break
+            Case(text: "E-Mail-Adressen", width: 120, height: 60, lineCount: 2, language: "de",
+                 breaks: ["E-|Mail", "Mail-|Adressen"], keeps: ["E-Ma|il"]),
+            Case(text: "Daten\u{AD}schutz\u{AD}einstellungen", width: 140, height: 60, lineCount: 2, language: "de",
+                 breaks: ["Daten\u{AD}|schutz", "schutz\u{AD}|einstellungen"], keeps: ["Daten\u{AD}schu|tz"]),
+            // an address breaks after its slashes and dots, a long number nowhere
+            Case(text: "Besuche https://www.example.com/settings/privacy", width: 160, height: 60, lineCount: 2,
+                 language: "de", breaks: ["https://|www", "settings/|privacy"], keeps: ["htt|ps", "priv|acy"],
+                 whole: ["Besuche"]),
+            Case(text: "Kundennummer 12345678901234", width: 140, height: 60, lineCount: 2, language: "de",
+                 breaks: ["Kundennummer |1234"], keeps: ["1234567|8901234"], whole: ["Kundennummer", "12345678901234"]),
+            // Japanese: kana before ー and small kana, fullwidth digits and letters, Latin words
+            Case(text: "プライバシーとセキュリティ", width: 140, height: 44, lineCount: 1, language: "ja",
+                 breaks: ["プライバシ|ーと", "セキ|ュリティ", "シー|と"]),
+            Case(text: "パスワードは数字１２３４５６を含めてください", width: 140, height: 60, lineCount: 2,
+                 language: "ja", breaks: ["数字１２|３４", "ワー|ド", "６|を"]),
+            Case(text: "ＩＤ：１２３４５６７８", width: 180, height: 60, lineCount: 2, language: "ja",
+                 breaks: ["Ｉ|Ｄ", "ＩＤ|：", "：|１２", "１２３|４"]),
+            Case(text: "iPhoneの設定でPasswordを変更してください", width: 150, height: 60, lineCount: 2,
+                 language: "ja", breaks: ["iPhone|の", "で|Password", "Password|を"],
+                 keeps: ["iPho|ne", "Pass|word"], whole: ["iPhone", "Password"]),
+            // Chinese and Korean
+            Case(text: "设置与隐私：翻译后的文字", width: 160, height: 60, lineCount: 2, language: "zh-Hans-CN",
+                 breaks: ["设置|与", "隐私|：", "隐私：|翻译"]),
+            Case(text: "개인 정보 보호 및 보안 설정을 관리합니다", width: 160, height: 60, lineCount: 2, language: "ko-KR",
+                 breaks: ["개인 |정보", "정|보", "관리|합니다"]),
+            // Thai, written without spaces between words
+            Case(text: "การตั้งค่าความเป็นส่วนตัวและความปลอดภัย", width: 150, height: 60, lineCount: 2, language: "th",
+                 breaks: ["การตั้งค่า|ความ", "ความเป็น|ส่วนตัว"]),
+            // Arabic and Hebrew, written from the right, with spaces between words
+            Case(text: "إعدادات الخصوصية والأمان", width: 110, height: 60, lineCount: 2, language: "ar",
+                 breaks: ["الخصوصية |والأمان"], keeps: ["الخصو|صية"], whole: ["إعدادات", "الخصوصية", "والأمان"]),
+            Case(text: "הגדרות פרטיות ואבטחה, עכשיו", width: 110, height: 60, lineCount: 2, language: "he",
+                 breaks: ["פרטיות |ואבטחה"], keeps: ["פרטי|ות", "ואבטחה|,"], whole: ["ואבטחה,"]),
+            // emoji: between them and words where there are spaces, never inside one
+            Case(text: "Gut gemacht 👍🏽 weiter so 🎉", width: 100, height: 60, lineCount: 2, language: "de",
+                 breaks: ["👍🏽 |weiter", "gemacht |👍🏽"], keeps: ["👍|🏽", "wei|ter"], whole: ["gemacht", "weiter"]),
+        ]
+        /// the text with `|` taken out, and the offset in UTF-16 units where it was (counted in
+        /// units, since `|` and an emoji modifier after it make one character)
+        func lineEnd(_ marked: String) -> (text: String, offset: Int) {
+            var units = Array(marked.utf16)
+            let bar = units.firstIndex(of: 0x7C)!
+            units.remove(at: bar)
+            precondition(!units.contains(0x7C), marked)
+            return (String(decoding: units, as: UTF16.self), bar)
+        }
+        for item in cases {
+            let allowed = BlockTextMask.wordKeepingLineEnds(in: item.text, language: item.language)
+            for (marked, keepsWords) in item.breaks.map({ ($0, true) }) + item.keeps.map({ ($0, false) }) {
+                let (part, offset) = lineEnd(marked)
+                let start = (item.text as NSString).range(of: part, options: .literal).location
+                XCTAssertNotEqual(start, NSNotFound, "\(marked) is not in \(item.text)")
+                XCTAssertEqual(allowed.contains(start + offset), keepsWords, "line end \(marked)")
+            }
+            for language in item.withoutLanguage ? [item.language, nil] : [item.language] {
+                let label = "\(item.text) \(language ?? "no language")"
+                func mask(_ width: Int) throws -> BlockTextMask {
+                    try XCTUnwrap(BlockTextMask(text: item.text, width: width, height: item.height,
+                                                lineCount: item.lineCount, language: language), "\(label) \(width)")
+                }
+                let set = try mask(item.width)
+                XCTAssertTrue(set.fits, label)
+                XCTAssertEqual(set.lines.joined(), item.text, label)
+                for word in item.whole {
+                    XCTAssertTrue(set.lines.contains { $0.contains(word) }, "\(label): \(word) broken in \(set.lines)")
+                }
+                // nothing the search does may make a wider box come out smaller
+                for narrower in [item.width - 3, item.width - 8, item.width - 20] {
+                    XCTAssertGreaterThanOrEqual(set.fontSize, try mask(narrower).fontSize - 0.001,
+                                                "\(label): \(item.width) against \(narrower)")
+                }
+                // no size anywhere near the smallest only because of how the script breaks
+                let lineHeight = CGFloat(item.height) / CGFloat(item.lineCount)
+                XCTAssertGreaterThan(set.fontSize, BlockTextMask.smallestFontShare * lineHeight + 1, label)
             }
         }
     }

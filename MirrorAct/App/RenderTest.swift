@@ -284,6 +284,9 @@ enum RenderTest {
             // far too long for its place: set smaller
             block(6, "Benachrichtigungseinstellungen", CGRect(x: 790, y: 960, width: 222, height: 40)),
             block(7, "Zwei Zeilen im Kästchen", CGRect(x: 135, y: 1290, width: 222, height: 96), lines: 2),
+            // a comma stays with its word; fullwidth digits break like the kana around them
+            block(12, "Mitteilungen, Töne und Haptik", CGRect(x: 480, y: 1290, width: 150, height: 96), lines: 2),
+            block(13, "パスワードは数字１２３４５６を含めてください", CGRect(x: 790, y: 1290, width: 222, height: 96), lines: 2),
             // the upper third is hidden, as under a title bar: nothing may be drawn there
             block(8, "Dieser Absatz ist oben abgeschnitten, als läge eine Titelleiste darüber: nur der sichtbare Teil wird gezeichnet.",
                   CGRect(x: 117, y: 1620, width: 936, height: 180), lines: 3,
