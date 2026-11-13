@@ -576,6 +576,96 @@ final class OverlayTrackerReadingTests: XCTestCase {
         XCTAssertEqual(OverlayTracker.plainShrink(of: known, edges: FrameMotion.top | FrameMotion.bottom, to: atBar,
                                                   in: image, plainRange: 10), 0)
     }
+
+    /// Two readings are the same text only when every word that differs is a misreading of its
+    /// word: a word that changed is a change however long the paragraph is, and a word with
+    /// other digits never is a misreading
+    func testNearlySameComparesWordByWord() {
+        let long = "Your parcel left the warehouse this morning and is on its way to you. Status: waiting at the "
+            + "depot. Delivery is expected on Monday between nine and twelve in the morning."
+        XCTAssertFalse(TextSimilarity.isNearlySame(long, long.replacingOccurrences(of: "waiting at", with: "leaving")))
+        XCTAssertTrue(TextSimilarity.isNearlySame(long, long.replacingOccurrences(of: "warehouse", with: "warehonse")))
+        XCTAssertTrue(TextSimilarity.isNearlySame(long, long.replacingOccurrences(of: "Monday", with: "Mondav")
+            .replacingOccurrences(of: "twelve", with: "tvelve")))
+        XCTAssertFalse(TextSimilarity.isNearlySame("Good morning Anna. You have 3 new messages from your team.",
+                                                   "Good morning Anna. You have 4 new messages from your team."))
+        XCTAssertFalse(TextSimilarity.isNearlySame("87 % - noch 5 Std. 12 Min.", "87 % - noch 5 Std. 11 Min."))
+        XCTAssertFalse(TextSimilarity.isNearlySame("Status online since today", "Status offline since today"))
+        // (misreadings: a digit read as the letter it looks like, a space lost, a dash left out)
+        XCTAssertTrue(TextSimilarity.isNearlySame("Delivery on 10 May before noon", "Delivery on 1O May before noon"))
+        XCTAssertTrue(TextSimilarity.isNearlySame("Hello World and everyone", "Hello W0rld and everyone"))
+        XCTAssertTrue(TextSimilarity.isNearlySame("Dunkles Design, Schrift- größe", "Dunkles Design, Schrift-größe"))
+        XCTAssertTrue(TextSimilarity.isNearlySame("Akku 87 % - noch fünf Stunden übrig", "Akku 87 % noch fünf Stunden übrig"))
+        XCTAssertTrue(TextSimilarity.isNearlySame("今日は天気がとても良いので公園まで散歩に行きました。",
+                                                  "今日は天気がとても良いので公園まで散歩に行きま した。"))
+        XCTAssertFalse(TextSimilarity.isNearlySame("新着メッセージが3件あります。チームからです。",
+                                                   "新着メッセージが4件あります。チームからです。"))
+    }
+
+    /// A status in a paragraph of ordinary length changes by a few words (7 letters of 170) and
+    /// only its line is read: the paragraph's place is read again, and the new text replaces the
+    /// old one and is translated
+    func testAChangedStatusInALongerParagraphIsTranslated() throws {
+        let screen = SyntheticScreen(seed: 29)
+        let tracker = OverlayTracker()
+        let text = "Your parcel left the warehouse this morning and is on its way to you. Status: waiting at the depot. "
+            + "Delivery is expected on Monday between nine and twelve in the morning."
+        let whole = Self.paragraph(4, 8, offset: 0, text: text)
+        try readAtRest(tracker, screen, offset: 0, blocks: [whole], time: 0)
+        let frame = changed(screen, offset: 0, below: 6, mark: 1)
+        _ = tracker.advance(frame, scale: scale, time: 3)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        tracker.finishRecognition(request, blocks: [SyntheticScreen.block(6, offset: 0, text: "Status: leaving the depot.")],
+                                  time: 3.6)
+        let newWhole = Self.paragraph(4, 8, offset: 0, text: text.replacingOccurrences(of: "waiting at", with: "leaving"))
+        let after = idle(tracker, frame: frame, from: 3.6, seconds: 3, answer: { region in
+            region.contains(newWhole.rect) ? [newWhole] : []
+        })
+        XCTAssertEqual(tracker.blocks.map(\.text), [newWhole.text])
+        XCTAssertEqual(after.sent, [newWhole.text])
+    }
+
+    /// The same with a counter in a line ("3 new messages" to "4 new messages"): a line with
+    /// other digits is no line of the paragraph read alone
+    func testACounterInAParagraphIsTranslated() throws {
+        let screen = SyntheticScreen(seed: 29)
+        let tracker = OverlayTracker()
+        let whole = Self.paragraph(4, 6, offset: 0, text: "Good morning Anna. You have 3 new messages from your team. "
+                                   + "Open the inbox to read them.")
+        try readAtRest(tracker, screen, offset: 0, blocks: [whole], time: 0)
+        let frame = changed(screen, offset: 0, below: 5, mark: 1)
+        _ = tracker.advance(frame, scale: scale, time: 3)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        tracker.finishRecognition(request, blocks: [SyntheticScreen.block(5, offset: 0,
+                                                                          text: "You have 4 new messages from your team.")],
+                                  time: 3.6)
+        let newWhole = Self.paragraph(4, 6, offset: 0, text: whole.text.replacingOccurrences(of: "3 new", with: "4 new"))
+        let after = idle(tracker, frame: frame, from: 3.6, seconds: 3, answer: { region in
+            region.contains(newWhole.rect) ? [newWhole] : []
+        })
+        XCTAssertEqual(tracker.blocks.map(\.text), [newWhole.text])
+        XCTAssertEqual(after.sent, [newWhole.text])
+    }
+
+    /// A one-line summary whose minute ticks ("noch 5 Std. 12 Min." to "11 Min.") gets the
+    /// translation of each new text
+    func testASummaryWhoseMinuteTicksIsTranslatedAgain() throws {
+        let screen = SyntheticScreen(seed: 26)
+        let tracker = OverlayTracker()
+        var summary = SyntheticScreen.block(5, offset: 0, text: "87 % - noch 5 Std. 12 Min.")
+        try readAtRest(tracker, screen, offset: 0, blocks: [summary], time: 0)
+        var time = 2.0
+        for minute in 0..<3 {
+            let frame = changed(screen, offset: 0, below: 5, mark: minute + 1)
+            summary.text = "87 % - noch 5 Std. \(11 - minute) Min."
+            let after = idle(tracker, frame: frame, from: time, seconds: 2, answer: { region in
+                region.contains(summary.rect) ? [summary] : []
+            })
+            XCTAssertEqual(after.sent, [summary.text], "minute \(minute)")
+            XCTAssertEqual(tracker.blocks.map(\.translation), ["T " + summary.text], "minute \(minute)")
+            time += 2
+        }
+    }
 }
 
 extension ReadingPlanTests {

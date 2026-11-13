@@ -2087,14 +2087,86 @@ enum TextSimilarity {
     /// two readings are related when this share of the words of the shorter one are in the other
     static let relatedWordShare = 0.6
 
-    /// The same text but for a misread letter or two
+    /// The same text but for a misread letter or two: at most one letter in `misreadDivisor` of
+    /// the whole text differs, and word by word (`wordsAlign`) every word that differs is itself
+    /// the same but for a misread letter (one in `misreadDivisor` of the word, at least one) and
+    /// has the same digits. A word that changed (a status, a counter, a minute) is a change of
+    /// the text, however long the text around it is.
     static func isNearlySame(_ first: String, _ second: String) -> Bool {
         if first == second { return true }
         let a = Array(first.unicodeScalars), b = Array(second.unicodeScalars)
         let longest = max(a.count, b.count)
         let limit = max(1, longest / misreadDivisor)
-        guard abs(a.count - b.count) * misreadDivisor <= longest, longest <= longestCompared else { return false }
-        return editDistance(a, b, limit: limit) <= limit
+        guard abs(a.count - b.count) * misreadDivisor <= longest, longest <= longestCompared,
+              editDistance(a, b, limit: limit) <= limit else { return false }
+        return wordsAlign(scalarWords(a), scalarWords(b))
+    }
+
+    /// The words of two readings pair up in order: each word with a word that `isMisread` of it,
+    /// two words with one word read without the space between them (or the other way round), and
+    /// a word without letters or digits (a dash, a bullet) may be missing in either
+    static func wordsAlign(_ a: [[Unicode.Scalar]], _ b: [[Unicode.Scalar]]) -> Bool {
+        let columns = b.count + 1
+        var reached = [Bool](repeating: false, count: (a.count + 1) * columns)
+        reached[0] = true
+        for i in 0...a.count {
+            for j in 0...b.count where reached[i * columns + j] {
+                if i == a.count, j == b.count { return true }
+                if i < a.count, j < b.count, isMisread(a[i], b[j]) { reached[(i + 1) * columns + j + 1] = true }
+                if i + 1 < a.count, j < b.count, isMisread(a[i] + a[i + 1], b[j]) {
+                    reached[(i + 2) * columns + j + 1] = true
+                }
+                if i < a.count, j + 1 < b.count, isMisread(a[i], b[j] + b[j + 1]) {
+                    reached[(i + 1) * columns + j + 2] = true
+                }
+                if i < a.count, !hasLetterOrDigit(a[i]) { reached[(i + 1) * columns + j] = true }
+                if j < b.count, !hasLetterOrDigit(b[j]) { reached[i * columns + j + 1] = true }
+            }
+        }
+        return reached[a.count * columns + b.count]
+    }
+
+    /// One word as another reading of the same word: equal, or at most one letter in
+    /// `misreadDivisor` (at least one) differs and its digits are the same – but for a digit read
+    /// as the letter it looks like (`digitLookalikes`: "1O" for "10", "W0rld" for "World")
+    static func isMisread(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Bool {
+        if a == b { return true }
+        if a.filter(isDigit) != b.filter(isDigit), a.map(lookalikeDigit) != b.map(lookalikeDigit) { return false }
+        let limit = max(1, max(a.count, b.count) / misreadDivisor)
+        return abs(a.count - b.count) <= limit && editDistance(a, b, limit: limit) <= limit
+    }
+
+    /// Letters a recognizer reads in place of a digit, and the digit
+    static let digitLookalikes: [Unicode.Scalar: Unicode.Scalar] = ["O": "0", "o": "0", "D": "0", "l": "1", "I": "1",
+                                                                    "i": "1", "|": "1", "Z": "2", "z": "2", "S": "5",
+                                                                    "s": "5", "B": "8"]
+
+    private static func isDigit(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.properties.numericType == .decimal
+    }
+
+    private static func lookalikeDigit(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
+        digitLookalikes[scalar] ?? scalar
+    }
+
+    private static func hasLetterOrDigit(_ word: [Unicode.Scalar]) -> Bool {
+        word.contains { $0.properties.isAlphabetic || isDigit($0) }
+    }
+
+    /// The words of a text, split at white space, as they are (case kept)
+    private static func scalarWords(_ scalars: [Unicode.Scalar]) -> [[Unicode.Scalar]] {
+        var result: [[Unicode.Scalar]] = []
+        var word: [Unicode.Scalar] = []
+        for scalar in scalars {
+            if scalar.properties.isWhitespace {
+                if !word.isEmpty { result.append(word) }
+                word = []
+            } else {
+                word.append(scalar)
+            }
+        }
+        if !word.isEmpty { result.append(word) }
+        return result
     }
 
     /// One text grew out of the other (more lines of the same paragraph) or they share most words
