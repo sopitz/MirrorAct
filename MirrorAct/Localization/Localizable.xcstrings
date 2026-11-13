@@ -3082,7 +3082,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Übersetzen ist auf diesem Mac nicht verfügbar (Zielsprache: %@)"
+            "value" : "Übersetzen nach %@ ist auf diesem Mac nicht verfügbar"
           }
         }
       }
@@ -3322,7 +3322,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ist unter %@ nicht erreichbar – prüfen, ob dieser Mac mit dem Netzwerk verbunden ist, und MirrorAct unter Systemeinstellungen > Datenschutz & Sicherheit > Lokales Netzwerk erlauben"
+            "value" : "ist unter %@ nicht erreichbar – prüfen, ob dieser Mac mit dem Netzwerk verbunden ist, und MirrorAct unter Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk erlauben"
           }
         }
       }
@@ -3332,7 +3332,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "der Dienst leitet die Anfrage an %@ weiter, und dem folgt MirrorAct nicht – die Adresse in den Einstellungen prüfen"
+            "value" : "der Dienst leitet die Anfrage an %@ weiter; MirrorAct folgt dem nicht – die Adresse in den Einstellungen prüfen"
           }
         }
       }
@@ -3412,7 +3412,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "kein Guthaben mehr, oder das Ausgabenlimit ist erreicht"
+            "value" : "kein Guthaben mehr oder das Ausgabenlimit ist erreicht"
           }
         }
       }
@@ -3862,7 +3862,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "«Übersetzen» geht mit der neuen Verbindung wieder an – «Übersetzen» drücken, damit es ausgeschaltet bleibt"
+            "value" : "«Übersetzen» geht mit der neuen Verbindung wieder an – auf «Übersetzen» klicken, damit es aus bleibt"
           }
         }
       }
