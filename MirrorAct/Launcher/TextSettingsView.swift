@@ -85,8 +85,9 @@ struct TextSettingsView: View {
         }
         .formStyle(.grouped)
         .task {
-            let languages = await LanguageAvailability().supportedLanguages
-            translationLanguages = Self.languageRows(for: languages, in: Self.appLocale)
+            let languages = await AppleTranslationAvailability.systemLanguages()
+            translationLanguages = Self.languageRows(for: languages.all, onDevice: languages.onDevice,
+                                                     in: Self.appLocale)
         }
         .onAppear { page.appear() }
         .onDisappear { page.disappear() }
@@ -264,12 +265,18 @@ struct TextSettingsView: View {
         /// the language's minimal identifier, as the settings keep it
         let id: String
         let label: String
+        /// only Apple's models that need Apple Intelligence translate into it (macOS 26.4 and later)
+        var needsAppleIntelligence = false
     }
 
     /// The rows for the languages Translation offers, in the order of their labels. Most of them
     /// come in several regions ("en", "en-GB", "en-IN" …): those are told apart by the region, a
-    /// language that comes once keeps its plain name.
-    static func languageRows(for languages: [Locale.Language], in locale: Locale) -> [LanguageRow] {
+    /// language that comes once keeps its plain name. A language that is not in `onDevice`, the
+    /// list of the models that work without Apple Intelligence, says that it needs it; nil = one
+    /// kind of models (before macOS 26.4).
+    static func languageRows(for languages: [Locale.Language], onDevice: [Locale.Language]? = nil,
+                             in locale: Locale) -> [LanguageRow] {
+        let withoutAppleIntelligence = onDevice.map { Set($0.map(LanguageMatching.key)) }
         var seen = Set<String>()
         let unique = languages.filter { seen.insert($0.minimalIdentifier).inserted }
         var count: [String: Int] = [:]
@@ -279,8 +286,14 @@ struct TextSettingsView: View {
         return unique
             .map { language in
                 let shared = count[LanguageMatching.name(of: language, in: locale), default: 0] > 1
+                let label = label(of: language, in: locale, withRegion: shared)
+                guard let withoutAppleIntelligence,
+                      !withoutAppleIntelligence.contains(LanguageMatching.key(language)) else {
+                    return LanguageRow(id: language.minimalIdentifier, label: label)
+                }
                 return LanguageRow(id: language.minimalIdentifier,
-                                   label: label(of: language, in: locale, withRegion: shared))
+                                   label: String(localized: "\(label) – needs Apple Intelligence"),
+                                   needsAppleIntelligence: true)
             }
             .sorted { $0.label.compare($1.label, locale: locale) == .orderedAscending }
     }
