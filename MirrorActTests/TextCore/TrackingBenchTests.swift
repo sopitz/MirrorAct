@@ -73,6 +73,7 @@ final class TrackingBenchTests: XCTestCase {
         "carousel": Threshold(score: 70, misplaced: 2),  // seed 1: 80.7, 0; seeds 1-3: 79.3
         "ticker": Threshold(score: 65, misplaced: 2),  // seed 1: 73.9, 0; seeds 1-3: 70.3
         "tickerStill": Threshold(score: 70, misplaced: 2),  // seed 1: 81.0, 0; seeds 1-3: 88.3
+        "tickerLow": Threshold(score: 50, misplaced: 2),  // seed 1: 62.6, 0; seeds 1-3: 70.7
         "diagonalPan": Threshold(score: 60, misplaced: 2),  // seed 1: 71.5, 0; seeds 1-3: 80.0
         // changes that are not scrolling
         "alert": Threshold(score: 85, misplaced: 2),  // seed 1: 94.2, 0; seeds 1-3: 97.9
@@ -972,7 +973,29 @@ final class TrackingBenchTests: XCTestCase {
     func testPager() throws { try check("pager") }
     func testCarousel() throws { try check("carousel") }
     func testTicker() throws { try check("ticker") }
+    /// (The cards stay: this cannot tell rest for each area from rest for the whole picture. It
+    /// guards what the page does without a ticker; `testTickerLowRestsWithItsPage` guards the
+    /// rest of the page beside a ticker that moves.)
     func testTickerStill() throws { try check("tickerStill") }
+    func testTickerLow() throws { try check("tickerLow") }
+
+    /// Rest is decided for each scrolling area, and the cards that glide sideways are an area of
+    /// their own, also where the page's drag covers them: once the page rests, its paragraphs
+    /// are translated, as completely as on a page without the cards. (With the cards' area taking
+    /// the page's drag, this fell to 0.56–0.66 on seeds 1, 3 and 4; with rest decided for the
+    /// whole picture, to 0.92 on seed 4 of tickerLow and 0.94 on seed 1 of ticker.)
+    func testTickerLowRestsWithItsPage() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        for seed: UInt64 in 1...4 {
+            let result = TrackingBenchTests.bench(try scenario("tickerLow", seed: seed)).run(OverlayTrackerSubject(),
+                                                                                             name: "tracker")
+            XCTAssertGreaterThanOrEqual(result.coverageResting, 0.95, "tickerLow, seed \(seed)")
+        }
+        let ticker = TrackingBenchTests.bench(try scenario("ticker", seed: 1)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertGreaterThanOrEqual(ticker.coverageResting, 0.99, "ticker, seed 1")
+    }
     func testDiagonalPan() throws { try check("diagonalPan") }
     func testAlert() throws { try check("alert") }
     func testBanner() throws { try check("banner") }

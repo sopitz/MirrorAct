@@ -573,6 +573,8 @@ enum TrackingScenarios {
                              summary: "a row of cards glides sideways all the time; the page scrolls once, then rests"),
         TrackingScenarioSpec(name: "tickerStill", make: { ticker(seed: $0, moving: false) },
                              summary: "as ticker, but the cards stay"),
+        TrackingScenarioSpec(name: "tickerLow", make: { ticker(seed: $0, moving: true, paragraphsAbove: 7) },
+                             summary: "as ticker, with the cards low on the page, where they glide before the page is dragged"),
         TrackingScenarioSpec(name: "carousel", make: carousel,
                              summary: "a row of cards scrolls sideways inside a page, then the page scrolls"),
         TrackingScenarioSpec(name: "diagonalPan", make: diagonalPan,
@@ -987,11 +989,15 @@ enum TrackingScenarios {
 
     /// A row of cards with captions that glides sideways without a pause (a news ticker, a
     /// carousel that turns by itself) on a page that is dragged once and then rests: the page
-    /// rests although the cards move, and its paragraphs at the bottom bar are translated
-    private static func ticker(seed: UInt64, moving: Bool) -> SimScenario {
+    /// rests although the cards move, and its paragraphs at the bottom bar are translated. With
+    /// `paragraphsAbove`, the row lies below that many paragraphs, near the bottom bar: it glides
+    /// before the page is dragged, and the drag covers it, and the page rests for 11 s.
+    private static func ticker(seed: UInt64, moving: Bool, paragraphsAbove: Int = 0) -> SimScenario {
         var box = SimRect()
-        var scroller = makeScroller(moving ? "ticker" : "tickerStill", seed: seed, tenths: 30, startPercent: 0, build: { builder in
+        let name = paragraphsAbove > 0 ? "tickerLow" : moving ? "ticker" : "tickerStill"
+        var scroller = makeScroller(name, seed: seed, tenths: 30, startPercent: 0, build: { builder in
             builder.heading(points: 22)
+            for _ in 0..<paragraphsAbove { builder.paragraph(lines: 3) }
             box = builder.reserve(points: 190)
         })
         let stage = scroller.stage
@@ -1011,7 +1017,7 @@ enum TrackingScenarios {
         let stripSprite = stage.scenario.add(strip)
         scroller.track.rest(45)
         scroller.track.drag(by: scroller.view * random.int(15, 30) / 100, ticks: random.int(40, 60))
-        scroller.track.rest(300)
+        scroller.track.rest(paragraphsAbove > 0 ? 660 : 300)
         var side = SimTrack(start: 0, lower: 0, upper: strip.width)
         if moving { side.glide(speed: 2048, ticks: scroller.track.positions.count) } else { side.rest(scroller.track.positions.count) }
         for (tick, offset) in scroller.track.positions.enumerated() {

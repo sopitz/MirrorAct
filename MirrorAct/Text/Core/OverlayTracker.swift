@@ -230,7 +230,8 @@ final class OverlayTracker {
         /// from resting); for the open top and bottom edges of a paragraph only what moves up or
         /// down by at least this much per frame (thumbnail pixels) and by at least `verticalShare`
         /// of how far it moves sideways counts: a strip that glides sideways brings no line into
-        /// view below or above its text
+        /// view below or above its text. A movement the other way than an area last moved joins
+        /// it only when they cover most of each other (`updateScrollAreas`).
         var verticalMotion = 0.1
         var verticalShare = 0.25
         /// A place outside of every scrolling area rests when nothing moved this near it
@@ -380,9 +381,12 @@ final class OverlayTracker {
         /// the edges that were found to the pixel (`FrameMotion.top` …)
         var refinedEdges: Int
         var lastMoved: TimeInterval
-        /// when it last moved up or down (`Configuration.verticalMotion`): what may go on beyond the
-        /// top or bottom of a paragraph in it comes into view only then
+        /// when it last moved up or down (`isVertical`): what may go on beyond the top or bottom of
+        /// a paragraph in it comes into view only then
         var lastMovedVertically: TimeInterval
+        /// its last movement was up or down (`isVertical`), not sideways: a movement the other way
+        /// joins it only when they cover most of each other
+        var movesVertically: Bool
         /// a refined top (bottom) edge that differs from the known one, seen in one frame only:
         /// it replaces the known edge when the next frame finds it again (rows that look alike
         /// can pass for the edge of a bar in a single frame)
@@ -759,8 +763,12 @@ final class OverlayTracker {
         return found
     }
 
-    /// Every movement belongs to the scrolling area it overlaps most, or to a new one; areas that
-    /// changed for the most part (another screen) are forgotten
+    /// Every movement belongs to the scrolling area it overlaps most (the smaller one of two that
+    /// it overlaps as much), or to a new one; areas that changed for the most part (another
+    /// screen) are forgotten. A movement joins an area when they cover most of each other, or
+    /// when it covers most of the smaller of the two and moves the same way (up or down, or
+    /// sideways, as the area last did): a strip that glides sideways inside a page that scrolls
+    /// is an area of its own, and does not keep the page moving.
     private func updateScrollAreas(_ motions: [FrameMotion], in current: LumaImage, time: TimeInterval) {
         // forget what is gone
         areas.removeAll { area in
@@ -784,10 +792,14 @@ final class OverlayTracker {
         for motion in motions {
             var found: Int?
             var bestOverlap = 0
-            for (index, area) in areas.enumerated() {
+            let vertical = isVertical(motion)
+            for (index, area) in areas.enumerated() where !motionAreaIDs.contains(area.id) {
                 let overlap = area.rect.intersection(motion.area).area
-                if overlap * 2 >= min(area.rect.area, motion.area.area), overlap > bestOverlap,
-                   !motionAreaIDs.contains(area.id) {
+                let coversBoth = overlap * 2 >= area.rect.area && overlap * 2 >= motion.area.area
+                let sameWay = overlap * 2 >= min(area.rect.area, motion.area.area) && area.movesVertically == vertical
+                guard coversBoth || sameWay else { continue }
+                let smaller = found.map { area.rect.area < areas[$0].rect.area } ?? false
+                if overlap > bestOverlap || (overlap == bestOverlap && smaller) {
                     bestOverlap = overlap
                     found = index
                 }
@@ -802,12 +814,13 @@ final class OverlayTracker {
                                                           with: seen.area, refined: seen.refined)
                 areas[index].refinedEdges |= motion.refinedEdges
                 areas[index].lastMoved = time
-                if isVertical(motion) { areas[index].lastMovedVertically = time }
+                if vertical { areas[index].lastMovedVertically = time }
+                areas[index].movesVertically = vertical
                 motionAreaIDs.append(areas[index].id)
             } else {
                 areas.append(ScrollArea(id: nextAreaID, rect: motion.area, refinedEdges: motion.refinedEdges,
-                                        lastMoved: time,
-                                        lastMovedVertically: isVertical(motion) ? time : -1000))
+                                        lastMoved: time, lastMovedVertically: vertical ? time : -1000,
+                                        movesVertically: vertical))
                 motionAreaIDs.append(nextAreaID)
                 nextAreaID += 1
             }
