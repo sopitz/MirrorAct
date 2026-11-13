@@ -444,6 +444,60 @@ final class OverlayTrackerFollowingTests: XCTestCase {
                        accuracy: 1.0)
     }
 
+    /// A label on a bar that stays, right beside the edge of a page that scrolls, stays where it
+    /// is while a pass reads it: the tiles across the edge move in part and carry the points of
+    /// the pass that lie in them on the bar's side, and a reading that lay in no scrolling area
+    /// does not take its movement from such a point (a tab label read while the page moved was
+    /// placed a few lines up in the page, carried along with it, or lost)
+    func testALabelOnABarBesideThePageStaysWhileThePageMoves() throws {
+        let screen = SyntheticScreen(seed: 8)
+        let width = SyntheticScreen.width, height = SyntheticScreen.height
+        // the page begins in the middle of a tile row of the thumbnails (tiles of 8 thumbnail
+        // pixels, a pass of the whole frame has its points in the first row of every other one)
+        let barEdge = 58
+        let label = CGRect(x: 160, y: 36, width: 80, height: 16)
+        func thumbnail(offset: Int, noiseSeed: UInt64) -> LumaImage {
+            var frame = [UInt8](repeating: 225, count: width * height)
+            for y in barEdge..<SyntheticScreen.bottomBar where y + offset >= 0 && y + offset < screen.pageHeight {
+                for x in 0..<width {
+                    frame[y * width + x] = screen.page[(y + offset) * width + x]
+                }
+            }
+            for x in 0..<width {
+                frame[(barEdge - 1) * width + x] = 190
+                frame[SyntheticScreen.bottomBar * width + x] = 190
+            }
+            for y in Int(label.minY)..<Int(label.maxY) {
+                for x in Int(label.minX)..<Int(label.maxX) where (x / 4) % 3 != 0 {
+                    frame[y * width + x] = 30
+                }
+            }
+            let image = LumaImage(width: width, height: height, pixels: frame).downsampled(by: scale)
+            return SyntheticPage.noisy(image, amount: 2, seed: noiseSeed)
+        }
+        let tracker = OverlayTracker()
+        let start = 200
+        _ = tracker.advance(thumbnail(offset: start, noiseSeed: 1), scale: scale, time: 0)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 1))
+        XCTAssertTrue(request.isFullFrame)
+        // the page moves down: what comes into view at its top edge passes the label's tiles
+        var offset = start
+        for frame in 1...12 {
+            offset = start - 6 * frame
+            _ = tracker.advance(thumbnail(offset: offset, noiseSeed: UInt64(frame + 1)), scale: scale,
+                                time: 1 + Double(frame) / 60)
+        }
+        tracker.finishRecognition(request, blocks: [RecognizedBlock(text: "Label", rect: label),
+                                                    SyntheticScreen.block(4, offset: start, text: "Four")],
+                                  time: 1.25)
+        let rects = Dictionary(uniqueKeysWithValues: tracker.blocks.map { ($0.text, $0.rect) })
+        let placed = try XCTUnwrap(rects["Label"], "the label is kept")
+        XCTAssertEqual(placed.minY, label.minY, accuracy: 1.0, "the label stays on the bar")
+        XCTAssertEqual(placed.minX, label.minX, accuracy: 1.0)
+        XCTAssertEqual(rects["Four"]?.minY ?? 0, SyntheticScreen.block(4, offset: offset, text: "").rect.minY,
+                       accuracy: 1.0, "the line moved with the page")
+    }
+
     /// A paragraph read again keeps its block and translation when the reading differs by a
     /// letter or the rectangle by a pixel; text that grew shows the old translation as stale
     /// until its own is there; other text replaces it

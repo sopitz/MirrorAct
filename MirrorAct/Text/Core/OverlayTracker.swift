@@ -445,6 +445,11 @@ final class OverlayTracker {
         /// the scrolling area each point lay in when the pass started, -1 = none: it moves with it
         /// even where a rough edge of the area leaves it out for a frame
         var areaIDs: [Int]
+        /// a point that a tile across the edge of a movement carried while it lay beyond that
+        /// edge (`isBeyondRefinedEdge`): it may have been on a bar beside the page
+        var carriedAcross: [Bool]
+        /// the scrolling areas when the pass started
+        var startAreas: [(id: Int, rect: ThumbnailRect)] = []
 
         init(region: ThumbnailRect, spacing: Int) {
             columns = max(1, (region.width + spacing - 1) / spacing)
@@ -464,23 +469,40 @@ final class OverlayTracker {
             tileX = x
             tileY = y
             areaIDs = [Int](repeating: -1, count: rows * columns)
+            carriedAcross = [Bool](repeating: false, count: rows * columns)
+        }
+
+        /// The scrolling area a point lay in when the pass started (the smallest), -1 = none
+        func startArea(atX x: Double, y: Double) -> Int {
+            var found = -1, smallest = Int.max
+            for area in startAreas where area.rect.contains(x: x, y: y) && area.rect.area < smallest {
+                found = area.id
+                smallest = area.rect.area
+            }
+            return found
         }
 
         /// How far the picture moved since the start at a point of the frame the pass read: as the
-        /// nearest valid probe says, with its area and by its tiles
+        /// nearest valid probe says, with its area and by its tiles. For a point that lay in no
+        /// scrolling area (a label on a bar beside a page), a probe that a tile across the edge of
+        /// a movement carried comes last: the content beside the edge moved, not the bar.
         func displacement(atX pointX: Double, y pointY: Double) -> (dx: Double, dy: Double, tileDX: Double, tileDY: Double)? {
             let column = (pointX - originX) / spacing, row = (pointY - originY) / spacing
+            let isOutside = startArea(atX: pointX, y: pointY) < 0
             var best: Int?
             var bestDistance = Double.infinity
+            var isBestCarried = true
             for candidateRow in [Int(floor(row)), Int(floor(row)) + 1] where candidateRow >= 0 && candidateRow < rows {
                 for candidateColumn in [Int(floor(column)), Int(floor(column)) + 1]
                 where candidateColumn >= 0 && candidateColumn < columns {
                     let index = candidateRow * columns + candidateColumn
                     guard valid[index] else { continue }
                     let distance = abs(Double(candidateRow) - row) + abs(Double(candidateColumn) - column)
-                    if distance < bestDistance {
+                    let isCarried = isOutside && carriedAcross[index]
+                    if (isBestCarried && !isCarried) || (isCarried == isBestCarried && distance < bestDistance) {
                         bestDistance = distance
                         best = index
+                        isBestCarried = isCarried
                     }
                 }
             }
@@ -1349,6 +1371,7 @@ final class OverlayTracker {
                                                 height: speed.area.height))
         }
         var probes = ProbeGrid(region: pixels, spacing: configuration.probeSpacing)
+        probes.startAreas = areas.map { ($0.id, $0.rect) }
         for index in probes.areaIDs.indices {
             var smallest = Int.max
             for area in areas where area.rect.contains(x: probes.x[index], y: probes.y[index]) && area.rect.area < smallest {
@@ -1363,7 +1386,8 @@ final class OverlayTracker {
     }
 
     /// Moves the probes of the running pass with the picture: with the scrolling area they lie
-    /// in, and (separately) as the tiles under them did
+    /// in, and (separately) as the tiles under them did; a probe that a tile carried from beyond
+    /// an edge of its movement is marked (`ProbeGrid.carriedAcross`)
     private func moveProbes(_ motions: [FrameMotion]) {
         guard var pass = running else { return }
         for index in pass.probes.valid.indices where pass.probes.valid[index] {
@@ -1382,6 +1406,9 @@ final class OverlayTracker {
                 pass.probes.x[index] += motions[area].dx
                 pass.probes.y[index] += motions[area].dy
             } else if let motion {
+                if OverlayTracker.isBeyondRefinedEdge(of: motions[motion], x: x, y: y) {
+                    pass.probes.carriedAcross[index] = true
+                }
                 pass.probes.x[index] += motions[motion].dx
                 pass.probes.y[index] += motions[motion].dy
             } else if kind == .changed {
@@ -1400,6 +1427,16 @@ final class OverlayTracker {
             }
         }
         running = pass
+    }
+
+    /// A point lies beyond an edge of a movement that was found to the pixel: a tile across that
+    /// edge moved only in part, and the point may not have moved with it
+    private static func isBeyondRefinedEdge(of motion: FrameMotion, x: Double, y: Double) -> Bool {
+        let area = motion.area
+        return (motion.refinedEdges & FrameMotion.top != 0 && y < Double(area.y))
+            || (motion.refinedEdges & FrameMotion.bottom != 0 && y >= Double(area.maxY))
+            || (motion.refinedEdges & FrameMotion.left != 0 && x < Double(area.x))
+            || (motion.refinedEdges & FrameMotion.right != 0 && x >= Double(area.maxX))
     }
 
     /// The motion of this frame whose scrolling area holds a point (the smallest of them)

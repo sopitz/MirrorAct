@@ -1071,6 +1071,19 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.score, 70)
     }
 
+    /// Seed 10 of iPadLandscape: a tab label below the page, read while the page moved, takes no
+    /// movement from a point of the pass that the page's edge carried off the bar (it was drawn
+    /// 22 pixels above its text for 16 frames; seeds 2, 6 and 11 carried labels into the page)
+    func testIPadLandscapeSeed10() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("iPadLandscape", seed: 10)).run(OverlayTrackerSubject(),
+                                                                                          name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 45)
+    }
+
     /// A page that springs back after a flick past its end: what a pass after the movement finds
     /// cut off is read again at rest, not drawn half-read (seeds 2 and 5 fell to 58.7 and 67.6,
     /// with 241 and 288 half-read frames, when such a pass counted as a reread)
