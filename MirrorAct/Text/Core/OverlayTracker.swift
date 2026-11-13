@@ -288,7 +288,8 @@ final class OverlayTracker {
         /// a pass started within this many seconds after a fast movement may lack lines
         var fastMotionWindow: TimeInterval = 0.1
         /// a block not confirmed where its area carried it is tried where the tiles under it went
-        /// when that differs by more than this (thumbnail pixels: a header that sticks)
+        /// when that differs by more than this (thumbnail pixels: a header that sticks); not where
+        /// a row that looks alike moves with the area that carried it out of view (`makeBlock`)
         var tileShiftDifference = 0.5
         /// a block read again where it may be cut off: what is read again reaches this share of a
         /// line plus `rereadAir` beyond each cut edge, and `rereadAir` beyond the others
@@ -1506,7 +1507,8 @@ final class OverlayTracker {
                 || abs(shift.tileDY - shift.dy) > configuration.tileShiftDifference {
                 // (it may lie on something that stays while its area moves: a header that sticks)
                 made = makeBlock(found, rect: rect, picture: pass.picture, shift: (shift.tileDX, shift.tileDY),
-                                 in: current, mustShowWhole: true, keepsUnseen: false, time: time)
+                                 in: current, mustShowWhole: true, keepsUnseen: false, time: time,
+                                 carriedBy: (shift.dx, shift.dy))
             }
             if made == nil, pass.whileMovingFast {
                 // Read while the picture moved fast: the frame now may be too damaged to confirm it.
@@ -1965,7 +1967,8 @@ final class OverlayTracker {
     /// A block of a pass in the current frame: its patch from the frame that was read, found near
     /// where the probes say it went and checked against the picture; nil when it is not there
     private func makeBlock(_ found: RecognizedBlock, rect: CGRect, picture: LumaImage, shift: (dx: Double, dy: Double),
-                           in current: LumaImage, mustShowWhole: Bool, keepsUnseen: Bool, time: TimeInterval) -> Block? {
+                           in current: LumaImage, mustShowWhole: Bool, keepsUnseen: Bool, time: TimeInterval,
+                           carriedBy carried: (dx: Double, dy: Double)? = nil) -> Block? {
         let margin = configuration.patchMargin
         let left = Int(floor(rect.minX)) - margin, top = Int(floor(rect.minY)) - margin
         let right = Int(ceil(rect.maxX)) + margin, bottom = Int(ceil(rect.maxY)) + margin
@@ -2004,7 +2007,27 @@ final class OverlayTracker {
         // the scrolling area it lies in, if it moved since the pass started
         if shift.dx != 0 || shift.dy != 0 {
             let center = thumbnailRect(of: block)
-            if let index = movingArea(atX: center.midX, y: center.midY) { block.areaID = motionAreaIDs[index] }
+            if let index = movingArea(atX: center.midX, y: center.midY) {
+                // Placed where the tiles under it went rather than where its area carried it
+                // (`carried`): when its area carried it out of view, the place of its tiles does
+                // not overlap that of its area, and more of the tiles under it moved with that
+                // area in the last frame than stayed still, it is not taken. It went out of view
+                // with its area; what its tiles show is a row that looks alike, found where a
+                // tile that missed a frame of a fast glide (damaged) left it, a row short of its
+                // own. Something that stays while its area moves (a header that sticks: still
+                // tiles), or that moves a little apart from it (a large title that shrinks: the
+                // places overlap), is taken.
+                if let carried {
+                    let byArea = CGRect(x: Double(patchRect.x) + carried.dx + block.insetX,
+                                        y: Double(patchRect.y) + carried.dy + block.insetY,
+                                        width: center.width, height: center.height)
+                    if !isInView(byArea, motion: index), !byArea.intersects(center),
+                       movesWithArea(center, motion: index) {
+                        return nil
+                    }
+                }
+                block.areaID = motionAreaIDs[index]
+            }
         }
         if block.areaID < 0 {
             // (in a scrolling area that rests: it moves with it when it moves again)
@@ -2016,6 +2039,23 @@ final class OverlayTracker {
             }
         }
         return block
+    }
+
+    /// More of the tiles under a place moved with a motion of the last frame than stayed still
+    private func movesWithArea(_ rect: CGRect, motion: Int) -> Bool {
+        let range = estimator.tileRange(of: rect)
+        var moved = 0, still = 0
+        for row in range.rows {
+            for column in range.columns {
+                let tile = row * estimator.columns + column
+                if estimator.kinds[tile] == .moved, Int(estimator.motionIndex[tile]) == motion {
+                    moved += 1
+                } else if estimator.kinds[tile] == .still {
+                    still += 1
+                }
+            }
+        }
+        return moved > still
     }
 
     private static func meanTexture(of patch: BlockPatch, inner: ThumbnailRect) -> Double {

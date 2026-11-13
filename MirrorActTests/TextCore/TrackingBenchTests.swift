@@ -1026,6 +1026,19 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.score, 75)
     }
 
+    /// Seed 15 of alikeRows: a row read while the list glided by about a row a frame had slid
+    /// under the bar when the pass ended. A tile under it had missed a frame of the glide, so its
+    /// tiles put it a row short of its own, on a row that looks alike, and it was taken there as
+    /// if it stayed like a header that sticks; its translation stood on the next row for 52 frames.
+    func testAlikeRowsSeed15() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("alikeRows", seed: 15)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 75)
+    }
+
     /// Seed 13 of largeTitle: the label to go back, misread once while the bar has no title, stays
     /// where it is when the titled bar takes over. Both bars show it with the same misreading;
     /// with one of their own each, its translation counted as drawn over text that is not on the

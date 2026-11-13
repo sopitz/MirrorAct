@@ -498,6 +498,71 @@ final class OverlayTrackerFollowingTests: XCTestCase {
                        accuracy: 1.0, "the line moved with the page")
     }
 
+    /// A pass read during a fast glide over rows that look alike: by the time it ends, its row has
+    /// slid under the bar, and a tile under it missed a frame of the movement (damaged), so its
+    /// tiles say it went a frame's movement less – about a row. The row that looks alike there is
+    /// no place for it: the picture under it moves with the page, so nothing stays there the way a
+    /// header that sticks does. It is not drawn there.
+    func testARowReadWhileGlidingIsNotPlacedOnTheRowThatLooksAlikeWhereItsTilesStopped() throws {
+        let width = SyntheticScreen.width, height = SyntheticScreen.height, period = 80
+        var page = SyntheticPage.page(width: width, height: 2000, seed: 31, period: period)
+        let other = SyntheticPage.page(width: width, height: 2000, seed: 32, lineHeight: 24, lineGap: 56)
+        // every row the same but for its right end
+        for y in 0..<2000 {
+            for x in 280..<width {
+                page[y * width + x] = other[y * width + x]
+            }
+        }
+        let bar = SyntheticScreen.topBar
+        /// The page scrolled by `offset` frame pixels under a bar, with a damaged square at (x, y)
+        /// of the thumbnail
+        func frame(offset: Int, damageAt damage: (x: Int, y: Int)? = nil) -> LumaImage {
+            var pixels = [UInt8](repeating: 225, count: width * height)
+            for y in bar..<height where y + offset < 2000 {
+                for x in 0..<width {
+                    pixels[y * width + x] = page[(y + offset) * width + x]
+                }
+            }
+            for x in 0..<width {
+                pixels[(bar - 1) * width + x] = 190
+            }
+            for y in 20..<40 {
+                for x in 150..<250 where (x / 5) % 2 == 0 {
+                    pixels[y * width + x] = 30
+                }
+            }
+            var image = LumaImage(width: width, height: height, pixels: pixels).downsampled(by: scale)
+            if let damage {
+                for y in (damage.y - 14)..<(damage.y + 14) {
+                    for x in (damage.x - 16)..<(damage.x + 16) {
+                        image[x, y] = (x / 2 + y / 2) % 2 == 0 ? 15 : 245
+                    }
+                }
+            }
+            return image
+        }
+        let tracker = OverlayTracker()
+        let start = 110, speed = period - 4
+        // the row read: its top at 320 in the frame the pass starts on; four frames later its own
+        // place is under the bar, and the next row is 4 frame pixels from where its tiles went
+        let row = RecognizedBlock(text: "Row", rect: CGRect(x: 16, y: 320, width: 254, height: 24))
+        _ = tracker.advance(frame(offset: start), scale: scale, time: 0)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 0.5))
+        // (the point that carries the row over to the current frame: the one nearest its centre,
+        // where it is after the first frame)
+        let probe = (x: 72, y: 168 - speed / scale)
+        for step in 1...4 {
+            let update = tracker.advance(frame(offset: start + speed * step, damageAt: step == 2 ? probe : nil),
+                                         scale: scale, time: 0.5 + Double(step) / 60)
+            XCTAssertEqual(update.change, .scrolled, "frame \(step)")
+        }
+        tracker.finishRecognition(request, blocks: [row], time: 0.5 + 4.5 / 60)
+        for block in tracker.blocks where block.text == "Row" {
+            XCTAssertLessThanOrEqual(block.rect.minY, Double(bar),
+                                     "the row is under the bar, not on the row that looks alike: \(block.rect)")
+        }
+    }
+
     /// A paragraph read again keeps its block and translation when the reading differs by a
     /// letter or the rectangle by a pixel; text that grew shows the old translation as stale
     /// until its own is there; other text replaces it
