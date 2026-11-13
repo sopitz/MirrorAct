@@ -12,7 +12,7 @@ import SwiftUI
 enum Showcase {
     static let notification = Notification.Name("io.github.sopitz.MirrorAct.showcase")
     /// Pixels per point of the pictures: that of the pictures in docs/, whatever the displays are
-    static let defaultScale: CGFloat = 2
+    nonisolated static let defaultScale: CGFloat = 2
 
     static func install() {
         DistributedNotificationCenter.default().addObserver(forName: notification, object: nil, queue: .main) { note in
