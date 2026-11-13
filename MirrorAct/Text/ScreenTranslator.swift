@@ -42,6 +42,10 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     private var engine: TranslationEngine?
     private var settingsChanges: AnyCancellable?
     private var lastNotice: (text: String, time: TimeInterval)?
+    #if DEBUG
+    /// debug builds: what `process` drew into the latest frame
+    private var debugPlaced: [PlacedBlock] = []
+    #endif
 
     /// texts per translation request
     private static let batchSize = 40
@@ -168,6 +172,9 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         }
         let update = tracker.advance(thumbnail.image, scale: thumbnail.scale, time: Self.clock)
         source = pixelBuffer
+        #if DEBUG
+        debugPlaced = update.placed
+        #endif
         let wake = update.recognitionDue == nil ? nil : wakeRecognition
         state.unlock()
         wake?.yield()
@@ -331,3 +338,38 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         }
     }
 }
+
+#if DEBUG
+extension ScreenTranslator {
+    /// Debug builds: the engine of the turn that is on (main thread)
+    @MainActor
+    var debugEngineName: String? { engine?.name }
+
+    /// Debug builds: the translations drawn into the latest frame, with the text they replace,
+    /// and every paragraph the tracker knows. Call inside `FrameSink.debugSnapshot`, so that
+    /// no frame is processed meanwhile.
+    func debugPlacement() -> (placed: [[String: Any]], tracked: [[String: Any]]) {
+        func rect(_ r: CGRect?) -> Any {
+            guard let r else { return NSNull() }
+            return ["x": r.minX, "y": r.minY, "width": r.width, "height": r.height]
+        }
+        func color(_ c: RGBColor) -> String { String(format: "#%02x%02x%02x", c.red, c.green, c.blue) }
+        return locked {
+            guard running else { return ([], []) }
+            let known = tracker.blocks
+            let placed: [[String: Any]] = debugPlaced.map { block in
+                let original = known.first { $0.id == block.id }
+                return ["id": block.id, "recognized": original?.text ?? NSNull(), "translation": block.text,
+                        "rect": rect(block.rect), "visibleRect": rect(block.visibleRect), "lineCount": block.lineCount,
+                        "background": color(block.colors.background), "foreground": color(block.colors.foreground)]
+            }
+            let tracked: [[String: Any]] = known.map { block in
+                ["id": block.id, "recognized": block.text, "translation": block.translation ?? NSNull(),
+                 "isStale": block.isStale, "rect": rect(block.rect), "lineCount": block.lineCount,
+                 "background": color(block.colors.background), "foreground": color(block.colors.foreground)]
+            }
+            return (placed, tracked)
+        }
+    }
+}
+#endif

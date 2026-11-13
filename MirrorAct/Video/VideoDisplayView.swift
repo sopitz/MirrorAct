@@ -276,3 +276,16 @@ final class FrameSink: @unchecked Sendable {
         renderer.enqueue(sampleBuffer)
     }
 }
+
+#if DEBUG
+extension FrameSink {
+    /// Debug builds: the latest frame as the device sent it and as it is shown, read while no
+    /// other frame can be presented, so that `body` sees both of one and the same frame (and
+    /// whatever the processor placed into it).
+    func debugSnapshot<T>(_ body: (_ source: CVPixelBuffer?, _ shown: CVPixelBuffer?) -> T) -> T {
+        presenting.lock()
+        defer { presenting.unlock() }
+        return body(latestSource, latest)
+    }
+}
+#endif
