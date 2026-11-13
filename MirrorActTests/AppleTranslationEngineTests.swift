@@ -162,6 +162,72 @@ final class AppleTranslationEngineTests: XCTestCase {
         client.cancel()
     }
 
+    /// macOS's question is a sheet of the window. When a sheet ends, AppKit moves the window back
+    /// to where it was when the sheet began. The window still goes back outside of the screens
+    /// and down to the normal level: after a question closed by turning Translate off, and once
+    /// the question is answered and the languages are on their way.
+    func testTheWindowGoesBackOutsideTheScreensWhenTheQuestionEnds() async throws {
+        try XCTSkipIf(NSScreen.screens.isEmpty, "no screen")
+        for answered in [false, true] {
+            let label = answered ? "answered" : "closed"
+            let macOS = FakeMacOS(supported: ["de", "en"])
+            let engine = engine(answeredBy: macOS)
+            engine.loadingCheckInterval = 0.02
+            // like the window of the views, but without them, so that no session is asked for
+            let window = NSWindow(contentRect: NSRect(x: -400, y: -400, width: 1, height: 1), styleMask: [.borderless],
+                                  backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.alphaValue = 0.02
+            window.ignoresMouseEvents = true
+            window.orderFrontRegardless()
+            defer { window.close() }
+            engine.makeWindow = { _ in window }
+            func isOnAScreen() -> Bool { NSScreen.screens.contains { $0.frame.intersects(window.frame) } }
+            let ended = Box(false)
+            let observer = NotificationCenter.default.addObserver(forName: NSWindow.didEndSheetNotification,
+                                                                  object: window, queue: .main) { _ in
+                MainActor.assumeIsolated { ended.value = true }
+            }
+            defer { NotificationCenter.default.removeObserver(observer) }
+
+            let client = AppleTranslationClient(engine: engine)
+            let request = Task { try await client.translate([Self.english], into: self.language("de")) }
+            try await waitUntil { engine.hosts.count == 1 }
+            let host = engine.hosts[0]
+            let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+            _ = try await request.value
+            try await waitUntil { macOS.preparing.count == 1 }
+            XCTAssertTrue(isOnAScreen(), label)
+            XCTAssertGreaterThan(window.level.rawValue, NSWindow.Level.floating.rawValue, label)
+            // the question of macOS
+            let sheet = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled],
+                                backing: .buffered, defer: false)
+            sheet.alphaValue = 0
+            window.beginSheet(sheet) { _ in }
+            try await waitUntil { window.attachedSheet === sheet }
+            if answered {
+                // the sheet goes, then prepareTranslation returns while the languages download
+                window.endSheet(sheet)
+                try await waitUntil { ended.value }
+                macOS.finish(host, installing: false)
+                try await waitUntil { !isOnAScreen() }
+                XCTAssertEqual(window.level, .normal, label)
+                macOS.installEverything()
+                try await waitFor(served)
+            } else {
+                // turning Translate off takes the view away, which ends the sheet
+                client.cancel()
+                window.endSheet(sheet)
+                try await waitUntil { ended.value }
+                try await waitFor(served)
+            }
+            try await waitUntil { !isOnAScreen() }
+            XCTAssertEqual(window.level, .normal, label)
+            client.cancel()
+            XCTAssertTrue(engine.hosts.isEmpty, label)
+        }
+    }
+
     // MARK: Loading languages (macOS answered by FakeMacOS: no session, no download)
 
     private static let english = "This is an ordinary English sentence about the weather today and tomorrow."

@@ -79,7 +79,10 @@ enum AppleTranslationHostWindow {
 
     /// While macOS asks whether it may load languages the window is on the main screen, because
     /// the question may be attached to the window that asked. It still is not to be seen there.
+    /// Not while a sheet is attached: AppKit would move the window back where it was when the
+    /// sheet ends (the engine places it again then).
     static func place(_ window: NSWindow, onScreen: Bool) {
+        guard window.attachedSheet == nil else { return }
         var origin = restingPlace
         if onScreen, let screen = NSScreen.main ?? NSScreen.screens.first {
             let visible = screen.visibleFrame

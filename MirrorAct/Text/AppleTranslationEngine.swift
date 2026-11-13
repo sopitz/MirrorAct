@@ -403,10 +403,10 @@ final class AppleTranslationEngine: ObservableObject {
             for host in hosts where host.pair == job.pair {
                 remove(host)
             }
-            if !keepsWindowOnScreen, let window {
+            if !keepsWindowOnScreen, window != nil {
                 keepsWindowOnScreen = true
                 Log.info("Translation: moving the window of the views onto the screen")
-                AppleTranslationHostWindow.place(window, onScreen: true)
+                placeWindow()
             }
             // others that wait for the pair do not have to wait for nothing
             if let next = waiting.first(where: { $0.pair == job.pair }) { wakeHost(for: next) }
@@ -442,7 +442,7 @@ final class AppleTranslationEngine: ObservableObject {
     /// Makes sure the pair of a job has a host that takes jobs, and wakes it.
     private func wakeHost(for job: AppleTranslationJob) {
         if !hosts.contains(where: { $0.pair == job.pair && !ending.contains($0.id) }) {
-            if window == nil { window = makeWindow(self) }
+            if window == nil { openWindow() }
             let host = AppleTranslationHost(pair: job.pair, source: job.source, target: job.target,
                                             strategy: job.strategy)
             let (stream, wake) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -483,7 +483,6 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     private func setLoading(_ isLoading: Bool, for host: AppleTranslationHost) {
-        let wasLoading = !loading.isEmpty
         if isLoading {
             loading.insert(host.id)
         } else {
@@ -491,11 +490,27 @@ final class AppleTranslationEngine: ObservableObject {
             downloading.remove(host.id)
         }
         updateStatuses()
-        // macOS may attach its question about loading languages to the window that asks: it has
-        // to be on a screen for that long, and above mirror windows that are kept on top
-        if wasLoading != !loading.isEmpty, let window {
-            if !keepsWindowOnScreen { AppleTranslationHostWindow.place(window, onScreen: !loading.isEmpty) }
-            AppleTranslationHostWindow.raise(window, !loading.isEmpty)
+        placeWindow()
+    }
+
+    /// macOS may attach its question about loading languages to the window that asks: it has to
+    /// be on a screen while a question may be up, and above mirror windows that are kept on top.
+    /// Once the question is answered (`downloading`) it goes back to its place outside the screens.
+    private func placeWindow() {
+        guard let window else { return }
+        let mayAsk = loading.contains { !downloading.contains($0) }
+        AppleTranslationHostWindow.place(window, onScreen: mayAsk || keepsWindowOnScreen)
+        AppleTranslationHostWindow.raise(window, mayAsk)
+    }
+
+    /// The question of macOS is a sheet of the window. A window moved while a sheet is attached is
+    /// moved back by AppKit when the sheet ends, so it is placed again then.
+    private func openWindow() {
+        window = makeWindow(self)
+        guard let window else { return }
+        NotificationCenter.default.addObserver(forName: NSWindow.didEndSheetNotification, object: window,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.placeWindow() }
         }
     }
 
@@ -609,6 +624,7 @@ final class AppleTranslationEngine: ObservableObject {
                 // prepareTranslation also returns while the languages are still on their way
                 downloading.insert(host.id)
                 updateStatuses()
+                placeWindow()
                 let start = Self.clock
                 status = await availability.status(host.source, host.target, host.strategy)
                 while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
