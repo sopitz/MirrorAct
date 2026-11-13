@@ -16,6 +16,8 @@ final class AppSettings: ObservableObject {
     @Published var peerToPeer: Bool { didSet { defaults.set(peerToPeer, forKey: "peerToPeer") } }
     @Published var showFrame: Bool { didSet { defaults.set(showFrame, forKey: "showFrame") } }
     @Published var alwaysOnTop: Bool { didSet { defaults.set(alwaysOnTop, forKey: "alwaysOnTop") } }
+    /// Keep on top also reaches every desktop and other apps' full-screen Spaces
+    @Published var onTopEverywhere: Bool { didSet { defaults.set(onTopEverywhere, forKey: "onTopEverywhere") } }
     @Published var playAudio: Bool { didSet { defaults.set(playAudio, forKey: "playAudio") } }
     @Published var recordWithFrame: Bool { didSet { defaults.set(recordWithFrame, forKey: "recordWithFrame") } }
     /// Tool rail always visible instead of only on hover
@@ -42,6 +44,7 @@ final class AppSettings: ObservableObject {
             "peerToPeer": true,
             "showFrame": true,
             "alwaysOnTop": false,
+            "onTopEverywhere": false,
             "playAudio": true,
             "recordWithFrame": false,
             "alwaysShowTools": false,
@@ -54,6 +57,7 @@ final class AppSettings: ObservableObject {
         peerToPeer = defaults.bool(forKey: "peerToPeer")
         showFrame = defaults.bool(forKey: "showFrame")
         alwaysOnTop = defaults.bool(forKey: "alwaysOnTop")
+        onTopEverywhere = defaults.bool(forKey: "onTopEverywhere")
         playAudio = defaults.bool(forKey: "playAudio")
         recordWithFrame = defaults.bool(forKey: "recordWithFrame")
         alwaysShowTools = defaults.bool(forKey: "alwaysShowTools")
