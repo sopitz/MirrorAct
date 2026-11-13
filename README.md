@@ -116,7 +116,11 @@ it until you turn it off. Under Settings → Text:
   MirrorAct says so once and sends fewer texts per request. If the service reports errors or cannot
   be reached, MirrorAct tries again after 5, 10, 20 and 40 seconds and then every minute, and the
   mirror window says when; once the service answers again, the screen is translated with the next
-  try. A pause the service asks for (too many requests) is kept.
+  try. A pause the service asks for (too many requests) is kept. If the model answers in a form
+  MirrorAct cannot use, the window says so and suggests another model; "Translate" stays on and
+  tries again after the same waits, one text at a time, until the model answers properly.
+  "Translate" turns off only when the API key is not accepted, the model or address is wrong, or
+  the model declines everything it is asked to translate.
 - **A server of your own** (Ollama, LM Studio or Custom): plain `http://` works for this Mac
   (`localhost`, `127.0.0.1`), for private IP addresses (`192.168.…`, `10.…`, `172.16.…` to
   `172.31.…`), `.local` names and names without a dot; any other address needs `https://`. An

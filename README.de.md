@@ -120,7 +120,11 @@ Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/Mirr
   er nicht erreichbar, versucht MirrorAct es nach 5, 10, 20 und 40 Sekunden wieder und dann jede
   Minute, und das Spiegelfenster sagt, wann; sobald der Dienst wieder antwortet, wird der
   Bildschirm mit dem nächsten Versuch übersetzt. Eine Pause, um die der Dienst bittet (zu viele
-  Anfragen), wird eingehalten.
+  Anfragen), wird eingehalten. Antwortet das Modell in einer Form, die MirrorAct nicht brauchen
+  kann, sagt das Fenster das und schlägt ein anderes Modell vor; «Übersetzen» bleibt an und
+  versucht es nach denselben Wartezeiten wieder, mit einem Text auf einmal, bis das Modell
+  richtig antwortet. «Übersetzen» geht nur aus, wenn der API-Schlüssel nicht angenommen wird, das
+  Modell oder die Adresse falsch ist oder das Modell alles ablehnt, was es übersetzen soll.
 - **Ein eigener Server** (Ollama, LM Studio oder Benutzerdefiniert): Einfaches `http://` geht für
   diesen Mac (`localhost`, `127.0.0.1`), für private IP-Adressen (`192.168.…`, `10.…`, `172.16.…`
   bis `172.31.…`), `.local`-Namen und Namen ohne Punkt; jede andere Adresse braucht `https://`.

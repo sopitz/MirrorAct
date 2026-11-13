@@ -144,8 +144,9 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     static let longestBackOff: TimeInterval = OverlayTracker.Configuration().longestRetryDelay
     /// longest wait a service may ask for (Retry-After); a day's quota is not sat out
     static let longestServiceWait: TimeInterval = 900
-    /// Answers that could not be used after which a model that has never given a usable one is
-    /// given up. Finding the one text a model stumbles over among forty takes seven of them.
+    /// Refusals after which a model that has never given a usable answer is given up (translating
+    /// ends): a model that declines whatever it is asked to translate. Finding the one text a
+    /// model stumbles over among forty takes seven requests.
     static let patience = 12
 
     private let connection: LLMConnection
@@ -172,7 +173,19 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     /// the extra fields the service takes; nil = not found out yet
     private var options: LLMRequestOptions?
     private var hadUsableAnswer = false
-    private var unusableAnswers = 0
+    /// refusals since the last usable answer (`patience`)
+    private var refusals = 0
+    /// The model's answers could not be used for the whole of a portion, a text alone included
+    /// (`translatePortion`): until an answer is usable again, a portion is first asked for with
+    /// one text alone
+    private var isUnable = false
+    /// texts asked for alone while the model could not translate (`isUnable`), since its last
+    /// usable answer, so that the next try asks for another one: the one it stumbles over does
+    /// not hold up the screen
+    private var probed: Set<String> = []
+    /// texts that were part of a request whose answer could not be used, in this turn (cleared
+    /// when it reaches 1000)
+    private var answeredBadly: Set<String> = []
     /// requests in a row whose texts all stayed untranslated
     private var failuresInARow = 0
     /// no request before this time (`now`)
@@ -263,8 +276,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         var results: [String?] = []
         for batch in TranslationPrompt.batches(texts) {
             do {
-                var portion = Portion(budget: Self.requestBudget(for: batch.count))
-                results += try await translate(batch, system: system, portion: &portion, isWhole: true)
+                results += try await translatePortion(batch, system: system)
                 locked { failuresInARow = 0 }
             } catch {
                 // translating was turned off meanwhile: "not now" for what is left
@@ -376,14 +388,80 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         var answered = false
         /// a request of this portion timed out
         var timedOut = false
+        /// a request of this portion got translations or a refusal: the model answers as asked
+        var understood = false
+        /// a request of this portion got an answer that cannot be used (not a refusal)
+        var unusable = false
+        /// a text of this portion asked for alone got an answer that cannot be used
+        var unusableAlone = false
+    }
+
+    /// The translations of one portion of texts (`TranslationPrompt.batches`).
+    ///
+    /// An answer that cannot be used (no list, cut off) is no translation: a text that gets one
+    /// even when asked for alone is asked for again later (nil), with the growing wait of a text
+    /// that failed, and not left as it is for good. When nothing in the portion was usable and
+    /// such a text was among it, the model cannot translate right now: the portion fails as a
+    /// whole, so that the user is told (the model's answer cannot be used) and the engine waits
+    /// (`backOff`) before it asks again, also on a screen that does not change. Once the model
+    /// has translated others in this turn, two cases are the exception: one single text, and a
+    /// portion whose texts all were part of an answer that could not be used before
+    /// (`answeredBadly`). Those are texts the model stumbles over, not a model that cannot
+    /// translate: they are only asked for again later, without the notice.
+    ///
+    /// Once the model could not translate, every portion is first asked for with one text alone,
+    /// until an answer is usable again: one request per try instead of the whole
+    /// `requestBudget`, and with a usable answer the rest of the portion goes out at once, so
+    /// that a model that answers properly again translates the screen with the next try. That
+    /// text is the shortest one not yet asked for alone since the last usable answer (`probed`;
+    /// when all were, they all may be asked for again), so that a text the model stumbles over
+    /// does not keep the rest of the screen untranslated.
+    private func translatePortion(_ texts: [String], system: String) async throws -> [String?] {
+        var portion = Portion(budget: Self.requestBudget(for: texts.count))
+        // nothing new in it: what fails again is a text the model stumbles over, not the model
+        let isKnown = locked { texts.allSatisfy { answeredBadly.contains($0) } }
+        if locked({ isUnable }), texts.count > 1,
+           let shortest = locked({ () -> Int? in
+               var candidates = texts.indices.filter { !probed.contains(texts[$0]) }
+               if candidates.isEmpty {
+                   probed.removeAll()
+                   candidates = Array(texts.indices)
+               }
+               let shortest = candidates.min { texts[$0].count < texts[$1].count }
+               if let shortest { probed.insert(texts[shortest]) }
+               return shortest
+           }) {
+            var probe = Portion(budget: 1)
+            let first = try await translate([texts[shortest]], system: system, portion: &probe)
+            guard probe.understood else { throw unusableAnswers() }
+            var rest = texts
+            rest.remove(at: shortest)
+            var translations = try await translate(rest, system: system, portion: &portion, isWhole: true)
+            translations.insert(first[0], at: shortest)
+            return translations
+        }
+        let translations = try await translate(texts, system: system, portion: &portion, isWhole: true)
+        if !portion.understood, portion.unusableAlone, texts.count > 1 || !locked({ hadUsableAnswer }),
+           !(isKnown && locked({ hadUsableAnswer })) {
+            locked { isUnable = true }
+            throw unusableAnswers()
+        }
+        return translations
+    }
+
+    /// The failure of a portion of which no answer could be used
+    private func unusableAnswers() -> TranslationFailure {
+        TranslationFailure(message: name + ": " + Self.words(for: .malformedReply(""), model: connection.model))
     }
 
     /// The translations of one portion of texts, in their order; nil = not now, ask again later.
     ///
     /// An answer that cannot be used (another number of items than texts, cut off, declined)
     /// is asked for again in two halves, so that one troublesome text does not keep the others
-    /// from being translated. A single text is left as it is then, and so are the texts that
-    /// are left when the portion has used up its `budget` of requests.
+    /// from being translated. A single text the model declines is left as it is then; one whose
+    /// answer cannot be used is asked for later (nil, see `translatePortion`). The texts that are
+    /// left when the portion has used up its `budget` of requests are left as they are after
+    /// refusals, and asked for later after answers that could not be used or time-outs.
     ///
     /// A request that times out is asked for in two halves as well. Once the server has answered
     /// a request of the portion, a text that still times out on its own is put off, and so are
@@ -394,8 +472,9 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     private func translate(_ texts: [String], system: String, portion: inout Portion,
                            isWhole: Bool = false) async throws -> [String?] {
         guard portion.budget > 0 else {
-            // after a time-out the model may be quicker the next time: not left as they are
-            let later = portion.timedOut
+            // after a time-out the model may be quicker the next time, and an answer that could
+            // not be used is no translation: not left as they are
+            let later = portion.timedOut || portion.unusable
             Log.info("Translation: \(name): \(texts.count) texts " + (later ? "are asked for later" : "stay as they are")
                      + " (no more requests for this portion)")
             return later ? [String?](repeating: nil, count: texts.count) : texts
@@ -405,27 +484,46 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             let answer = try await ask(texts, system: system)
             portion.answered = true
             let translations = try TranslationPrompt.parse(answer, count: texts.count)
+            portion.understood = true
             locked {
                 hadUsableAnswer = true
-                unusableAnswers = 0
+                refusals = 0
+                isUnable = false
+                probed.removeAll()
             }
             return TranslationPrompt.usable(translations, for: texts)
         } catch let error as LLMError where Self.isAboutTheAnswer(error) {
             portion.answered = true
-            let isHopeless: Bool = locked {
-                unusableAnswers += 1
-                return !hadUsableAnswer && unusableAnswers >= Self.patience
-            }
             let declined = error == .refused
-            if isHopeless {
-                // Asking on would cost the user request after request for nothing.
-                let words = Self.words(for: declined ? .refused : .malformedReply(""), model: connection.model)
-                throw TranslationFailure(message: name + ": " + words, isPermanent: true)
+            if declined {
+                // the model answers as asked, it only will not translate this
+                portion.understood = true
+                let isHopeless: Bool = locked {
+                    refusals += 1
+                    isUnable = false
+                    return !hadUsableAnswer && refusals >= Self.patience
+                }
+                if isHopeless {
+                    // Asking on would cost the user request after request for nothing.
+                    throw TranslationFailure(message: name + ": " + Self.words(for: .refused, model: connection.model),
+                                             isPermanent: true)
+                }
+            } else {
+                portion.unusable = true
+                locked {
+                    if answeredBadly.count >= 1000 { answeredBadly.removeAll() }
+                    answeredBadly.formUnion(texts)
+                }
             }
             guard texts.count > 1 else {
-                Log.info("Translation: \(name): one text stays as it is (\(Self.kind(of: error)))")
-                if declined { note(name + ": " + Self.words(for: error, model: connection.model)) }
-                return texts
+                if declined {
+                    Log.info("Translation: \(name): one text stays as it is (\(Self.kind(of: error)))")
+                    note(name + ": " + Self.words(for: error, model: connection.model))
+                    return texts
+                }
+                Log.info("Translation: \(name): one text is asked for later (\(Self.kind(of: error)))")
+                portion.unusableAlone = true
+                return [nil]
             }
             Log.info("Translation: \(name): asking again for \(texts.count) texts in two halves (\(Self.kind(of: error)))")
             return try await halves(of: texts, system: system, portion: &portion)

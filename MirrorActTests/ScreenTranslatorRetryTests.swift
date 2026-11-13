@@ -207,6 +207,26 @@ final class ScreenTranslatorRetryTests: XCTestCase {
         XCTAssertTrue(translator.isActive)
     }
 
+    /// The model answers with something that is not the list asked for, for ten minutes, on a
+    /// still screen: the window says that the model's answer cannot be used after the first
+    /// try, Translate stays on, each later try costs one request, and once the model answers
+    /// properly the screen is translated with the next try, without turning Translate off and on
+    func testAModelWhoseAnswersCannotBeUsedIsNamedAndTheScreenIsTranslatedOnceItAnswersProperly() async throws {
+        let outage = try await failFor(600, mode: .garbage)
+        let notice = "LM Studio: " + String(localized: "the model’s answer cannot be used – choose another model in the settings")
+        XCTAssertEqual(messages.first, notice)
+        // the halves of the first try, then the shortest text alone at each try
+        XCTAssertEqual(outage.tries.count, 13, "tries at \(outage.tries)")
+        XCTAssertEqual(outage.requests, LLMTranslationEngine.requestBudget(for: texts.count) + 12)
+        assertTheWaits(outage.waits, steadyAfter: 4)
+        XCTAssertLessThanOrEqual(outage.recovery, 62, "translated \(outage.recovery) s after the model answered again")
+        let translated = await run(until: {
+            Set(self.service.requests.filter { $0.mode == .answers }.flatMap(\.texts)) == Set(self.texts)
+        })
+        XCTAssertTrue(translated, "asked for after the model answered again: \(service.requests.filter { $0.mode == .answers }.map(\.texts))")
+        XCTAssertTrue(translator.isActive)
+    }
+
     /// A text that comes into view while the engine waits for its service goes out with the
     /// next request together with the texts that failed, and once the service answers again it
     /// is translated with them, not after waits of its own that grew while nothing was sent.

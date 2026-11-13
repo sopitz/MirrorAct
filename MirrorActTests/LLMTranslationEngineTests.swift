@@ -203,16 +203,22 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(transport.requests.map { sentTexts($0) }, [texts, ["one", "two", "three"], ["four", "five"]])
     }
 
-    func testASingleTextThatStillFailsStaysAsItIs() async throws {
+    func testASingleTextWhoseAnswerStillCannotBeUsedIsAskedForLater() async throws {
         let transport = ScriptedTransport { request, _ in
             // whatever contains "two" is answered with a sentence instead of a list
             if sentTexts(request).contains("two") { return openAIReply("Sorry, I cannot do that.") }
             return openAIReply(translated(request))
         }
-        let translations = try await makeEngine(transport: transport).translate(["one", "two", "three"], into: german)
-        XCTAssertEqual(translations, ["de:one", "two", "de:three"])
+        let engine = makeEngine(transport: transport)
+        let translations = try await engine.translate(["one", "two", "three"], into: german)
+        // not translated, so not left as it is for good: "not now", and the caller asks again
+        XCTAssertEqual(translations, ["de:one", nil, "de:three"])
         XCTAssertEqual(transport.requests.map { sentTexts($0) },
                        [["one", "two", "three"], ["one", "two"], ["one"], ["two"], ["three"]])
+        // asked for again alone: the model has translated others, so it is this text, not the model
+        let again = try await engine.translate(["two"], into: german)
+        XCTAssertEqual(again, [nil])
+        XCTAssertEqual(transport.requests.count, 6)
     }
 
     func testAnAnswerThatWasCutOffIsAskedForAgainInTwoHalves() async throws {
@@ -370,19 +376,109 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(notices.all, ["OpenAI: " + String(localized: "the model declined to translate this text")])
     }
 
-    func testAModelThatNeverAnswersUsablyIsGivenUp() async {
-        let transport = ScriptedTransport { _, _ in openAIReply("Here are your translations!") }
+    /// The model answers with something that is not the list asked for: the screen fails as a
+    /// whole with a notice that names it, the engine waits, each later try asks for one text
+    /// alone, and once the model answers properly the screen is translated with the next try
+    func testAModelWhoseAnswersCannotBeUsedIsNamedAndAskedOnceEachTryUntilItAnswers() async throws {
+        var usable = false
+        let transport = ScriptedTransport { request, _ in
+            usable ? openAIReply(translated(request)) : openAIReply("Here are your translations!")
+        }
         let engine = makeEngine(.ollama, model: "tiny", transport: transport)
+        var clock: TimeInterval = 1000
+        engine.now = { clock }
         let texts = (1...40).map { "Text \($0)" }
-        let failure = await failure { try await engine.translate(texts, into: self.german) }
-        // translating ends: asking on would cost request after request
-        XCTAssertEqual(failure?.isPermanent, true)
-        XCTAssertEqual(failure?.message, "Ollama: "
+        let first = await failure { try await engine.translate(texts, into: self.german) }
+        // not given up for good: a model that is loaded anew, or a service that is mended, may answer
+        XCTAssertEqual(first?.isPermanent, false)
+        XCTAssertEqual(first?.message, "Ollama: "
                        + String(localized: "the model’s answer cannot be used – choose another model in the settings"))
-        XCTAssertEqual(transport.requests.count, LLMTranslationEngine.patience)
+        XCTAssertEqual(first?.retryAfter, LLMTranslationEngine.firstBackOff)
+        XCTAssertEqual(transport.requests.count, LLMTranslationEngine.requestBudget(for: 40))
+
+        // the next try: the shortest text alone, one request
+        clock += first?.retryAfter ?? 0
+        let second = await failure { try await engine.translate(texts, into: self.german) }
+        XCTAssertEqual(second?.message, first?.message)
+        XCTAssertEqual(second?.retryAfter, 2 * LLMTranslationEngine.firstBackOff)
+        XCTAssertEqual(transport.requests.count, LLMTranslationEngine.requestBudget(for: 40) + 1)
+        XCTAssertEqual(transport.requests.last.map { sentTexts($0) }, ["Text 1"])
+
+        // the model answers properly: the next shortest text not yet asked for alone, then all
+        // the others at once
+        usable = true
+        clock += second?.retryAfter ?? 0
+        let translations = try await engine.translate(texts, into: german)
+        XCTAssertEqual(translations, texts.map { "de:" + $0 })
+        XCTAssertEqual(transport.requests.suffix(2).map { sentTexts($0) },
+                       [["Text 2"], texts.filter { $0 != "Text 2" }])
     }
 
-    func testAModelThatHasAnsweredUsablyIsNotGivenUp() async throws {
+    /// After a spell of answers that cannot be used, the model answers properly again except for
+    /// the shortest text of the screen: the next try asks for another text alone, and the screen
+    /// is translated but for that text, which is asked for later
+    func testAShortTextTheModelCannotAnswerDoesNotKeepTheScreenUntranslatedAfterASpell() async throws {
+        var spell = true
+        let transport = ScriptedTransport { request, _ in
+            spell || sentTexts(request).contains("Battery")
+                ? openAIReply("Here are your translations!") : openAIReply(translated(request))
+        }
+        let engine = makeEngine(.lmStudio, model: "tiny", transport: transport)
+        var clock: TimeInterval = 1000
+        engine.now = { clock }
+        let texts = ["Battery", "Network and internet", "Connected devices", "Apps and notifications",
+                     "Display and brightness", "Sound and vibration", "Privacy settings", "Location access"]
+        let first = await failure { try await engine.translate(texts, into: self.german) }
+        XCTAssertNotNil(first)
+        spell = false
+        // the first try after the spell asks for "Battery" alone, and it still cannot be used
+        clock += first?.retryAfter ?? 0
+        let second = await failure { try await engine.translate(texts, into: self.german) }
+        XCTAssertEqual(transport.requests.last.map { sentTexts($0) }, ["Battery"])
+        // the next one asks for another text alone, then for the rest
+        clock += second?.retryAfter ?? 0
+        let translations = try await engine.translate(texts, into: german)
+        XCTAssertEqual(translations, [nil] + texts.dropFirst().map { "de:" + $0 })
+    }
+
+    /// The model has translated the screen but for two texts, whose answers cannot be used even
+    /// alone: when only those two are offered again, they are asked for again later, and the
+    /// window does not tell the user to choose another model
+    func testTwoTextsTheModelCannotAnswerAreAskedForLaterWithoutTheNotice() async throws {
+        let transport = ScriptedTransport { request, _ in
+            let sent = sentTexts(request)
+            return sent.contains("Battery") || sent.contains("Storage")
+                ? openAIReply("Here are your translations!") : openAIReply(translated(request))
+        }
+        let engine = makeEngine(.lmStudio, model: "tiny", transport: transport)
+        var clock: TimeInterval = 1000
+        engine.now = { clock }
+        let notices = Collected<String>()
+        engine.notify = { notices.add($0) }
+        let texts = ["Battery", "Storage", "Settings", "Network and internet", "Privacy", "Location"]
+        let first = try await engine.translate(texts, into: german)
+        XCTAssertEqual(first, texts.map { $0 == "Battery" || $0 == "Storage" ? nil : "de:" + $0 })
+        for _ in 0..<3 {
+            clock += 60
+            let again = try await engine.translate(["Battery", "Storage"], into: german)
+            XCTAssertEqual(again, [nil, nil])
+        }
+        XCTAssertEqual(notices.all, [])
+    }
+
+    /// A text alone whose answer cannot be used, before the model has translated anything: as
+    /// clear as it gets, the user is told at once
+    func testASingleTextWhoseAnswerCannotBeUsedTellsTheUserAtOnce() async {
+        let transport = ScriptedTransport { _, _ in openAIReply("Here are your translations!") }
+        let engine = makeEngine(.lmStudio, model: "tiny", transport: transport)
+        let failure = await failure { try await engine.translate(["Einstellungen"], into: self.german) }
+        XCTAssertEqual(failure?.isPermanent, false)
+        XCTAssertEqual(failure?.message, "LM Studio: "
+                       + String(localized: "the model’s answer cannot be used – choose another model in the settings"))
+        XCTAssertEqual(transport.requests.count, 1)
+    }
+
+    func testAModelThatHasAnsweredUsablyIsNotGivenUpButTheUserIsToldWhenItStopsDoingSo() async throws {
         let transport = ScriptedTransport { request, number in
             if number == 0 { return openAIReply(translated(request)) }
             return openAIReply("Here are your translations!")
@@ -390,11 +486,26 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(transport: transport)
         let first = try await engine.translate(["Settings"], into: german)
         XCTAssertEqual(first, ["de:Settings"])
-        // from here on nothing usable: the texts are asked for in halves and stay as they are
+        // from here on nothing usable: the texts are asked for in halves, and then the screen fails
         let texts = (1...16).map { "Text \($0)" }
-        let second = try await engine.translate(texts, into: german)
-        XCTAssertEqual(second, texts)
+        let failure = await failure { try await engine.translate(texts, into: self.german) }
+        XCTAssertEqual(failure?.isPermanent, false)
+        XCTAssertEqual(failure?.message, "Mistral: "
+                       + String(localized: "the model’s answer cannot be used – choose another model in the settings"))
         XCTAssertEqual(transport.requests.count, 1 + LLMTranslationEngine.requestBudget(for: 16))
+    }
+
+    func testAModelThatDeclinesEverythingIsGivenUp() async {
+        let transport = ScriptedTransport { _, _ in
+            reply(200, #"{"choices":[{"message":{"role":"assistant","content":null,"refusal":"I can't help with that."},"finish_reason":"stop"}]}"#)
+        }
+        let engine = makeEngine(.openAI, transport: transport)
+        let texts = (1...40).map { "Text \($0)" }
+        let failure = await failure { try await engine.translate(texts, into: self.german) }
+        // translating ends: asking on would cost request after request
+        XCTAssertEqual(failure?.isPermanent, true)
+        XCTAssertEqual(failure?.message, "OpenAI: " + String(localized: "the model declined to translate this text"))
+        XCTAssertEqual(transport.requests.count, LLMTranslationEngine.patience)
     }
 
     func testAScreenTheModelDeclinesCostsAFewRequestsNotOnePerText() async throws {
@@ -422,7 +533,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         _ = try await engine.translate(["Settings"], into: german)
         let texts = (1...40).map { "Text \($0)" }
         let translations = try await engine.translate(texts, into: german)
-        XCTAssertEqual(translations, texts.map { Optional($0 == "Text 29" ? $0 : "de:" + $0) })
+        XCTAssertEqual(translations, texts.map { $0 == "Text 29" ? nil : "de:" + $0 })
         XCTAssertEqual(LLMTranslationEngine.requestBudget(for: 1), 2)
         XCTAssertEqual(LLMTranslationEngine.requestBudget(for: 2), 4)
     }
