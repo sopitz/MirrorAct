@@ -29,15 +29,24 @@ struct UnreadArea: Equatable {
     /// how often a reread was asked for at this place already
     var attempts = 0
     /// the scrolling area it lies in, -1 = none or not known: a place read at rest waits for
-    /// that area to rest, else for the picture as a whole
+    /// that area to rest, else for the motion near it (`ReadingPlan.RestClock`);
+    /// `everythingOver`: it waits for every scrolling area it overlaps or that lies near it
     var areaID = -1
+
+    /// What was read while the picture moved fast, or not found again while it moved
+    /// (`Kind.confirm`), waits for every scrolling area it overlaps, or that lies within
+    /// `readMargin` of it, to rest (for the picture as a whole when there is none): what moves over
+    /// it or under it may belong to another area than the one its centre lies in (a page that
+    /// slides in beside the one that slides out), and a pass reads that margin around it too
+    static let everythingOver = -2
 }
 
 /// What has to be read, and when: areas of the picture that move with the content they belong
 /// to until a recognition pass takes them.
 final class ReadingPlan {
-    /// When the content of a place last moved (`vertically`: up or down): that of its scrolling
-    /// area (`areaID`), or for a place outside of every area (-1) the motion near `rect`
+    /// When the content of a place last moved (`vertically`: up or down): that of its
+    /// scrolling area (`areaID`), for a place outside of every area (-1) the motion near `rect`,
+    /// for `UnreadArea.everythingOver` that of every scrolling area `rect` overlaps
     typealias RestClock = (_ areaID: Int, _ rect: CGRect, _ vertically: Bool) -> TimeInterval
 
     private let configuration: OverlayTracker.Configuration
@@ -103,7 +112,9 @@ final class ReadingPlan {
         result.attempts = max(first.attempts, second.attempts)
         // (a place outside of every area joined with one in an area waits for that area; one in
         // two areas waits for the picture as a whole)
-        if first.areaID < 0 {
+        if first.areaID == UnreadArea.everythingOver || second.areaID == UnreadArea.everythingOver {
+            result.areaID = UnreadArea.everythingOver
+        } else if first.areaID < 0 {
             result.areaID = second.areaID
         } else if second.areaID >= 0, second.areaID != first.areaID {
             result.areaID = -1
@@ -223,11 +234,12 @@ final class ReadingPlan {
     // MARK: When and what
 
     /// When `area` may be read; nil = not yet (a reread that cannot be seen completely).
-    /// `areaMotion` says when the content of a place last moved (at all, or up or down): a place
-    /// that waits for movement to end (a thin strip, a confirm, a place read at rest) waits for
-    /// its scrolling area, or for the motion near it when it lies in none, not for the whole
-    /// picture; where a paragraph may go on (`.rest`, beyond its top or bottom) it waits only for
-    /// movement up or down. Without `areaMotion`, everything waits for `lastMotion`.
+    /// `areaMotion` says when the content of a place last moved: a place that waits for movement
+    /// to end (a thin strip, a place read at rest) waits for its scrolling area, or for the motion
+    /// near it when it lies in none, not for the whole picture; a confirm read waits for every
+    /// area it overlaps (`UnreadArea.everythingOver`); where a paragraph may go on (`.rest`, beyond
+    /// its top or bottom) waits only for movement up or down. Without `areaMotion`,
+    /// everything waits for `lastMotion`.
     func due(of area: UnreadArea, lastMotion: TimeInterval, isFullyVisible: (CGRect) -> Bool,
              areaMotion: RestClock? = nil) -> TimeInterval? {
         switch area.kind {

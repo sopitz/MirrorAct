@@ -1012,6 +1012,18 @@ final class TrackingBenchTests: XCTestCase {
     func testIPadLandscape() throws { try check("iPadLandscape") }
     func testCrossFade() throws { try check("crossFade") }
     func testSwipeBack() throws { try check("swipeBack") }
+
+    /// Seed 5 of swipeBack: a page read while it moved fast is read again once all that moves over
+    /// it or under it rests, not once the area its centre lies in rests (that one rested while the
+    /// page beside it slid on, and a reading taken mid-slide stayed 10 pixels beside its text).
+    func testSwipeBackSeed5() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("swipeBack", seed: 5)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 75)
+    }
     func testKeyboard() throws { try check("keyboard") }
     func testLateContent() throws { try check("lateContent") }
     func testZoom() throws { try check("zoom") }

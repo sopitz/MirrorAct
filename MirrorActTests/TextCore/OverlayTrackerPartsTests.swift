@@ -332,9 +332,9 @@ final class ReadingPlanTests: XCTestCase {
         let plan = ReadingPlan(configuration: configuration)
         let place = CGRect(x: 0, y: 300, width: 200, height: 30)
         plan.add(UnreadArea(rect: place, kind: .confirm, since: 5))
-        var asked: [(Int, CGRect, Bool)] = []
-        let due = plan.due(lastMotion: 9, isFullyVisible: { _ in true }, areaMotion: { id, rect, vertically in
-            asked.append((id, rect, vertically))
+        var asked: [(Int, CGRect)] = []
+        let due = plan.due(lastMotion: 9, isFullyVisible: { _ in true }, areaMotion: { id, rect, _ in
+            asked.append((id, rect))
             return 4
         })
         XCTAssertEqual(due ?? 0, 5, accuracy: 1e-9, "the motion near it ended before it was asked for")
