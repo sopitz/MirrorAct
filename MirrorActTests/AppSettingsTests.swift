@@ -28,8 +28,10 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(suite.string(forKey: "receiverDeviceID"), settings.receiverDeviceID)
     }
 
-    /// What the test host runs when the test run ends: nothing the tests stored stays behind,
-    /// the code and the device ID least of all
+    /// What the test host registers to run when the test run ends: nothing the tests stored
+    /// stays behind, the code and the device ID least of all. The test catches the registration
+    /// instead of exiting, so it shows that the store registers it and what it does, not that
+    /// the process runs it on exit.
     func testTheTestsSettingsAreEmptiedAtTheEnd() throws {
         // the settings are made, and with them the code and the device ID
         _ = AppSettings.shared
@@ -39,7 +41,14 @@ final class AppSettingsTests: XCTestCase {
         defer { suite.setPersistentDomain(stored, forName: suiteName) }
         XCTAssertNotNil(suite.string(forKey: "pin"))
 
-        AppSettings.emptyTestDomain()
+        var atExit: [@convention(c) () -> Void] = []
+        _ = AppSettings.makeDefaults(atExit: { atExit.append($0) })
+        XCTAssertEqual(atExit.count, 1)
+        // making the store empties the domain as well; what is to be emptied at the end is put back
+        suite.setPersistentDomain(stored, forName: suiteName)
+        XCTAssertNotNil(suite.string(forKey: "pin"))
+
+        atExit.forEach { $0() }
         XCTAssertTrue((suite.persistentDomain(forName: suiteName) ?? [:]).isEmpty)
         XCTAssertNil(suite.string(forKey: "pin"))
         XCTAssertNil(suite.string(forKey: "receiverDeviceID"))

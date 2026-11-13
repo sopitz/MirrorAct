@@ -18,13 +18,14 @@ final class AppSettings: ObservableObject {
         : nil
 
     /// The app's preferences, or those of the tests, emptied first so that every test run starts
-    /// from the registered defaults
-    private static func makeDefaults() -> UserDefaults {
+    /// from the registered defaults. `atExit` registers what runs when the process exits; the
+    /// tests pass their own, so that they can check what is registered without exiting.
+    static func makeDefaults(atExit: (@convention(c) () -> Void) -> Void = { _ = atexit($0) }) -> UserDefaults {
         guard let name = testSuiteName, let suite = UserDefaults(suiteName: name) else { return .standard }
         suite.removePersistentDomain(forName: name)
         // emptied again when the test run ends, so that the code, the device ID and what the
         // tests set do not stay on the Mac; XCTest ends the test host with exit()
-        atexit { AppSettings.emptyTestDomain() }
+        atExit { AppSettings.emptyTestDomain() }
         return suite
     }
 
