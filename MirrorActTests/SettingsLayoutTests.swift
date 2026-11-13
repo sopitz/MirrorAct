@@ -71,8 +71,9 @@ final class SettingsLayoutTests: XCTestCase {
             XCTAssertTrue(popUps.contains { $0.title == self.chosenLanguage.name }, situation)
             for popUp in popUps {
                 let cell = try XCTUnwrap(popUp.cell as? NSPopUpButtonCell)
+                // (not rounded up to whole points: at 2x a button is laid out in half points)
                 let room = cell.titleRect(forBounds: popUp.bounds).width
-                let needed = popUp.attributedTitle.size().width.rounded(.up)
+                let needed = popUp.attributedTitle.size().width
                 XCTAssertGreaterThanOrEqual(room, needed, "“\(popUp.title)” is cut off, \(situation)")
             }
         }
