@@ -313,7 +313,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
                     // draw the texts here, not on the thread that delivers the frames
                     compositor.prepare(locked { tracker.blocks })
                     sink.redisplay()
-                    if postponed { wakeTranslationLater(turn: turn) }
+                    if postponed { wakeTranslationLater(turn: turn, texts: texts) }
                 } catch {
                     let stillOn: Bool = locked {
                         guard isCurrent(turn) else { return false }
@@ -321,7 +321,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
                         return true
                     }
                     if Task.isCancelled || !stillOn { return }
-                    await failed(error, turn: turn)
+                    await failed(error, texts: texts, turn: turn)
                     break
                 }
             }
@@ -337,7 +337,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         }
     }
 
-    private func failed(_ error: Error, turn: Int) async {
+    private func failed(_ error: Error, texts: [String], turn: Int) async {
         let failure = error as? TranslationFailure
         let message = failure?.message ?? String(localized: "Translation failed: \(error.localizedDescription)")
         Log.error("Translation: \(message)")
@@ -353,14 +353,16 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             if failure?.isPermanent == true { stop() }
         }
         guard failure?.isPermanent != true else { return }
-        wakeTranslationLater(turn: turn, after: failure?.retryAfter)
+        wakeTranslationLater(turn: turn, texts: texts, after: failure?.retryAfter)
     }
 
-    /// Texts whose translation failed or was postponed are offered again by the tracker after
-    /// `retryDelay`; nothing else would wake the loop on a still picture.
+    /// Texts whose translation failed or was postponed are offered again by the tracker after a
+    /// wait that grows with each failure of a text; nothing else would wake the loop on a still
+    /// picture. Wakes it when the first of `texts` may be offered again (`OverlayTracker.nextRetry`).
     /// - Parameter seconds: a longer wait the engine asked for (it sends nothing before then)
-    private func wakeTranslationLater(turn: Int, after seconds: TimeInterval? = nil) {
-        let retry = max(OverlayTracker.Configuration().retryDelay, seconds ?? 0)
+    private func wakeTranslationLater(turn: Int, texts: [String], after seconds: TimeInterval? = nil) {
+        let next = locked { tracker.nextRetry(of: texts) }
+        let retry = max(next.map { $0 - Self.clock } ?? OverlayTracker.Configuration().retryDelay, seconds ?? 0, 0)
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64((retry + 0.2) * 1_000_000_000))
             guard let self else { return }

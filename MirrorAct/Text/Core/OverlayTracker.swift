@@ -50,8 +50,10 @@ final class OverlayTracker {
         /// seconds without a change after which the picture counts as settled; also how long a
         /// changed part of the picture must rest before it is read
         var settleTime: TimeInterval = 0.12
-        /// seconds until a failed translation is offered again
+        /// seconds until a failed translation is offered again; each further failure of the same
+        /// text doubles the wait, up to `longestRetryDelay`
         var retryDelay: TimeInterval = 5
+        var longestRetryDelay: TimeInterval = 60
         /// translations remembered for text that comes back into view
         var cacheLimit = 2000
 
@@ -322,7 +324,7 @@ final class OverlayTracker {
     /// bounded; tracking does not depend on it.
     var heldItemCount: Int {
         tracked.count + areas.count + plan.areas.count + plan.inFlight.count + translations.count + requested.count
-            + failedAt.count
+            + failures.count
     }
 
     /// A paragraph followed from frame to frame
@@ -507,7 +509,8 @@ final class OverlayTracker {
     /// source text → translation (equal to the text: nothing to show)
     private var translations: [String: String] = [:]
     private var requested: Set<String> = []
-    private var failedAt: [String: TimeInterval] = [:]
+    /// texts whose translation failed or was put off: when it failed last, and how often in a row
+    private var failures: [String: (at: TimeInterval, count: Int)] = [:]
     /// per tile of the estimator: in how many frames in a row that moved it stayed while the
     /// content around it moved (see `Configuration.overlayFrames`)
     private var overlayHits: [UInt8] = []
@@ -2083,7 +2086,7 @@ final class OverlayTracker {
             if block.openEdges != 0,
                time - lastMoved(area: block.areaID, around: thumbnailRect(of: block), vertically: true)
                 < configuration.restDelay { continue }
-            if let failed = failedAt[text], time - failed < configuration.retryDelay { continue }
+            if let failure = failures[text], time - failure.at < retryDelay(after: failure.count) { continue }
             requested.insert(text)
             texts.append(text)
         }
@@ -2094,7 +2097,7 @@ final class OverlayTracker {
     /// there is nothing to show for it.
     func setTranslation(_ translation: String, for text: String) {
         requested.remove(text)
-        failedAt[text] = nil
+        failures[text] = nil
         if translations.count >= configuration.cacheLimit {
             let onScreen = Set(tracked.map(\.text))
             translations = translations.filter { onScreen.contains($0.key) }
@@ -2105,17 +2108,43 @@ final class OverlayTracker {
         }
     }
 
-    /// Offered again by `textsAwaitingTranslation` after `Configuration.retryDelay`.
+    /// Offered again by `textsAwaitingTranslation` after `Configuration.retryDelay`, which doubles
+    /// with each further failure of the same text (up to `longestRetryDelay`): a text that keeps
+    /// failing is not asked for every few seconds for as long as it shows. What is remembered of
+    /// a text whose wait is over and that no block shows any more is forgotten.
     func translationFailed(for text: String, time: TimeInterval) {
         requested.remove(text)
-        failedAt[text] = time
+        let count = (failures[text]?.count ?? 0) + 1
+        var shown: Set<String>?
+        for (other, failure) in failures where time - failure.at >= retryDelay(after: failure.count) {
+            if shown == nil { shown = Set(tracked.map(\.text)) }
+            if shown?.contains(other) == false { failures[other] = nil }
+        }
+        failures[text] = (time, count)
+    }
+
+    /// When the first of `texts` whose translation failed may be offered again
+    /// (`translationFailed`); nil = none of them failed
+    func nextRetry(of texts: [String]) -> TimeInterval? {
+        var earliest: TimeInterval?
+        for text in texts {
+            guard let failure = failures[text] else { continue }
+            let due = failure.at + retryDelay(after: failure.count)
+            earliest = min(earliest ?? due, due)
+        }
+        return earliest
+    }
+
+    /// The wait after a text failed `count` times in a row
+    private func retryDelay(after count: Int) -> TimeInterval {
+        min(configuration.longestRetryDelay, configuration.retryDelay * pow(2, Double(max(0, min(count, 30) - 1))))
     }
 
     /// Another language or another translator: every block needs a new translation.
     func forgetTranslations() {
         translations = [:]
         requested = []
-        failedAt = [:]
+        failures = [:]
         for index in tracked.indices {
             tracked[index].earlier = nil
         }
@@ -2131,7 +2160,7 @@ final class OverlayTracker {
         previous = nil
         translations = [:]
         requested = []
-        failedAt = [:]
+        failures = [:]
     }
 
     // MARK: Internals

@@ -699,6 +699,53 @@ final class OverlayTrackerReadingTests: XCTestCase {
         XCTAssertEqual(after.regions, [])
     }
 
+    /// A text whose translation keeps failing (the engine puts it off every time) is offered
+    /// again after a wait that doubles each time, not every few seconds for as long as it
+    /// shows; a translation that comes ends it
+    func testATextThatKeepsFailingIsOfferedLessAndLessOften() throws {
+        let screen = SyntheticScreen(seed: 35)
+        let tracker = OverlayTracker()
+        let line = SyntheticScreen.block(4, offset: 0, text: "Line five words here")
+        _ = tracker.advance(screen.thumbnail(offset: 0, noiseSeed: 7), scale: scale, time: 0)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 1))
+        tracker.finishRecognition(request, blocks: [line], time: 1.2)
+        var offered: [TimeInterval] = []
+        var time = 1.2
+        while time < 61.2 {
+            for text in tracker.textsAwaitingTranslation(limit: 10, time: time) {
+                XCTAssertEqual(text, line.text)
+                offered.append(time)
+                tracker.translationFailed(for: text, time: time)
+                let next = try XCTUnwrap(tracker.nextRetry(of: [text]))
+                XCTAssertGreaterThanOrEqual(next - time, tracker.configuration.retryDelay - 1e-9)
+            }
+            time += 0.1
+        }
+        XCTAssertLessThanOrEqual(offered.count, 6, "\(offered)")
+        XCTAssertGreaterThanOrEqual(offered.count, 3, "\(offered)")
+        for (earlier, later) in zip(offered, offered.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(later - earlier, tracker.configuration.retryDelay - 1e-6)
+        }
+        // (and once it is translated, nothing of it is kept)
+        let more = tracker.textsAwaitingTranslation(limit: 10, time: 200)
+        XCTAssertEqual(more, [line.text])
+        tracker.setTranslation("T " + line.text, for: line.text)
+        XCTAssertNil(tracker.nextRetry(of: [line.text]))
+    }
+
+    /// What the tracker remembers of texts whose translation failed stays bounded while the
+    /// screen keeps showing new text (a clock while the engine fails): a text no block shows any
+    /// more is forgotten once its wait is over, and none is offered again before its wait
+    func testFailedTextsThatAreGoneAreForgotten() {
+        let tracker = OverlayTracker()
+        let before = tracker.heldItemCount
+        for second in 0..<5000 {
+            tracker.translationFailed(for: "10:\(second)", time: Double(second))
+        }
+        XCTAssertLessThanOrEqual(tracker.heldItemCount - before, 2 * Int(tracker.configuration.retryDelay) + 2)
+        XCTAssertEqual(tracker.nextRetry(of: ["10:4999"]) ?? 0, 4999 + tracker.configuration.retryDelay, accuracy: 1e-9)
+    }
+
     /// The end of a page whose ground below its last line shows no movement (it stops there
     /// while it springs back) is not taken for a bar: a translation there is not cut off
     func testTheEndOfAPageIsNoBar() {
