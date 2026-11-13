@@ -991,6 +991,55 @@ final class AppleTranslationEngineTests: XCTestCase {
         client.cancel()
     }
 
+    /// Two windows translate the same pair, and the question was closed without downloading:
+    /// turning translating off and on in one of them asks again, as the notice says, although the
+    /// other window still wants the pair
+    func testTurningTranslatingOnAgainAsksAgainWhileAnotherWindowWaitsForTheLanguages() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        let engine = engine(answeredBy: macOS)
+        engine.loadingCheckInterval = 0.02
+        engine.downloadPatience = 0.1
+        let first = AppleTranslationClient(engine: engine)
+        let other = AppleTranslationClient(engine: engine)
+        let statuses = Box<[ObjectIdentifier: String?]>([:])
+        for client in [first, other] {
+            let key = ObjectIdentifier(client)
+            client.notifyStatus = { status in MainActor.assumeIsolated { statuses.value[key] = status } }
+        }
+        let request = Task { try await first.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+        _ = try await request.value
+        try await waitUntil { macOS.preparing.count == 1 }
+        // the other window asks during the question: "not now"
+        let waiting = try await other.translate([Self.english], into: language("de"))
+        XCTAssertEqual(waiting, [nil])
+        // "Done" without downloading; both are told what to do
+        macOS.finish(host, installing: false)
+        let missing = engine.missingNotice(for: host)
+        try await waitUntil {
+            [first, other].allSatisfy { (statuses.value[ObjectIdentifier($0)] ?? nil) == missing }
+        }
+        // off and on again in the first window
+        first.cancel()
+        let again = AppleTranslationClient(engine: engine)
+        let asked = Task { try await again.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.contains { $0.id != host.id } }
+        let next = try XCTUnwrap(engine.hosts.first { $0.id != host.id })
+        let servedNext = Task { await engine.serve(next, prepare: { try await macOS.prepare(next) }, work: {}) }
+        try await waitUntil { macOS.asked == [host.id, next.id] }
+        // the host before goes
+        try await waitFor(served)
+        XCTAssertFalse(engine.hosts.contains { $0.id == host.id })
+        other.cancel()
+        again.cancel()
+        _ = try await asked.value
+        try await waitFor(servedNext)
+        XCTAssertTrue(engine.hosts.isEmpty)
+        macOS.finish(next, installing: false)
+    }
+
     // MARK: Languages of the texts (the language recognizer of macOS; needs no download)
 
     func testTheLanguageOfWholeSentencesIsDecided() {

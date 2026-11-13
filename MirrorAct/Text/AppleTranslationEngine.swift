@@ -255,6 +255,13 @@ final class AppleTranslationEngine: ObservableObject {
             notInstalledSince.removeAll()
             appleIntelligence = nil
             clients[key] = AppleTranslationClient.Reference(client: client)
+            // The notice for languages that did not come says to turn translating off and on to
+            // be asked again: that holds also while another window wants the pair and keeps its
+            // host looking for them. The host ends, and the next request asks anew.
+            for host in hosts where missing.contains(host.id) && !ending.contains(host.id) {
+                Log.info("Translation: no longer waiting for the languages for \(host.pair); asking again")
+                end(host)
+            }
         }
         return true
     }
@@ -427,9 +434,9 @@ final class AppleTranslationEngine: ObservableObject {
         return isLoading(pair)
     }
 
-    /// A host of the pair waits for macOS to load its languages
+    /// A host of the pair waits for macOS to load its languages (and is not on its way out)
     private func isLoading(_ pair: String) -> Bool {
-        hosts.contains { $0.pair == pair && loading.contains($0.id) }
+        hosts.contains { $0.pair == pair && loading.contains($0.id) && !ending.contains($0.id) }
     }
 
     // MARK: Jobs
