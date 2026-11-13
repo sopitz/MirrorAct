@@ -55,7 +55,7 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Mirror` | Spiegelfenster, Werkzeugleiste, Stil-Panel, Präsentieren, `DeviceControl` (Schnittstelle zum Bedienen eines Geräts) |
 | `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten, beim Ende einer kabellosen Verbindung gestoppt), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, Host-Zeit, variable Bildrate) |
-| `MirrorAct/Text` | Text auf dem Bildschirm: `TextRecognizer` (Vision), `FramePixels` (Vorschaubilder und Farben direkt aus dem Bild), `ScreenTranslator` (ein `FrameProcessor` im `FrameSink`: liest, übersetzt und zeichnet neben den Bildern her), `TranslationCompositor` mit `BlockPlacement`, `BlockTextMask` und `ChromaPlane` (zeichnet die Übersetzungen in eine Kopie des Bildes, in dessen eigenem Pixelformat), `TranslationEngines` (wählt, was laut Einstellungen übersetzt), `AppleTranslationEngine` (Apples Translation-Framework; die Sitzungen leben in einem unsichtbaren Hilfsfenster), `LLMTranslationEngine` (Sprachmodell-Dienste mit dem Schlüssel des Nutzers aus `KeychainStore`) |
+| `MirrorAct/Text` | Text auf dem Bildschirm: `TextRecognizer` (Vision), `FramePixels` (Vorschaubilder und Farben direkt aus dem Bild), `ScreenTranslator` (ein `FrameProcessor` im `FrameSink`: liest, übersetzt und zeichnet neben den Bildern her), `TranslationCompositor` mit `BlockPlacement`, `BlockTextMask` und `ChromaPlane` (zeichnet die Übersetzungen in eine Kopie des Bildes, in dessen eigenem Pixelformat), `TranslationEngine` (die Schnittstelle, die jeder Übersetzer erfüllt), `TranslationEngines` (wählt, was laut Einstellungen übersetzt), `AppleTranslationEngine` (Apples Translation-Framework; die Sitzungen leben in einem unsichtbaren Hilfsfenster, `AppleTranslationHost`), `LLMTranslationEngine` (Sprachmodell-Dienste mit dem Schlüssel des Nutzers aus `KeychainStore`) |
 | `MirrorAct/Text/Core` | der Teil ohne Apple-Frameworks: `TextLayout`, `TextTracking`, `LumaImage` (Vorschaubilder), `OverlayTracker` mit `MotionEstimator`, `ReadingPlan` und `BlockPatch` (hält Übersetzungen beim Scrollen auf ihrem Text und entscheidet, was gelesen wird), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt`, `LanguageMatching`. Andere MirrorAct-Apps bauen denselben Code für andere Plattformen; er verwendet deshalb nur Foundation und keine Schnittstelle, die es nur auf Apple-Plattformen gibt. Sie vergleichen ihre Ergebnisse über `TrackingParityTests` mit ihm. Die Tests liegen in `MirrorActTests/TextCore` (mit einem Simulator scrollender Telefonbildschirme und einem Prüfstand, `Tracking*.swift`) |
 | `MirrorAct/Editor` | Editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + Export) |
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
@@ -101,6 +101,10 @@ TrackingBenchTests` führt alle Szenarien und Selbsttests aus und dauert weit ü
 TrackingBenchTests/testReport` liefert zusätzlich den Bericht über diese Seeds. `scripts/test.sh`
 gibt jede `TRACKING_*`-Variable an die Tests weiter; die übrigen sind oben in
 `TrackingBenchTests.swift` beschrieben.
+
+Mit eingeschaltetem «Übersetzen» kommt ein Debug-Build dem Videostrom nicht nach, weil das
+Nachführen ohne Optimierung um ein Vielfaches langsamer ist. Um die Funktion mit den Debug-Befehlen
+auszuprobieren, mit `scripts/build.sh --debug --no-install SWIFT_OPTIMIZATION_LEVEL=-O` bauen.
 
 ## Screenshots
 

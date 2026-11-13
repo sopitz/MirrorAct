@@ -55,7 +55,7 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
 | `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes, stopped when a wireless connection ends), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
-| `MirrorAct/Text` | text on the screen: `TextRecognizer` (Vision), `FramePixels` (thumbnails and colors straight from the frame), `ScreenTranslator` (a `FrameProcessor` in the `FrameSink`: reads, translates and draws beside the frames), `TranslationCompositor` with `BlockPlacement`, `BlockTextMask` and `ChromaPlane` (draws the translations into a copy of the frame, in its own pixel format), `TranslationEngines` (picks the engine the settings name), `AppleTranslationEngine` (Apple's Translation framework; its sessions live in a hidden host window), `LLMTranslationEngine` (language model services with the user's key from `KeychainStore`) |
+| `MirrorAct/Text` | text on the screen: `TextRecognizer` (Vision), `FramePixels` (thumbnails and colors straight from the frame), `ScreenTranslator` (a `FrameProcessor` in the `FrameSink`: reads, translates and draws beside the frames), `TranslationCompositor` with `BlockPlacement`, `BlockTextMask` and `ChromaPlane` (draws the translations into a copy of the frame, in its own pixel format), `TranslationEngine` (the interface every engine implements), `TranslationEngines` (picks the engine the settings name), `AppleTranslationEngine` (Apple's Translation framework; its sessions live in a hidden host window, `AppleTranslationHost`), `LLMTranslationEngine` (language model services with the user's key from `KeychainStore`) |
 | `MirrorAct/Text/Core` | the part without Apple frameworks: `TextLayout`, `TextTracking`, `LumaImage` (thumbnails), `OverlayTracker` with `MotionEstimator`, `ReadingPlan` and `BlockPatch` (keeps translations on their text while the content scrolls and decides what to read), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt`, `LanguageMatching`. Other MirrorAct apps build the same code for other platforms, so it uses Foundation only and no API that exists only on Apple platforms; they compare their results with it through `TrackingParityTests`. Its tests are in `MirrorActTests/TextCore` (with a simulator of scrolling phone screens and a bench, `Tracking*.swift`) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |
@@ -100,6 +100,10 @@ a release build, so a normal run skips most of it on purpose and the skipped tes
 `TRACKING_SEEDS=1,2,3 scripts/test.sh TrackingBenchTests/testReport` adds the report over those
 seeds. `scripts/test.sh` passes every `TRACKING_*` variable on to the tests; the others are
 described at the top of `TrackingBenchTests.swift`.
+
+With "Translate" on, a debug build falls behind the stream, because the tracker is many times
+slower without optimization. To try the feature with the debug commands, build with
+`scripts/build.sh --debug --no-install SWIFT_OPTIMIZATION_LEVEL=-O`.
 
 ## Screenshots
 
