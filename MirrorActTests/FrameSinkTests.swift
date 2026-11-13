@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import CoreMedia
 import CoreVideo
+import ImageIO
 import XCTest
 @testable import MirrorAct
 
@@ -303,6 +304,58 @@ final class FrameSinkTests: XCTestCase {
             let squeezed = 16 + (Int(expected.pixels[index]) * 219 + 127) / 255
             XCTAssertLessThanOrEqual(abs(Int(thumbnail.image.pixels[index]) - squeezed), 1)
         }
+    }
+
+    /// Thumbnails of real pictures (the screenshots in docs/, drawn at the sizes of phone and
+    /// tablet frames with padded rows) are the same as the reference makes, in both pixel
+    /// formats
+    func testThumbnailsOfRealPicturesMatchTheReference() throws {
+        let docs = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs")
+        let sizes = [(1170, 2532), (1081, 2399), (2047, 1535)]
+        for (index, name) in ["android.jpg", "mirror.jpg", "framed.jpg"].enumerated() {
+            let url = docs.appendingPathComponent(name)
+            let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil), "no picture \(name)")
+            let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+            let (width, height) = sizes[index]
+            let colored = try bgraFrame(of: image, width: width, height: height)
+            let gray = try TestFrames.frame(from: TestFrames.luma(of: colored), width: width, height: height,
+                                            format: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
+            for frame in [colored, gray] {
+                let bgra = CVPixelBufferGetPixelFormatType(frame) == kCVPixelFormatType_32BGRA
+                let thumbnail = try XCTUnwrap(FramePixels.thumbnail(of: frame))
+                CVPixelBufferLockBaseAddress(frame, .readOnly)
+                defer { CVPixelBufferUnlockBaseAddress(frame, .readOnly) }
+                let base = try XCTUnwrap(bgra ? CVPixelBufferGetBaseAddress(frame)
+                                              : CVPixelBufferGetBaseAddressOfPlane(frame, 0))
+                let bytesPerRow = bgra ? CVPixelBufferGetBytesPerRow(frame) : CVPixelBufferGetBytesPerRowOfPlane(frame, 0)
+                XCTAssertGreaterThan(bytesPerRow, width * (bgra ? 4 : 1), "rows must be padded")
+                let format: LumaImage.PixelFormat = bgra ? .bgra8 : .luma8
+                XCTAssertEqual(thumbnail.image, ReferenceThumbnail.downsampled(
+                    from: base, width: width, height: height, bytesPerRow: bytesPerRow, format: format,
+                    scale: thumbnail.scale), "\(name) \(format)")
+                // and one more scale per picture (the reference takes its time in a debug build)
+                let scale = [2, 5, 7][index]
+                LumaImageTests.assertMatchesReference(base, width: width, height: height, bytesPerRow: bytesPerRow,
+                                                      format: format, scale: scale, "\(name) \(format) scale \(scale)")
+            }
+        }
+    }
+
+    /// `image` drawn into a BGRA frame of the given size
+    private func bgraFrame(of image: CGImage, width: Int, height: Int) throws -> CVPixelBuffer {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary] as CFDictionary, &buffer)
+        let frame = try XCTUnwrap(buffer, "no pixel buffer")
+        CVPixelBufferLockBaseAddress(frame, [])
+        defer { CVPixelBufferUnlockBaseAddress(frame, []) }
+        let context = try XCTUnwrap(CGContext(
+            data: CVPixelBufferGetBaseAddress(frame), width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(frame), space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return frame
     }
 
     func testOtherPixelFormatsGiveNoThumbnail() throws {
