@@ -80,8 +80,11 @@ final class TranslationCompositor: @unchecked Sendable {
     }
 
     /// Draws the text of these blocks ahead of time, off the thread that delivers the frames
-    /// (blocks without translation are skipped)
+    /// (blocks without translation are skipped). `blocks` are all the blocks the tracker knows:
+    /// the texts of other blocks are dropped, because a block id never comes back (text that
+    /// returns into view gets a new id), so their texts would only fill the cache.
     func prepare(_ blocks: [TrackedBlock]) {
+        texts.keepOnly(ids: Set(blocks.map(\.id)))
         poolLock.lock()
         let format = poolFormat, language = currentLanguage
         poolLock.unlock()
@@ -489,6 +492,15 @@ final class BlockTextCache: @unchecked Sendable {
         entries = [:]
         bytes = 0
         lock.unlock()
+    }
+
+    /// Drops the texts of every block whose id is not in `ids`
+    func keepOnly(ids: Set<Int>) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard entries.keys.contains(where: { !ids.contains($0.id) }) else { return }
+        entries = entries.filter { ids.contains($0.key.id) }
+        bytes = entries.values.reduce(0) { $0 + $1.bytes }
     }
 
     /// Called with the lock held. Drops a quarter more than necessary, so that this does not

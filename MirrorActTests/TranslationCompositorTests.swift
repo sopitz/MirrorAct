@@ -1039,6 +1039,30 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertEqual(prepared.texts.drawCount, 1)
     }
 
+    /// A block id never comes back: scrolling through a long page or a clock that ticks would
+    /// otherwise fill the cache with texts that are never drawn again, up to its limits
+    func testTextsOfBlocksTheTrackerNoLongerKnowsAreDropped() throws {
+        func tracked(_ id: Int) -> TrackedBlock {
+            TrackedBlock(id: id, text: "Absatz \(id)", rect: CGRect(x: 40, y: 10 + 6 * id, width: 300, height: 48),
+                         lineCount: 1, colors: darkOnLight, translation: "Paragraph \(id)", isStale: false)
+        }
+        let compositor = TranslationCompositor()
+        compositor.prepare((1...20).map(tracked))
+        XCTAssertEqual(compositor.texts.count, 20)
+        // the page scrolled on: blocks 1 to 14 are gone, 21 to 24 came in
+        compositor.prepare((15...24).map(tracked))
+        XCTAssertEqual(compositor.texts.count, 10)
+        XCTAssertEqual(compositor.texts.drawCount, 24)
+        // the texts of the blocks that stayed are kept and used
+        let block = tracked(15)
+        let placed = PlacedBlock(id: 15, text: "Paragraph 15", rect: block.rect, visibleRect: nil, lineCount: 1,
+                                 colors: darkOnLight)
+        XCTAssertNotNil(compositor.compose(try videoFrame(width: 640, height: 240), blocks: [placed]))
+        XCTAssertEqual(compositor.texts.drawCount, 24)
+        compositor.prepare([])
+        XCTAssertEqual(compositor.texts.count, 0)
+    }
+
     func testOldTextsMakeRoomForNewOnes() throws {
         let cache = BlockTextCache(limit: 8, byteLimit: 1 << 20)
         for id in 0..<8 {
