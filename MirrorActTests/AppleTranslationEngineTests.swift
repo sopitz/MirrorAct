@@ -352,6 +352,26 @@ final class AppleTranslationEngineTests: XCTestCase {
         }
     }
 
+    /// A second language on the screen whose pair is not on this Mac yet goes into the form of the
+    /// system language that is (English (US) next to German), so that macOS has to load only that
+    /// language, not British English as well
+    func testANewLanguageGoesIntoTheFormOfTheSystemLanguageThatIsOnThisMac() async throws {
+        let macOS = FakeMacOS(onDevice: Self.onDevice, all: Self.onDevice + Self.onlyWithAppleIntelligence)
+        macOS.installPair("de", "en")
+        let engine = engine(answeredBy: macOS)
+        engine.pickUpLimit = 0.2
+        let client = AppleTranslationClient(engine: engine)
+        _ = try await client.translate([Self.german], into: language("en-DE"))
+        // the host of the French text stays until it is looked at
+        engine.pickUpLimit = 20
+        let request = Task { try await client.translate([Self.french], into: self.language("en-DE")) }
+        try await waitUntil { engine.hosts.contains { $0.source.languageCode?.identifier == "fr" } }
+        let host = try XCTUnwrap(engine.hosts.first { $0.source.languageCode?.identifier == "fr" })
+        XCTAssertEqual(host.target.minimalIdentifier, "en")
+        client.cancel()
+        _ = try await request.value
+    }
+
     /// The notices name the region where the models have another form of the language, as the
     /// question of macOS does: "English (United Kingdom)" next to English (US)
     func testTheNoticesNameTheRegionWhereTheLanguageAloneIsAmbiguous() async throws {

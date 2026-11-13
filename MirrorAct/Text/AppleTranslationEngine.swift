@@ -353,19 +353,27 @@ final class AppleTranslationEngine: ObservableObject {
     /// The form of `target` (the language of the system as the models know it: "en-GB" for
     /// "en-DE") to translate `source` into: `target` itself if its pair with `source` is on this
     /// Mac, otherwise the first other form of the same language and script in the same list of
-    /// languages whose pair is ("en" when German and English (US) are there), otherwise `target`.
-    /// A form the user chose in the settings is not looked for (see `translate`).
+    /// languages whose pair is ("en" when German and English (US) are there). Where no pair with
+    /// `source` is on this Mac yet, a form that a pair with another language was seen on this Mac
+    /// with in this turn, in the same order (French goes into English (US) as well then, and macOS
+    /// asks for French alone). Otherwise `target`. A form the user chose in the settings is not
+    /// looked for (see `translate`).
     private func installedForm(of target: Locale.Language, from source: Locale.Language,
                                in languages: AppleTranslationLanguages) async -> Locale.Language {
         let list = languages.isOnDevice(target) ? languages.onDevice : languages.all
         let others = Self.otherForms(of: target, in: list)
         // nothing to choose from: macOS need not be asked here
         guard !others.isEmpty else { return target }
-        for form in [target] + others {
+        let forms = [target] + others
+        for form in forms {
             let pair = Self.pair(source, form)
             if await isInstalled(pair, from: source, to: form, with: languages.strategy(from: source, to: form)) {
                 return form
             }
+        }
+        for form in forms {
+            let ending = "→" + LanguageMatching.key(form)
+            if installedPairs.contains(where: { $0.hasSuffix(ending) }) { return form }
         }
         return target
     }
