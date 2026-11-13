@@ -195,6 +195,25 @@ final class TextLayoutCutOffTests: XCTestCase {
         }
     }
 
+    /// A part that is garbage beyond doubt without looking cut off: its box is 0.66 of its size
+    /// (above `cutOffHeight`, below `unsurePartHeight`), the recognizer is not sure of it, and the
+    /// line above it is clearly higher. The paragraph above may go on below, as next to a part that
+    /// looks cut off.
+    func testAParagraphNextToGarbageThatDoesNotLookCutOffMayGoOn() throws {
+        let first = "Bestellungen bis vierzehn Uhr verlassen das Lager", second = "noch am selben Tag und kommen bald an"
+        let size = 900 / TextLayout.widthUnits(of: first)
+        let width = TextLayout.widthUnits(of: second) * size
+        let lines = [
+            line(first, 50, 2100, 900, 0.95 * size, confidence: 1, in: android),
+            line(second, 50, 2100 + 1.2 * size, width, 0.66 * size, confidence: 0.5, in: android),
+        ]
+        XCTAssertFalse(TextLayout.looksCutOff(second, width: width, height: 0.66 * size))
+        let blocks = TextLayout.blocks(lines, imageSize: android)
+        XCTAssertEqual(blocks.map(\.text), [first, second])
+        XCTAssertEqual(blocks.map(\.isGarbled), [false, true])
+        XCTAssertEqual(blocks.map(\.cutOffEdges), [FrameMotion.bottom, FrameMotion.top | FrameMotion.bottom])
+    }
+
     /// The same low box in the middle of the screen, with a higher line next to it, may be cut
     /// off (by a header that sticks, a keyboard), but there it is never garbage beyond doubt
     func testNothingInTheMiddleOfTheScreenIsGarbageBeyondDoubt() {

@@ -27,8 +27,8 @@ struct TextBlock: Equatable {
     /// that of the least certain line, nil when the recognizer reports none
     var confidence: Double?
     /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph may go on, hidden: it
-    /// is a line of which perhaps only a part shows (then both), or a line that looks cut off lies
-    /// right above or below it (see `TextLayout.blocks`). It may not be complete.
+    /// is a line of which perhaps only a part shows (then both), or a part that looks cut off or is
+    /// garbage lies right above or below it (see `TextLayout.blocks`). It may not be complete.
     var cutOffEdges: Int
     /// It is a line of which only a part shows, read as garbage, beyond doubt: it is never
     /// complete, and never worth translating (`cutOffEdges` holds both edges)
@@ -117,7 +117,9 @@ enum TextLayout {
     /// `cutOffHeight` of its size (`looksCutOff`) where bars lie: within `barReach` of the longer
     /// side of the picture from its top or bottom edge. A part is a block of its own, marked as
     /// going on beyond both edges (`TextBlock.cutOffEdges`); so is the paragraph it would continue
-    /// or that would continue it, on that side, when the part looks cut off. A part is garbage
+    /// or that would continue it, on that side, when the part looks cut off (`looksCutOff`) or is
+    /// garbage beyond doubt (`TextBlock.isGarbled`, which it can be with a box that is not lower
+    /// than `cutOffHeight`, see below). A part is garbage
     /// beyond doubt (`TextBlock.isGarbled`) only where bars lie, and only when its box is lower
     /// than `garbledHeight` of its size; or lower than `cutOffHeight` and the recognizer is not
     /// sure of it (a confidence below `sureConfidence`; that does not count when a line right above
@@ -381,8 +383,8 @@ enum TextLayout {
     static let unsurePartHeight = 0.7
     /// … and a line of fewer than `shortUnits` (not mostly full-width) only by a box lower than this
     static let shortGarbledHeight = 0.5
-    /// `plainText`: the status bar lies in this top share of the picture; a line within this share
-    /// of the top or bottom edge is cut off there
+    /// `content`: the status bar lies in this top share of the height of the picture; `plainText`:
+    /// a line within this share of the top or bottom edge is cut off there
     static let statusBarShare = 0.04
     static let screenEdgeShare = 0.004
 
