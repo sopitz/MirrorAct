@@ -15,9 +15,10 @@ import Foundation
 //   come; it goes back to sleep when the property is nil or `beginRecognition` returns nil. A
 //   pass reads the frame given to the last `advance` and returns (0.05 s + 0.20 s × requested
 //   area / frame area) ± 15 % later with what a recognizer would have found in that region:
-//   the lines of every layer of the picture grouped by `TextLayout.blocks`, in the pixels of
-//   that frame. A line of which less than 60 % can be seen (hidden, or outside the region) is
-//   missing; from 60 to 95 % it is missing in half of the cases and otherwise comes back with a
+//   the lines of every layer of the picture below the status bar (`TextLayout.content`) grouped
+//   by `TextLayout.blocks`, in the pixels of that frame. A line of which less than 60 % can be
+//   seen (hidden, or outside the region) is missing; from 60 to 95 % it is missing in half of
+//   the cases and otherwise comes back with a
 //   garbled text of its own and the visible part as rectangle. In a frame damaged by fast
 //   motion (`SimLayer.loss`, 0…100) a line is missing in 0.3 × loss % of the cases: about one
 //   in ten at 5 % of the view per frame. The edges of the rectangles are
@@ -801,7 +802,8 @@ final class TrackingBench {
                                                          height: line.rect.height / size.height))
         }
         var blocks: [RecognizedBlock] = []
-        for block in TextLayout.blocks(lines, imageSize: size) where TextLayout.isTranslatable(block.text) {
+        for block in TextLayout.blocks(TextLayout.content(lines, imageSize: size), imageSize: size)
+        where TextLayout.isTranslatable(block.text) {
             let rect = CGRect(x: (block.rect.minX * size.width).rounded(), y: (block.rect.minY * size.height).rounded(),
                               width: (block.rect.width * size.width).rounded(),
                               height: (block.rect.height * size.height).rounded())

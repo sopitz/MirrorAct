@@ -63,18 +63,24 @@ enum TextLayout {
     }
 
     /// All text the way it reads when pasted somewhere: one paragraph per line (its lines on the
-    /// screen joined), in reading order. Left out: lines cut off at the top or bottom edge of the
-    /// picture or by something in front of them (of which only part shows, see `blocks`), and a
-    /// status bar (lines in the top `statusBarShare` of the picture).
+    /// screen joined), in reading order. Left out: the status bar (`content`), and lines cut off at
+    /// the top or bottom edge of the picture or by something in front of them (of which only part
+    /// shows, see `blocks`).
     static func plainText(_ lines: [RecognizedLine], imageSize: CGSize) -> String {
         let edge = Double(imageSize.height) * screenEdgeShare
-        let kept = lines.filter { line in
+        let kept = content(lines, imageSize: imageSize).filter { line in
             let top = Double(line.rect.minY * imageSize.height), bottom = Double(line.rect.maxY * imageSize.height)
-            return bottom > Double(imageSize.height) * statusBarShare && top > edge
-                && bottom < Double(imageSize.height) - edge
+            return top > edge && bottom < Double(imageSize.height) - edge
         }
         let whole = measure(kept, imageSize: imageSize).filter { !$0.1.isPart }.map(\.0)
         return blocks(whole, imageSize: imageSize).map(\.text).joined(separator: "\n")
+    }
+
+    /// The lines that show what is on the screen, for copying and for translating: all but those
+    /// of the status bar (whose box ends within the top `statusBarShare` of the picture: a clock
+    /// and icons, read as letters)
+    static func content(_ lines: [RecognizedLine], imageSize: CGSize) -> [RecognizedLine] {
+        lines.filter { Double($0.rect.maxY * imageSize.height) > Double(imageSize.height) * statusBarShare }
     }
 
     /// Joins the lines of a paragraph. `imageSize` in pixels, because x and y of the rects have

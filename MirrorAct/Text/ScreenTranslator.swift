@@ -248,9 +248,9 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         return true
     }
 
-    /// Paragraphs worth translating, in frame pixels, with the colors to draw them in. No
-    /// paragraph reaches across a known edge of a scrolling area: what lies on the other side is
-    /// a bar that stays, or other content.
+    /// Paragraphs worth translating, in frame pixels, with the colors to draw them in, of the
+    /// lines below the status bar (`TextLayout.content`). No paragraph reaches across a known edge
+    /// of a scrolling area: what lies on the other side is a bar that stays, or other content.
     static func recognizedBlocks(from lines: [RecognizedLine], in frame: CVPixelBuffer,
                                  areas: [ScrollingArea]) -> [RecognizedBlock] {
         let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
@@ -262,7 +262,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         // lines with the same known edges above them lie between the same edges
         var keys: [[Int]] = []
         var groups: [[Int]: [RecognizedLine]] = [:]
-        for line in lines {
+        for line in TextLayout.content(lines, imageSize: size) {
             let x = line.rect.midX * size.width, y = line.rect.midY * size.height
             let above = edges.indices.filter { edges[$0].y < y && edges[$0].from <= x && x <= edges[$0].to }
             if groups[above] == nil { keys.append(above) }
