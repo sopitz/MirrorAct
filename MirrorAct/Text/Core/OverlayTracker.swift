@@ -231,8 +231,13 @@ final class OverlayTracker {
         /// view below or above its text
         var verticalMotion = 0.1
         var verticalShare = 0.25
-        /// moving fast: more than this share of the scrolling area per frame (the link starts
-        /// losing detail then)
+        /// A place outside of every scrolling area rests when nothing moved this near it
+        /// (thumbnail pixels): a strip that glides beside a page that was never scrolled does not
+        /// keep the page from resting
+        var restReach = 16.0
+        /// moving fast: more than this share of its area per frame (the link starts losing detail
+        /// then); a pass reads while moving fast when such a movement of the last frame that moved
+        /// lies over its region
         var fastMotionShare = 0.005
         /// a region of at least this share of the frame is read as a whole frame
         var wholeFrameShare = 0.5
@@ -487,8 +492,12 @@ final class OverlayTracker {
     private var running: Pass?
     private var lastChange: TimeInterval = 0
     private var lastMotion: TimeInterval = -1000
-    /// the largest movement of the last frame that moved, as a share of its area
-    private var lastSpeedShare = 0.0
+    /// the movements of the last frame that moved: where, and how far as a share of their area
+    private var lastSpeeds: [(area: ThumbnailRect, share: Double)] = []
+    /// per tile of the estimator: when content last moved through it, and when it last moved
+    /// up or down (`isVertical`): the rest of places outside of every scrolling area
+    private var tileMovedAt: [TimeInterval] = []
+    private var tileMovedVerticallyAt: [TimeInterval] = []
     private var nextBlockID = 1
     private var nextRequestID = 1
     private var nextAreaID = 1
@@ -583,12 +592,11 @@ final class OverlayTracker {
         priors = motions
         guard let dominant = motions.max(by: { $0.tiles < $1.tiles }) else { return (.changed, 0, 0) }
         lastMotion = time
-        var speed = 0.0
-        for motion in motions {
-            speed = max(speed, abs(motion.dy) / Double(max(1, motion.area.height)),
-                        abs(motion.dx) / Double(max(1, motion.area.width)))
+        lastSpeeds = motions.map { motion in
+            (motion.area, max(abs(motion.dy) / Double(max(1, motion.area.height)),
+                              abs(motion.dx) / Double(max(1, motion.area.width))))
         }
-        lastSpeedShare = speed
+        noteMovedTiles(motions, time: time)
         return (.scrolled, dominant.dx, dominant.dy)
     }
 
@@ -686,13 +694,41 @@ final class OverlayTracker {
         areas.first { $0.id == id }
     }
 
-    /// When the content of a scrolling area last moved (`vertically`: up or down), the picture
-    /// as a whole for -1 or an area that is not known: rest is decided for each area, so that
+    /// When the content of a scrolling area last moved (`vertically`: up or down); for -1 or an
+    /// area that is not known, when content last moved within `restReach` of `rect` (thumbnail
+    /// pixels): rest is decided for each area, and for each place outside of every area, so that
     /// something that keeps moving beside a page (a ticker, a carousel, a video) does not keep
     /// the page from resting
-    private func lastMoved(area id: Int, vertically: Bool) -> TimeInterval {
-        guard id >= 0, let area = scrollArea(id: id) else { return lastMotion }
-        return vertically ? area.lastMovedVertically : area.lastMoved
+    private func lastMoved(area id: Int, around rect: CGRect, vertically: Bool) -> TimeInterval {
+        if id >= 0, let area = scrollArea(id: id) { return vertically ? area.lastMovedVertically : area.lastMoved }
+        let times = vertically ? tileMovedVerticallyAt : tileMovedAt
+        guard !times.isEmpty, times.count == estimator.kinds.count else { return lastMotion }
+        let reach = configuration.restReach
+        let range = estimator.tileRange(of: rect.insetBy(dx: -reach, dy: -reach))
+        var latest = -1000.0
+        for row in range.rows {
+            for column in range.columns {
+                latest = max(latest, times[row * estimator.columns + column])
+            }
+        }
+        return latest
+    }
+
+    /// Remembers for every tile that content moved through it in this frame
+    private func noteMovedTiles(_ motions: [FrameMotion], time: TimeInterval) {
+        let count = estimator.kinds.count
+        if tileMovedAt.count != count {
+            tileMovedAt = [TimeInterval](repeating: -1000, count: count)
+            tileMovedVerticallyAt = tileMovedAt
+        }
+        let vertical = motions.map(isVertical)
+        for tile in 0..<count {
+            let kind = estimator.kinds[tile]
+            guard kind == .moved || kind == .entered else { continue }
+            tileMovedAt[tile] = time
+            let motion = Int(estimator.motionIndex[tile])
+            if motion >= 0, motion < vertical.count, vertical[motion] { tileMovedVerticallyAt[tile] = time }
+        }
     }
 
     /// A movement up or down: by `Configuration.verticalMotion` at least, and not much less than
@@ -701,10 +737,10 @@ final class OverlayTracker {
         abs(motion.dy) >= configuration.verticalMotion && abs(motion.dy) >= configuration.verticalShare * abs(motion.dx)
     }
 
-    /// The content of an area had rested for `restDelay` when `pass` started and has not moved
-    /// since
-    private func restedThrough(_ pass: Pass, area id: Int, vertically: Bool) -> Bool {
-        pass.startTime - lastMoved(area: id, vertically: vertically) >= configuration.restDelay
+    /// The content of an area (or near `rect`, see `lastMoved`) had rested for `restDelay` when
+    /// `pass` started and has not moved since
+    private func restedThrough(_ pass: Pass, area id: Int, around rect: CGRect, vertically: Bool) -> Bool {
+        pass.startTime - lastMoved(area: id, around: rect, vertically: vertically) >= configuration.restDelay
     }
 
     /// The scrolling area a place lies in (the smallest that holds its centre), -1 = none
@@ -1138,10 +1174,10 @@ final class OverlayTracker {
         return plan.due(lastMotion: lastMotion, isFullyVisible: isFullyVisible, areaMotion: areaMotion)
     }
 
-    /// When the content of a scrolling area last moved: places to read at rest wait for their
-    /// own area (`ReadingPlan.due`)
-    private func areaMotion(_ id: Int, vertically: Bool) -> TimeInterval {
-        lastMoved(area: id, vertically: vertically)
+    /// When the content of a place last moved: places to read at rest wait for their own area,
+    /// or the motion near them (`ReadingPlan.due`)
+    private func areaMotion(_ id: Int, around rect: CGRect, vertically: Bool) -> TimeInterval {
+        lastMoved(area: id, around: rect, vertically: vertically)
     }
 
     /// A place can be seen completely: inside the frame and inside the scrolling area it lies in,
@@ -1181,7 +1217,13 @@ final class OverlayTracker {
         for block in tracked {
             startRects[block.id] = thumbnailRect(of: block)
         }
-        let isFast = time - lastMotion <= configuration.fastMotionWindow && lastSpeedShare > configuration.fastMotionShare
+        // (moving fast where it reads: a strip that glides fast beside the region does not count)
+        let regionRect = CGRect(x: pixels.x, y: pixels.y, width: pixels.width, height: pixels.height)
+        let isFast = time - lastMotion <= configuration.fastMotionWindow && lastSpeeds.contains { speed in
+            speed.share > configuration.fastMotionShare
+                && regionRect.intersects(CGRect(x: speed.area.x, y: speed.area.y, width: speed.area.width,
+                                                height: speed.area.height))
+        }
         var probes = ProbeGrid(region: pixels, spacing: configuration.probeSpacing)
         for index in probes.areaIDs.indices {
             var smallest = Int.max
@@ -1288,7 +1330,7 @@ final class OverlayTracker {
             let now = rect.offsetBy(dx: shift.dx, dy: shift.dy)
             // (at rest: the scrolling area it lies in did not move up or down all the while)
             if cut != 0, !(settles && pass.rereadAttempts != nil
-                           && restedThrough(pass, area: areaID(around: now), vertically: true)) {
+                           && restedThrough(pass, area: areaID(around: now), around: now, vertically: true)) {
                 // (the blocks it lies over stay until their place is read completely)
                 for block in tracked where block.seen != nil && thumbnailRect(of: block).intersects(now) {
                     taken.insert(block.id)
@@ -1315,7 +1357,8 @@ final class OverlayTracker {
             // (its area did not move up or down all the while: what is cut off by an edge of the
             // view stays so)
             closeEdgesInView(&block, rect: rect,
-                             atRest: restedThrough(pass, area: block.areaID, vertically: true))
+                             atRest: restedThrough(pass, area: block.areaID, around: thumbnailRect(of: block),
+                                                   vertically: true))
             let index: Int
             if let known = absorb(&block, attempts: rereadAttempt, time: time) {
                 index = known
@@ -1339,7 +1382,7 @@ final class OverlayTracker {
             guard !taken.contains(block.id), let start = pass.startRects[block.id] else { return false }
             let gone = start.minX >= inner.minX && start.minY >= inner.minY && start.maxX <= inner.maxX
                 && start.maxY <= inner.maxY
-            if gone, !restedThrough(pass, area: block.areaID, vertically: false) {
+            if gone, !restedThrough(pass, area: block.areaID, around: start, vertically: false) {
                 // (read while the picture moved, a line may have been missed: its place is read
                 // again once it rests)
                 plan.add(UnreadArea(rect: thumbnailRect(of: block).intersection(bounds), kind: .confirm, since: time,
@@ -1494,7 +1537,8 @@ final class OverlayTracker {
                 continue
             }
             closeEdgesInView(&tracked[index], rect: start,
-                             atRest: restedThrough(pass, area: tracked[index].areaID, vertically: true))
+                             atRest: restedThrough(pass, area: tracked[index].areaID,
+                                                   around: thumbnailRect(of: tracked[index]), vertically: true))
         }
     }
 
@@ -1514,7 +1558,7 @@ final class OverlayTracker {
         let now = rect.offsetBy(dx: shift.dx, dy: shift.dy)
         // (at rest: the scrolling area it lies in did not move up or down all the while)
         let area = areaID(around: now)
-        let atRest = restedThrough(pass, area: area, vertically: true)
+        let atRest = restedThrough(pass, area: area, around: now, vertically: true)
         if isGarbled, atRest { return }
         let attempts = (pass.rereadAttempts ?? -1) + 1
         guard attempts < configuration.maxRereads else {
@@ -2015,7 +2059,8 @@ final class OverlayTracker {
             if translations[text] != nil || requested.contains(text) || texts.contains(text) { continue }
             // (it may go on beyond what was seen of it: its text is not final while the picture moves)
             if block.openEdges != 0,
-               time - lastMoved(area: block.areaID, vertically: true) < configuration.restDelay { continue }
+               time - lastMoved(area: block.areaID, around: thumbnailRect(of: block), vertically: true)
+                < configuration.restDelay { continue }
             if let failed = failedAt[text], time - failed < configuration.retryDelay { continue }
             requested.insert(text)
             texts.append(text)
@@ -2079,7 +2124,9 @@ final class OverlayTracker {
         plan.reset()
         running?.isObsolete = true
         lastMotion = -1000
-        lastSpeedShare = 0
+        lastSpeeds = []
+        tileMovedAt = []
+        tileMovedVerticallyAt = []
     }
 
     private func shownTranslation(for text: String) -> String? {

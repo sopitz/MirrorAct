@@ -36,6 +36,10 @@ struct UnreadArea: Equatable {
 /// What has to be read, and when: areas of the picture that move with the content they belong
 /// to until a recognition pass takes them.
 final class ReadingPlan {
+    /// When the content of a place last moved (`vertically`: up or down): that of its scrolling
+    /// area (`areaID`), or for a place outside of every area (-1) the motion near `rect`
+    typealias RestClock = (_ areaID: Int, _ rect: CGRect, _ vertically: Bool) -> TimeInterval
+
     private let configuration: OverlayTracker.Configuration
     private(set) var areas: [UnreadArea] = []
     /// the areas the running pass reads (they come back when it fails)
@@ -219,13 +223,13 @@ final class ReadingPlan {
     // MARK: When and what
 
     /// When `area` may be read; nil = not yet (a reread that cannot be seen completely).
-    /// `areaMotion` says when the content of a scrolling area last moved (at all, or up or
-    /// down): a place that waits for movement to end (a thin strip, a confirm, a place read at
-    /// rest) and lies in a known area waits for that area, not for the whole picture; where a
-    /// paragraph may go on (`.rest`, beyond its top or bottom) it waits only for movement up
-    /// or down.
+    /// `areaMotion` says when the content of a place last moved (at all, or up or down): a place
+    /// that waits for movement to end (a thin strip, a confirm, a place read at rest) waits for
+    /// its scrolling area, or for the motion near it when it lies in none, not for the whole
+    /// picture; where a paragraph may go on (`.rest`, beyond its top or bottom) it waits only for
+    /// movement up or down. Without `areaMotion`, everything waits for `lastMotion`.
     func due(of area: UnreadArea, lastMotion: TimeInterval, isFullyVisible: (CGRect) -> Bool,
-             areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)? = nil) -> TimeInterval? {
+             areaMotion: RestClock? = nil) -> TimeInterval? {
         switch area.kind {
         case .changed:
             return area.since + configuration.settleTime
@@ -248,11 +252,12 @@ final class ReadingPlan {
         }
     }
 
-    /// When what `area` lies in last moved: its scrolling area, or the picture
+    /// When what `area` lies in last moved: its scrolling area, or the motion near it
+    /// (`RestClock`); the picture as a whole when no clock is given
     private func restingSince(_ area: UnreadArea, vertically: Bool, lastMotion: TimeInterval,
-                              areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)?) -> TimeInterval {
-        guard area.areaID >= 0, let areaMotion else { return lastMotion }
-        return areaMotion(area.areaID, vertically)
+                              areaMotion: RestClock?) -> TimeInterval {
+        guard let areaMotion else { return lastMotion }
+        return areaMotion(area.areaID, area.rect, vertically)
     }
 
     /// Once the picture has rested for `restDelay`; once for each time it comes to rest: an area
@@ -264,7 +269,7 @@ final class ReadingPlan {
 
     /// The earliest time something is due
     func due(lastMotion: TimeInterval, isFullyVisible: (CGRect) -> Bool,
-             areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)? = nil) -> TimeInterval? {
+             areaMotion: RestClock? = nil) -> TimeInterval? {
         var earliest: TimeInterval?
         for area in areas {
             guard let due = due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible,
@@ -279,7 +284,7 @@ final class ReadingPlan {
     /// that text at its edges can be read completely. The areas it covers are in flight then.
     /// nil when nothing is due.
     func takeRegion(at time: TimeInterval, lastMotion: TimeInterval, bounds: CGRect,
-                    isFullyVisible: (CGRect) -> Bool, areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)? = nil) -> CGRect? {
+                    isFullyVisible: (CGRect) -> Bool, areaMotion: RestClock? = nil) -> CGRect? {
         var dueAreas: [UnreadArea] = []
         for area in areas {
             if let due = due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible, areaMotion: areaMotion),
@@ -346,11 +351,12 @@ final class ReadingPlan {
         }
     }
 
-    /// The areas in flight were all rereads (besides places read at rest): the highest number of
-    /// attempts among them, else nil
+    /// The areas in flight were all rereads (besides places read at rest and confirm reads, which
+    /// ride along with whatever is read over them): the highest number of attempts among them,
+    /// else nil
     var rereadAttemptsInFlight: Int? {
         var most: Int?
-        for area in inFlight where area.kind != .rest {
+        for area in inFlight where area.kind != .rest && area.kind != .confirm {
             guard area.kind == .reread else { return nil }
             most = max(most ?? 0, area.attempts)
         }

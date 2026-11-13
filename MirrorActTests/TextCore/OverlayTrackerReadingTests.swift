@@ -599,6 +599,46 @@ final class OverlayTrackerReadingTests: XCTestCase {
         }
     }
 
+    /// A page that was never scrolled (it lies in no scrolling area) beside a strip that keeps
+    /// gliding sideways, and a paragraph on it that `TextLayout` marks as next to a line that is
+    /// cut off: rest is decided by the motion near the paragraph, so it is read again once and
+    /// sent, as on a page without the strip. Passes take 0.25 s while the frames go on, one at
+    /// a time, and the translator is asked after each, as in the app.
+    func testAParagraphNextToACutLineIsSentOnAStillPageBesideATicker() throws {
+        let screen = SyntheticScreen(seed: 33)
+        let pattern = Self.tickerPattern(seed: 5)
+        var paragraph = Self.paragraph(7, 8, offset: 0, text: "Seven and eight together")
+        paragraph.cutOffEdges = FrameMotion.bottom
+        for moving in [false, true] {
+            let tracker = OverlayTracker()
+            var time = 0.0, shift = 0, passes = 0
+            var sent: [String] = []
+            var pending: (request: RecognitionRequest, answer: [RecognizedBlock], at: TimeInterval)?
+            while time < 6 {
+                time += 1.0 / 60
+                if moving { shift += 2 }
+                _ = tracker.advance(Self.withTicker(screen.thumbnail(offset: 0, noiseSeed: 7), shift: shift,
+                                                    pattern: pattern), scale: scale, time: time)
+                if let job = pending, time >= job.at {
+                    tracker.finishRecognition(job.request, blocks: job.answer, time: time)
+                    pending = nil
+                    for text in tracker.textsAwaitingTranslation(limit: 10, time: time) {
+                        sent.append(text)
+                        tracker.setTranslation("T " + text, for: text)
+                    }
+                }
+                if pending == nil, let due = tracker.recognitionDue, due <= time,
+                   let request = tracker.beginRecognition(time: time) {
+                    // (what enters the strip is read as it comes in: only passes over the page count)
+                    if request.region.maxY > Double((Self.tickerTop + 24 + 24) * scale) { passes += 1 }
+                    pending = (request, request.region.contains(paragraph.rect) ? [paragraph] : [], time + 0.25)
+                }
+            }
+            XCTAssertEqual(sent, [paragraph.text], "moving \(moving)")
+            XCTAssertLessThanOrEqual(passes, 3, "moving \(moving): reading the page comes to rest")
+        }
+    }
+
     /// The end of a page whose ground below its last line shows no movement (it stops there
     /// while it springs back) is not taken for a bar: a translation there is not cut off
     func testTheEndOfAPageIsNoBar() {

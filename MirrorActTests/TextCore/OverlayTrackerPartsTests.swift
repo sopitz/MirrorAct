@@ -308,6 +308,43 @@ final class ReadingPlanTests: XCTestCase {
         XCTAssertEqual(plan.areas.count, 1, "a pass that failed leaves it to be read")
     }
 
+    /// A confirm read that rides along with a reread (it lies over the same place) does not make
+    /// the pass count as a first reading: the place is not read again and again
+    func testAConfirmThatRidesAlongKeepsTheRereadCount() throws {
+        let plan = ReadingPlan(configuration: configuration)
+        let place = CGRect(x: 0, y: 200, width: 200, height: 40)
+        plan.add(UnreadArea(rect: place, kind: .reread, since: 5, attempts: 1))
+        plan.add(UnreadArea(rect: bounds, kind: .confirm, since: 5))
+        _ = try XCTUnwrap(plan.takeRegion(at: 5, lastMotion: -1000, bounds: bounds, isFullyVisible: { _ in true }))
+        XCTAssertEqual(plan.inFlight.map(\.kind), [.reread, .confirm])
+        XCTAssertEqual(plan.rereadAttemptsInFlight, 1)
+        // (what is new, such as a strip, is read for the first time)
+        plan.finishPass(succeeded: true)
+        plan.add(UnreadArea(rect: place, kind: .reread, since: 6, attempts: 1))
+        plan.add(UnreadArea(rect: CGRect(x: 0, y: 190, width: 200, height: 14), kind: .strip, since: 6))
+        _ = try XCTUnwrap(plan.takeRegion(at: 6, lastMotion: -1000, bounds: bounds, isFullyVisible: { _ in true }))
+        XCTAssertNil(plan.rereadAttemptsInFlight)
+    }
+
+    /// A place outside of every scrolling area waits for the motion near it, which the clock
+    /// tells for its place: the plan hands it the area id and the place
+    func testAPlaceOutsideOfEveryAreaAsksTheClockForItsPlace() {
+        let plan = ReadingPlan(configuration: configuration)
+        let place = CGRect(x: 0, y: 300, width: 200, height: 30)
+        plan.add(UnreadArea(rect: place, kind: .confirm, since: 5))
+        var asked: [(Int, CGRect, Bool)] = []
+        let due = plan.due(lastMotion: 9, isFullyVisible: { _ in true }, areaMotion: { id, rect, vertically in
+            asked.append((id, rect, vertically))
+            return 4
+        })
+        XCTAssertEqual(due ?? 0, 5, accuracy: 1e-9, "the motion near it ended before it was asked for")
+        XCTAssertEqual(asked.count, 1)
+        XCTAssertEqual(asked.first?.0, -1)
+        XCTAssertEqual(asked.first?.1, place)
+        XCTAssertEqual(plan.due(lastMotion: 9, isFullyVisible: { _ in true }) ?? 0, 9 + configuration.confirmDelay,
+                       accuracy: 1e-9, "without a clock: the picture as a whole")
+    }
+
     /// A part that keeps changing (a video) does not keep the rest of a new screen from being read
     func testAChangeIsCutOutOfAnOlderOne() {
         let plan = ReadingPlan(configuration: configuration)
