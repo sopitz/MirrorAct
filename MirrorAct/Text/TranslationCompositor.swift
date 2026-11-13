@@ -72,6 +72,7 @@ final class TranslationCompositor: @unchecked Sendable {
         CVBufferPropagateAttachments(source, copy)
 
         let language = self.language
+        let blocks = Self.withoutBlocksInsideOthers(blocks)
         let drawn = biPlanar
             ? drawVideo(blocks, into: copy, width: width, height: height, fullRange: fullRange, language: language)
             : drawBGRA(blocks, into: copy, width: width, height: height, language: language)
@@ -178,6 +179,27 @@ final class TranslationCompositor: @unchecked Sendable {
     }
 
     // MARK: Drawing
+
+    /// The blocks without those that lie (three quarters of them or more) within a larger
+    /// block, or within one of the same size that comes later. Such a block is a piece of a
+    /// paragraph that is also known whole, for example when the text recognition read it once
+    /// in pieces and once whole: its box would cover lines of the paragraph's translation, and
+    /// its text is part of that translation anyway.
+    private static func withoutBlocksInsideOthers(_ blocks: [PlacedBlock]) -> [PlacedBlock] {
+        // (a rectangle that cannot be drawn hides nothing)
+        func area(_ rect: CGRect) -> CGFloat { BlockPlacement.textSize(of: rect) == nil ? 0 : rect.width * rect.height }
+        let areas = blocks.map { area($0.rect.standardized) }
+        var kept: [PlacedBlock] = []
+        kept.reserveCapacity(blocks.count)
+        for (index, block) in blocks.enumerated() {
+            let inside = areas[index] > 0 && blocks.indices.contains { other in
+                other != index && (areas[other] > areas[index] || (areas[other] == areas[index] && other > index))
+                    && area(blocks[other].rect.standardized.intersection(block.rect.standardized)) * 4 >= areas[index] * 3
+            }
+            if !inside { kept.append(block) }
+        }
+        return kept
+    }
 
     /// 4:2:0 video: the first plane is the brightness of every pixel, the second the color of
     /// every 2 × 2 pixels

@@ -712,6 +712,33 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertEqual(fitting.lines.joined(), sentence)
     }
 
+    /// A piece of a paragraph that is also known as a block of its own (read once whole, once
+    /// in pieces) would cover the lines of the paragraph's translation with its box. A block
+    /// that lies within a larger one is left out; blocks that merely touch are both drawn.
+    func testABlockInsideALargerOneDoesNotCoverItsText() throws {
+        let source = try videoFrame(width: 1080, height: 600)
+        let long = "Light text on a dark background is harder to read when the contrast is wrong. "
+            + "The translation here should also appear light on dark and should not brighten the background."
+        // three lines; the piece is the last of them and reaches a pixel below the paragraph
+        let paragraph = PlacedBlock(id: 22, text: long, rect: CGRect(x: 49.6, y: 116.8, width: 948.5, height: 190.5),
+                                    visibleRect: nil, lineCount: 3, colors: darkOnLight)
+        let piece = PlacedBlock(id: 25, text: "[??] ÜBERSETZUNG SOLLTE HIER EBENFALLS HELL AUF",
+                                rect: CGRect(x: 51.6, y: 250.6, width: 856.5, height: 58), visibleRect: nil,
+                                lineCount: 1, colors: darkOnLight)
+        let alone = picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [paragraph])))
+        XCTAssertTrue(picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [paragraph, piece]))) == alone)
+        XCTAssertTrue(picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [piece, paragraph]))) == alone)
+
+        // a block below the paragraph whose margin overlaps it a little is drawn as well
+        let below = PlacedBlock(id: 26, text: "Next paragraph", rect: CGRect(x: 49.6, y: 300, width: 948.5, height: 60),
+                                visibleRect: nil, lineCount: 1, colors: darkOnLight)
+        let both = picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [paragraph, below])))
+        XCTAssertFalse(both == alone)
+        // of two blocks of the same size at the same place one is drawn, not both and not none
+        let twin = PlacedBlock(id: 27, text: long, rect: paragraph.rect, visibleRect: nil, lineCount: 3, colors: darkOnLight)
+        XCTAssertTrue(picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [paragraph, twin]))) == alone)
+    }
+
     // MARK: The copy
 
     func testCopyHasFormatSizeAndAttachmentsOfTheFrame() throws {
