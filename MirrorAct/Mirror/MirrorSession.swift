@@ -360,7 +360,8 @@ final class MirrorSession: ObservableObject, Identifiable {
     // MARK: Text
 
     /// Reads the text on the screen (Vision, on this Mac) and copies it to the clipboard:
-    /// the text of the device, also while its translation is shown
+    /// the text of the device, also while its translation is shown, one paragraph per line
+    /// (`TextLayout.plainText`)
     func copyText() {
         guard let buffer = sink.latestSource ?? sink.latest else {
             NSSound.beep()
@@ -378,7 +379,8 @@ final class MirrorSession: ObservableObject, Identifiable {
                 return
             }
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(TextLayout.plainText(lines), forType: .string)
+            let size = CGSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+            NSPasteboard.general.setString(TextLayout.plainText(lines, imageSize: size), forType: .string)
             self?.showToast(String(localized: "Text copied to the clipboard"))
         }
     }

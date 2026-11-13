@@ -62,11 +62,19 @@ enum TextLayout {
         return rows.map { $0.sorted { $0.rect.minX < $1.rect.minX } }
     }
 
-    /// All text, one row of the screen per line
-    static func plainText(_ lines: [RecognizedLine]) -> String {
-        readingOrder(lines)
-            .map { $0.map(\.text).joined(separator: " ") }
-            .joined(separator: "\n")
+    /// All text the way it reads when pasted somewhere: one paragraph per line (its lines on the
+    /// screen joined), in reading order. Left out: lines cut off at the top or bottom edge of the
+    /// picture or by something in front of them (of which only part shows, see `blocks`), and a
+    /// status bar (lines in the top `statusBarShare` of the picture).
+    static func plainText(_ lines: [RecognizedLine], imageSize: CGSize) -> String {
+        let edge = Double(imageSize.height) * screenEdgeShare
+        let kept = lines.filter { line in
+            let top = Double(line.rect.minY * imageSize.height), bottom = Double(line.rect.maxY * imageSize.height)
+            return bottom > Double(imageSize.height) * statusBarShare && top > edge
+                && bottom < Double(imageSize.height) - edge
+        }
+        let whole = measure(kept, imageSize: imageSize).filter { !$0.1.isPart }.map(\.0)
+        return blocks(whole, imageSize: imageSize).map(\.text).joined(separator: "\n")
     }
 
     /// Joins the lines of a paragraph. `imageSize` in pixels, because x and y of the rects have
@@ -239,6 +247,10 @@ enum TextLayout {
     static let partHeight = 0.78
     static let partOfNeighbour = 0.75
     static let cutOffHeight = 0.62
+    /// `plainText`: the status bar lies in this top share of the picture; a line within this share
+    /// of the top or bottom edge is cut off there
+    static let statusBarShare = 0.04
+    static let screenEdgeShare = 0.004
 
     /// The size of the text of a line (about the height of its font, in the units of `width`),
     /// measured from its width: `width` divided by `widthUnits`. nil when the text is too short to

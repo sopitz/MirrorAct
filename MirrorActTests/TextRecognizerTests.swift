@@ -19,6 +19,7 @@ final class TextRecognizerTests: XCTestCase {
     ]
 
     func testLinesOfTheWholeFrameInReadingOrderAndInPlace() throws {
+        let size = CGSize(width: width, height: height)
         for (name, format) in formats {
             let (frame, inked) = try TestFrames.text(lines, width: width, height: height, format: format)
             let found = try TextRecognizer.lines(in: frame)
@@ -28,8 +29,8 @@ final class TextRecognizerTests: XCTestCase {
                 XCTAssertTrue(Self.reads(line.text, as: lines[index].text), "\(name): \(line.text)")
                 checkPlace(of: line, drawnAt: inked[index], name)
             }
-            XCTAssertTrue(Self.reads(TextLayout.plainText(found), as: lines.map(\.text).joined(separator: "\n")),
-                          "\(name): \(TextLayout.plainText(found))")
+            XCTAssertTrue(Self.reads(TextLayout.plainText(found, imageSize: size), as: lines.map(\.text).joined(separator: "\n")),
+                          "\(name): \(TextLayout.plainText(found, imageSize: size))")
         }
     }
 

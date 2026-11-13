@@ -178,7 +178,7 @@ final class TextLayoutTests: XCTestCase {
 
     /// Scrolled to the end of the page: the navigation bar hides the lower part of the last line.
     /// Vision read the rest of it, nearly right, in a box two thirds as high as the line above.
-    /// The paragraph ends above it; the part is no line of it.
+    /// The paragraph ends above it; the part is no line of it, and it is not pasted.
     func testAPartOfALineIsNoLineOfTheParagraph() {
         let lines = [
             line("Zum Schluss noch ein langer Absatz, damit", 49, 2037, 909, 53),
@@ -194,17 +194,26 @@ final class TextLayoutTests: XCTestCase {
             "an ainer alten Stalle ctahen hlaihen menn der",
         ])
         XCTAssertEqual(blocks.map(\.cutOffEdges), [0, 0])
+        XCTAssertEqual(TextLayout.plainText(lines, imageSize: phone), blocks[0].text)
     }
 
-    func testPlainTextReadsTopToBottomAndLeftToRight() {
+    /// Pasted text: one paragraph per line, without the status bar and without a line cut off at
+    /// the bottom edge of the screen
+    func testPlainTextHasAParagraphPerLine() {
         let lines = [
-            line("third line.", 117, 881, 351, 51),
-            line("Title", 468, 253, 234, 76),
-            line("9:41", 117, 51, 117, 38),
-            line("Label", 117, 1269, 234, 51),
-            line("Value", 819, 1266, 234, 51),
+            line("12:47 L", 42, 17, 139, 35),
+            line("< Testlabor", 41, 103, 377, 66),
+        ] + page + [
+            line("Am Montag bleibt es überwiegend bewölkt,", 49, 2350, 916, 50),
         ]
-        XCTAssertEqual(TextLayout.plainText(lines), "9:41\nTitle\nthird line.\nLabel Value")
+        XCTAssertEqual(TextLayout.plainText(lines, imageSize: phone), [
+            "< Testlabor",
+            "Willkommen im Testlabor",
+            "Diese Seite ist ein Prüfstand für die Texterkennung. Sie enthält Überschriften, längere Absätze, "
+                + "kurze Beschriftungen und farbige Schaltflächen, damit man sehen kann, ob die Übersetzung an der "
+                + "richtigen Stelle erscheint.",
+            "Benutzername", "Passwort vergessen?", "Jetzt anmelden", "Abbrechen",
+        ].joined(separator: "\n"))
     }
 
     func testOnlyTextWithLettersIsTranslated() {
