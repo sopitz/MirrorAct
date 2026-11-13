@@ -204,6 +204,11 @@ final class OverlayTracker {
         /// moved) lies over the content: a floating button, a header that sticks. Nothing is drawn
         /// over it or the tiles next to it. (One frame may be a tile whose source the codec damaged.)
         var overlayFrames = 3
+        /// … only a movement of at least this many thumbnail pixels tells whether a tile stays: a
+        /// frame that moved less (a page that creeps the last pixel before it rests, a trembling
+        /// hand) neither counts a tile nor makes it count again from nothing, so a floating button
+        /// is not forgotten just before the content rests
+        var overlayMinShift = 1.5
         /// … a block of which at least this share lies where it shows belongs to it
         var overlayOwnShare = 0.5
         /// … a pixel of it stays: it differs from the frame before by at most `stayDifference`,
@@ -641,7 +646,9 @@ final class OverlayTracker {
 
     // MARK: What lies over the content
 
-    /// Counts for every tile how often in a row it stayed while the content around it moved
+    /// Counts for every tile how often in a row it stayed while the content around it moved (a
+    /// movement too short to tell, `Configuration.overlayMinShift`, neither counts nor breaks
+    /// the row)
     private func updateOverlays() {
         let count = estimator.kinds.count
         if overlayHits.count != count {
@@ -654,6 +661,7 @@ final class OverlayTracker {
                 overlayHits[tile] = 0
             case .still, .plain:
                 let verdict = estimator.stillVerdicts[tile]
+                guard verdict == 0 || isLongEnoughToTell(tile: tile) else { continue }
                 if verdict == MotionEstimator.stillAgainstMotion {
                     overlayHits[tile] = min(200, overlayHits[tile] + 1)
                     let box = estimator.stayBoxes[tile]
@@ -663,6 +671,21 @@ final class OverlayTracker {
                 }
             }
         }
+    }
+
+    /// The movement that judged a tile (the first of this frame whose area takes it in, as
+    /// `MotionEstimator` judges them) is long enough to tell a tile that stays from one that
+    /// moved with the content (`Configuration.overlayMinShift`)
+    private func isLongEnoughToTell(tile: Int) -> Bool {
+        let size = configuration.tileSize
+        let row = tile / max(1, estimator.columns), column = tile % max(1, estimator.columns)
+        for motion in estimator.motions where !motion.area.isEmpty {
+            let area = motion.area
+            guard row >= area.y / size, row <= (area.maxY - 1) / size, column >= area.x / size,
+                  column <= (area.maxX - 1) / size else { continue }
+            return max(abs(motion.dx), abs(motion.dy)) >= configuration.overlayMinShift
+        }
+        return true
     }
 
     /// `rect` (thumbnail pixels) without what lies over the content there: cut off from the side

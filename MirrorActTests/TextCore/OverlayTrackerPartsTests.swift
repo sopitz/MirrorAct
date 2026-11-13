@@ -499,6 +499,57 @@ final class OverlayTrackerFollowingTests: XCTestCase {
         XCTAssertNotEqual(tracker.blocks.first?.id, first.id)
     }
 
+    /// A floating button learned while the page scrolled is still known when the page creeps
+    /// the last pixel or two before it rests: a paragraph read at rest whose box reaches under
+    /// the button (the recognizer's box takes in the part of the line beside it) is not drawn
+    /// over the button
+    func testAFloatingButtonIsNotForgottenAsTheScrollComesToRest() throws {
+        let screen = SyntheticScreen(seed: 6)
+        let tracker = OverlayTracker()
+        // the button, in thumbnail pixels: an outline, a plus in its middle; over the right end
+        // of the lines
+        let button = (x: 160, y: 200, side: 28)
+        func frame(offset: Int) -> LumaImage {
+            var image = screen.thumbnail(offset: offset)
+            for y in button.y..<(button.y + button.side) {
+                for x in button.x..<(button.x + button.side) {
+                    let inPlus = (abs(x - button.x - button.side / 2) < 2 && abs(y - button.y - button.side / 2) < 8)
+                        || (abs(y - button.y - button.side / 2) < 2 && abs(x - button.x - button.side / 2) < 8)
+                    let isEdge = x == button.x || y == button.y || x == button.x + button.side - 1
+                        || y == button.y + button.side - 1
+                    image[x, y] = inPlus ? 250 : (isEdge ? 20 : 90)
+                }
+            }
+            return image
+        }
+        // line 10 ends at rest with its lower part beside and under the button
+        let rest = SyntheticScreen.firstLine + 10 * SyntheticScreen.linePitch - (button.y * scale + 40)
+        // 3 thumbnail pixels a frame, then 1, then rest
+        var offsets = (0..<20).map { rest - 4 - 6 * (19 - $0) }
+        offsets += [rest - 2, rest, rest, rest]
+        var time = 0.0
+        for offset in offsets {
+            _ = tracker.advance(frame(offset: offset), scale: scale, time: time)
+            time += 1.0 / 60
+        }
+        time += 1
+        let request = try XCTUnwrap(tracker.beginRecognition(time: time))
+        let line = SyntheticScreen.block(10, offset: rest, text: "Ten")
+        let buttonRect = CGRect(x: button.x * scale, y: button.y * scale, width: button.side * scale,
+                                height: button.side * scale)
+        XCTAssertTrue(line.rect.intersects(buttonRect), "the box of the line reaches under the button")
+        tracker.finishRecognition(request, blocks: [line], time: time + 0.2)
+        for text in tracker.textsAwaitingTranslation(limit: 5, time: time + 0.2) {
+            tracker.setTranslation("T " + text, for: text)
+        }
+        let update = tracker.advance(frame(offset: rest), scale: scale, time: time + 0.3)
+        let placed = try XCTUnwrap(update.placed.first { $0.text == "T Ten" }, "the line is translated beside the button")
+        let drawn = placed.visibleRect ?? placed.rect
+        let overlap = drawn.intersection(buttonRect)
+        XCTAssertTrue(overlap.isNull || overlap.width <= Double(scale) || overlap.height <= Double(scale),
+                      "nothing is drawn over the button: \(drawn)")
+    }
+
     /// A still screen of a wireless source sends one frame: the reading is due by time alone,
     /// and once read nothing is read again
     func testStillScreenIsReadOnceWithoutFurtherFrames() throws {

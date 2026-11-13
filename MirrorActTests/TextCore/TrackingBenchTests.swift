@@ -1038,6 +1038,19 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
         XCTAssertGreaterThanOrEqual(result.score, 45)
     }
+
+    /// Seed 4 of floatingButton: the button learned while the list was dragged is still known
+    /// after the last pixel of the drag, so a paragraph read at rest beside it is not drawn over
+    /// its edge (8 misplaced frames and 60.3 when a frame that moved by a pixel cleared it)
+    func testFloatingButtonSeed4() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("floatingButton", seed: 4))
+            .run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 70)
+    }
     /// A page that springs back after a flick past its end: what a pass after the movement finds
     /// cut off is read again at rest, not drawn half-read (seeds 2 and 5 fell to 58.7 and 67.6,
     /// with 241 and 288 half-read frames, when such a pass counted as a reread)
