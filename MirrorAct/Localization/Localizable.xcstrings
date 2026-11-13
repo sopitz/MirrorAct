@@ -3117,12 +3117,54 @@
         }
       }
     },
-    "Loading %@ for translating …" : {
+    "%@ – needs Apple Intelligence" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ wird zum Übersetzen geladen …"
+            "value" : "%@ – braucht Apple Intelligence"
+          }
+        }
+      }
+    },
+    "Translating into %@ needs Apple Intelligence." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen nach %@ braucht Apple Intelligence."
+          }
+        }
+      }
+    },
+    "macOS asks whether it may download %@ and %@ – answer its question" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS fragt, ob es %1$@ und %2$@ laden darf – die Frage beantworten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "macOS asks whether it may download %1$@ and %2$@ – answer its question"
+          }
+        }
+      }
+    },
+    "Downloading %@ and %@ for translating …" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ und %2$@ werden zum Übersetzen geladen …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Downloading %1$@ and %2$@ for translating …"
           }
         }
       }
@@ -3153,6 +3195,58 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ lässt sich auf diesem Mac nicht übersetzen"
+          }
+        }
+      }
+    },
+    "Translating into %@ needs Apple Intelligence – turn it on in System Settings, or choose another language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen nach %@ braucht Apple Intelligence – in den Systemeinstellungen einschalten oder eine andere Sprache wählen"
+          }
+        }
+      }
+    },
+    "Translating into %@ needs Apple Intelligence, which this Mac doesn’t support – choose another language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen nach %@ braucht Apple Intelligence, die dieser Mac nicht unterstützt – eine andere Sprache wählen"
+          }
+        }
+      }
+    },
+    "Translating from %@ into %@ needs Apple Intelligence – turn it on in System Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen von %1$@ nach %2$@ braucht Apple Intelligence – in den Systemeinstellungen einschalten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Translating from %1$@ into %2$@ needs Apple Intelligence – turn it on in System Settings"
+          }
+        }
+      }
+    },
+    "Translating from %@ into %@ needs Apple Intelligence, which this Mac doesn’t support" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen von %1$@ nach %2$@ braucht Apple Intelligence, die dieser Mac nicht unterstützt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Translating from %1$@ into %2$@ needs Apple Intelligence, which this Mac doesn’t support"
           }
         }
       }
@@ -3207,12 +3301,12 @@
         }
       }
     },
-    "cannot be reached at %@ – allow MirrorAct under System Settings > Privacy & Security > Local Network" : {
+    "cannot be reached at %@ – check that this Mac is on the network, and allow MirrorAct under System Settings > Privacy & Security > Local Network" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ist unter %@ nicht erreichbar – MirrorAct unter Systemeinstellungen > Datenschutz & Sicherheit > Lokales Netzwerk erlauben"
+            "value" : "ist unter %@ nicht erreichbar – prüfen, ob dieser Mac mit dem Netzwerk verbunden ist, und MirrorAct unter Systemeinstellungen > Datenschutz & Sicherheit > Lokales Netzwerk erlauben"
           }
         }
       }
@@ -3323,6 +3417,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "der Dienst ist gerade ausgelastet"
+          }
+        }
+      }
+    },
+    "the model takes longer than %lld s to answer – MirrorAct asks for fewer texts at a time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "das Modell braucht länger als %lld s für eine Antwort – MirrorAct sendet weniger Texte pro Anfrage"
+          }
+        }
+      }
+    },
+    "trying again in %lld min" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nächster Versuch in %lld Min."
           }
         }
       }
@@ -3447,12 +3561,12 @@
         }
       }
     },
-    "A language model service, with your own API key" : {
+    "Language model service (own API key)" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ein Sprachmodell-Dienst, mit eigenem API-Schlüssel"
+            "value" : "Sprachmodell-Dienst (eigener API-Schlüssel)"
           }
         }
       }
@@ -3527,6 +3641,26 @@
         }
       }
     },
+    "Deployment name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereitstellungsname"
+          }
+        }
+      }
+    },
+    "Model name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modellname"
+          }
+        }
+      }
+    },
     "Models" : {
       "localizations" : {
         "de" : {
@@ -3583,6 +3717,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kein Schlüssel gesichert; dieser Dienst braucht womöglich keinen."
+          }
+        }
+      }
+    },
+    "Not saved yet: Save, Return or a Test that works replaces the stored key." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nicht gesichert: «Sichern», Return oder ein gelungenes «Testen» ersetzt den gesicherten Schlüssel."
           }
         }
       }
@@ -3683,6 +3827,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen mit %@ – der Text auf dem Bildschirm wird dorthin gesendet"
+          }
+        }
+      }
+    },
+    "Translate goes on again with the new connection – press Translate to keep it off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Übersetzen» geht mit der neuen Verbindung wieder an – «Übersetzen» drücken, damit es ausgeschaltet bleibt"
+          }
+        }
+      }
+    },
+    "Translate stays off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Übersetzen» bleibt aus"
+          }
+        }
+      }
+    },
+    "Translate is off – the new connection took too long" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Übersetzen» ist aus – die neue Verbindung hat zu lange gedauert"
           }
         }
       }
