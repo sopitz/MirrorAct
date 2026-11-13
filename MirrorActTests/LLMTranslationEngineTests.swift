@@ -664,16 +664,30 @@ final class LLMTranslationEngineTests: XCTestCase {
     }
 
     func testARedirectOnTheSameServerNamesTheAddressToEnter() async {
-        for (location, shown) in [("https://192.168.1.5/v1?token=sk-123", "https://192.168.1.5/v1"),
-                                  ("/api/v1", "http://192.168.1.5:8080/api/v1"),
-                                  ("http://other.example.com/v1", "other.example.com")] {
-            let transport = ScriptedTransport { _, _ in reply(301, "", headers: [LLMHeader("Location", location)]) }
+        // what to enter is the base address: what the request adds to it is left out
+        let cases: [(request: String, location: String, shown: String)] = [
+            ("translate", "https://192.168.1.5/v1?token=sk-123", "https://192.168.1.5/v1"),
+            ("translate", "/api/v1", "http://192.168.1.5:8080/api/v1"),
+            ("translate", "http://other.example.com/v1", "other.example.com"),
+            ("translate", "https://192.168.1.5:8080/v1/chat/completions", "https://192.168.1.5:8080/v1"),
+            ("models", "https://192.168.1.5:8080/v1/models", "https://192.168.1.5:8080/v1"),
+            ("models", "/api/v1/models", "http://192.168.1.5:8080/api/v1"),
+            ("models", "https://192.168.1.5:8080/v1", "https://192.168.1.5:8080/v1"),
+        ]
+        for test in cases {
+            let transport = ScriptedTransport { _, _ in reply(301, "", headers: [LLMHeader("Location", test.location)]) }
             let engine = makeEngine(.custom, baseURL: "http://192.168.1.5:8080/v1", model: "m", transport: transport)
-            let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
-            XCTAssertEqual(failure?.isPermanent, true)
+            let failure: TranslationFailure?
+            do {
+                if test.request == "models" { _ = try await engine.models() } else { _ = try await engine.translate(["Settings"], into: german) }
+                failure = nil
+            } catch {
+                failure = error as? TranslationFailure
+            }
+            XCTAssertEqual(failure?.isPermanent, true, test.location)
             XCTAssertEqual(failure?.message, "192.168.1.5: "
-                           + String(localized: "the service forwards the request to \(shown), which MirrorAct does not follow – check the address in the settings"),
-                           location)
+                           + String(localized: "the service forwards the request to \(test.shown), which MirrorAct does not follow – check the address in the settings"),
+                           "\(test.request) \(test.location)")
         }
     }
 

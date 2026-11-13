@@ -609,11 +609,24 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         // Another server is named by its host. On the same one (https instead of http, another
         // path) the host says nothing new: the whole address, without what may hold a key.
         let sameServer = host.lowercased() == LLMConnection.host(of: request.url).lowercased()
-        let shown = host.isEmpty || sameServer ? Self.short(LLMConnection.shown(target)) : host
+        let shown = host.isEmpty || sameServer ? Self.short(baseAddress(of: LLMConnection.shown(target), for: request)) : host
         Log.error("Translation: \(name): the request was redirected to \(host.isEmpty ? "another address" : host)")
         return TranslationFailure(message: name + ": "
                                   + String(localized: "the service forwards the request to \(shown), which MirrorAct does not follow – check the address in the settings"),
                                   isPermanent: true)
+    }
+
+    /// `target` without the path the request adds to the address of the connection
+    /// ("/models", "/chat/completions"), where it ends with it: the address to enter in the
+    /// settings. Shown with its path, "…/v1/models" would make every request go to
+    /// "…/v1/models/chat/completions".
+    private func baseAddress(of target: String, for request: LLMHTTPRequest) -> String {
+        let base = LLMConnection.shown(connection.baseURL)
+        let asked = LLMConnection.shown(request.url)
+        guard let prefix = asked.range(of: base, options: [.caseInsensitive, .anchored]), prefix.upperBound < asked.endIndex,
+              let suffix = target.range(of: asked[prefix.upperBound...], options: [.caseInsensitive, .anchored, .backwards]),
+              suffix.lowerBound > target.startIndex else { return target }
+        return String(target[..<suffix.lowerBound])
     }
 
     private func finished(_ id: UUID) {
