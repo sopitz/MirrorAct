@@ -9,8 +9,9 @@ import XCTest
 /// A debug build is fifty to a hundred times slower at this than a release build, the tracker
 /// included. `scripts/test.sh` tests a debug build, so by default the tests play only the
 /// scenarios of `quickScenarios` and leave out the self-tests of the bench that take long and
-/// the report, unless the environment asks for more. Everything, which takes several minutes:
-/// `TRACKING_ALL=1 TRACKING_SEEDS=1 scripts/test.sh TrackingBenchTests`.
+/// the report, unless the environment asks for more. Everything in a debug build, which takes
+/// close to an hour: `TRACKING_ALL=1 TRACKING_SEEDS=1 scripts/test.sh TrackingBenchTests`. A
+/// release build plays it in a few minutes (CONTRIBUTING.md, Tests, has the command).
 ///
 /// Environment (`scripts/test.sh` passes every `TRACKING_*` variable on to the tests; give paths
 /// as absolute paths):
