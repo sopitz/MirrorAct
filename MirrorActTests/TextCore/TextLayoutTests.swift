@@ -143,6 +143,25 @@ final class TextLayoutTests: XCTestCase {
         XCTAssertFalse(TextLayout.looksCutOff("une rose acamuse", width: 340, height: 26))
     }
 
+    /// Right at the bottom, under the navigation bar, Vision read the upper part of the first line
+    /// of a paragraph as garbage; there is no line of its paragraph next to it to compare with,
+    /// but near the edge of the screen a box that low is enough
+    func testALineCutOffAtTheBottomOfTheScreenNeedsNoNeighbour() {
+        let lines = [
+            line("Horario de la biblioteca", 52, 2201, 631, 56),
+            line("Is hihlintans shrn da lnn o vinrnno da niinun", 42, 2313, 972, 31),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: phone).map(\.cutOffEdges),
+                       [0, FrameMotion.top | FrameMotion.bottom])
+        // the same line in the middle of the screen is taken as it is
+        let moved = lines.map { line -> RecognizedLine in
+            var line = line
+            line.rect.origin.y -= 0.4
+            return line
+        }
+        XCTAssertEqual(TextLayout.blocks(moved, imageSize: phone).map(\.cutOffEdges), [0, 0])
+    }
+
     /// The tracker is given what `blocks` makes of these lines: it asks to translate the heading,
     /// but neither the garbage nor the paragraph that goes on below the navigation bar (both are
     /// read again once all of them can be seen)

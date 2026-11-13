@@ -97,10 +97,12 @@ enum TextLayout {
     /// part that was read) when its box is lower than `partHeight` of its text size and at most
     /// `partOfNeighbour` of the box of a line right above or below it that could be the next
     /// line of its paragraph. (The low box alone does not tell: with letters of unusual widths the
-    /// text size comes out too large.) Such a line is a block of its own. When its box is even
-    /// lower than `cutOffHeight` of its text size (`looksCutOff`), the recognizer read it mostly
-    /// as garbage: it and the paragraph it would continue or that would continue it are marked as
-    /// going on beyond it (`TextBlock.cutOffEdges`).
+    /// text size comes out too large.) A line whose box is even lower than `cutOffHeight` of its
+    /// text size (`looksCutOff`) was read mostly as garbage; near the top or bottom edge of the
+    /// picture (within `edgeReach` times its text size), where bars lie, it needs no line next to
+    /// it to tell. A part of a line is a block of its own; one read as garbage and the paragraph
+    /// it would continue or that would continue it are marked as going on beyond it
+    /// (`TextBlock.cutOffEdges`).
     static func blocks(_ lines: [RecognizedLine], imageSize: CGSize) -> [TextBlock] {
         struct Open {
             var block: TextBlock
@@ -155,7 +157,12 @@ enum TextLayout {
         }
         for index in all.indices where all[index].1.isLow {
             let line = all[index].1
-            all[index].1.isPart = all.contains { _, neighbour in
+            // (near the top or bottom of the picture, where bars lie, a box low enough for garbage
+            // is cut off without a line next to it to compare)
+            let nearEdge = line.size.map { size in
+                Double(line.rect.minY) < edgeReach * size || Double(imageSize.height - line.rect.maxY) < edgeReach * size
+            } ?? false
+            all[index].1.isPart = (line.isCutOff && nearEdge) || all.contains { _, neighbour in
                 Double(line.rect.height) <= partOfNeighbour * Double(neighbour.rect.height)
                     && (adjoins(neighbour, below: line, size: neighbour.size)
                         || adjoins(line, below: neighbour, size: neighbour.size))
@@ -247,6 +254,7 @@ enum TextLayout {
     static let partHeight = 0.78
     static let partOfNeighbour = 0.75
     static let cutOffHeight = 0.62
+    static let edgeReach = 2.0
     /// `plainText`: the status bar lies in this top share of the picture; a line within this share
     /// of the top or bottom edge is cut off there
     static let statusBarShare = 0.04
