@@ -93,8 +93,12 @@ struct BlockColors: Equatable {
             farthest = max(farthest, distance(pixel, background))
         }
         guard farthest >= 96 else { return (backgroundIndices, nil) }
-        // the core of the strokes; pixels on their edges are mixtures with the background
-        return (backgroundIndices, pixels.indices.filter { distance(pixels[$0], background) * 10 >= farthest * 7 })
+        // The core of the strokes: the pixels at least 85 % of the way from the background to the
+        // farthest one. Pixels on the edges of the strokes are mixtures with the background, and
+        // in small or thin text most pixels of a stroke are edges: from 70 % of the way, the text
+        // color came out 3 to 5 % of the contrast lighter than the strokes on Android screens.
+        // Measured against the farthest pixel of the same block, a gray text stays gray.
+        return (backgroundIndices, pixels.indices.filter { distance(pixels[$0], background) * 20 >= farthest * 17 })
     }
 
     private static func bin(_ color: RGBColor) -> Int {

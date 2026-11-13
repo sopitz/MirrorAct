@@ -13,6 +13,36 @@ final class YCbCrColorTests: XCTestCase {
         XCTAssertEqual(YCbCrColor(y: 126, cb: 128, cr: 128).rgb(fullRange: false), RGBColor(red: 128, green: 128, blue: 128))
     }
 
+    /// Thin strokes: most of their pixels are mixtures with the background. The text color is
+    /// that of their core, not a mean that the edges make lighter; and a gray text stays gray.
+    func testTheTextColorIsThatOfTheCoreOfTheStrokes() {
+        let paper = YCbCrColor(y: 222, cb: 129, cr: 127)
+        func block(core: YCbCrColor, coreCount: Int, edgeShare: Double, edgeCount: Int) -> BlockColors {
+            // the edges lie 75 % of the way from the background to the core
+            let edge = YCbCrColor(y: UInt8((Double(paper.y) + (Double(core.y) - Double(paper.y)) * edgeShare).rounded()),
+                                  cb: core.cb, cr: core.cr)
+            let samples = [YCbCrColor](repeating: paper, count: 300) + [YCbCrColor](repeating: core, count: coreCount)
+                + [YCbCrColor](repeating: edge, count: edgeCount)
+            return BlockColors.estimate(samples: samples, fullRange: false)
+        }
+        // dark text: 10 samples in the cores, 30 on the edges (a summary 36 pixels high)
+        let ink = YCbCrColor(y: 40, cb: 129, cr: 127)
+        let thin = block(core: ink, coreCount: 10, edgeShare: 0.75, edgeCount: 30)
+        XCTAssertEqual(thin.foregroundInVideo, VideoColor(color: ink, fullRange: false),
+                       "the edges must not make the text lighter")
+        XCTAssertEqual(thin.foreground, ink.rgb(fullRange: false))
+        // a gray summary is not made darker than its strokes
+        let gray = YCbCrColor(y: 95, cb: 130, cr: 125)
+        let summary = block(core: gray, coreCount: 10, edgeShare: 0.75, edgeCount: 30)
+        XCTAssertEqual(summary.foregroundInVideo, VideoColor(color: gray, fullRange: false))
+        // light text on a dark background: its lightest part
+        let night = YCbCrColor(y: 30, cb: 128, cr: 128), white = YCbCrColor(y: 225, cb: 128, cr: 128)
+        let samples = [YCbCrColor](repeating: night, count: 300) + [YCbCrColor](repeating: white, count: 8)
+            + [YCbCrColor](repeating: YCbCrColor(y: 176, cb: 128, cr: 128), count: 30)
+        XCTAssertEqual(BlockColors.estimate(samples: samples, fullRange: false).foregroundInVideo,
+                       VideoColor(color: white, fullRange: false))
+    }
+
     func testSaturatedColors() {
         // BT.709: pure blue has little brightness and the largest blue difference
         let blue = YCbCrColor(RGBColor(red: 0, green: 0, blue: 255), fullRange: false)
