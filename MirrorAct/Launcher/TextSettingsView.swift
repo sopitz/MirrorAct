@@ -430,13 +430,20 @@ extension TextSettingsView {
 
         // MARK: The key
 
-        /// Save, and Return in the key field
+        /// Save, and Return in the key field. An empty field saves nothing, like the disabled Save
+        /// button: storing an empty key removes the stored one, which may exist nowhere else.
         func saveEnteredKey() {
+            guard !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             storeKey(enteredKey)
         }
 
+        /// Removes the stored key. A key that is typed and not saved stays in the field: with no
+        /// key stored, dropping it would lose it without a word.
         func removeKey() {
+            guard hasStoredKey else { return }
+            let typed = enteredKey
             storeKey(nil)
+            enteredKey = typed
         }
 
         private func refreshKeyState() {

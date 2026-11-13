@@ -286,6 +286,127 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertEqual(page.modelsProblem, missing)
     }
 
+    // MARK: Every way to store or remove a key
+
+    /// What the user can do on the page that may store, replace or remove a key
+    private enum KeyAction: String, CaseIterable {
+        case save = "Save", pressReturn = "Return", remove = "Remove"
+        case testThatWorks = "a Test that works", testThatFails = "a Test that fails"
+        case listThatLoads = "Load the list, which works", listThatFails = "Load the list, which fails"
+        case otherService = "another service", pageCloses = "the page closing"
+        case windowNoLongerKey = "the window no longer key"
+    }
+
+    /// What the key field holds before the action
+    private enum KeyField: String, CaseIterable {
+        case empty, blank, filled
+
+        var text: String {
+            switch self {
+            case .empty: return ""
+            case .blank: return "   "
+            case .filled: return "sk-typed"
+            }
+        }
+    }
+
+    /// What the key store must hold for the service after `action`. A stored key changes only
+    /// when the user asks for it (Save or Return with a key in the field, Remove) or when a Test,
+    /// a real request that needs the key, worked with the typed key. Load the list proves nothing:
+    /// some services list their models to anyone. A typed key goes where no key is stored yet
+    /// when the page or the service changes or the list loaded, so that it is not lost.
+    private static func keyAfter(_ action: KeyAction, stored: String?, content: KeyField) -> String? {
+        let typed = content == .filled ? content.text : nil
+        switch action {
+        case .save, .pressReturn, .testThatWorks: return typed ?? stored
+        case .remove: return nil
+        case .testThatFails, .listThatFails, .windowNoLongerKey: return stored
+        case .listThatLoads, .otherService, .pageCloses: return stored ?? typed
+        }
+    }
+
+    func testEveryWayToStoreOrRemoveAKey() throws {
+        for action in KeyAction.allCases {
+            for stored in ["sk-stored", nil] as [String?] {
+                for content in KeyField.allCases {
+                    try checkKey(after: action, stored: stored, content: content)
+                }
+            }
+        }
+    }
+
+    private func checkKey(after action: KeyAction, stored: String?, content: KeyField) throws {
+        let openAI = LLMProvider.openAI.id
+        let label = "\(action.rawValue) with \(stored == nil ? "no key" : "a key") stored and a field that is \(content)"
+        settings.llmProvider = openAI
+        keysThere = stored.map { [openAI: $0] } ?? [:]
+        storedKeys = []
+        switch action {
+        case .testThatWorks:
+            serviceAnswer = Self.chatReply("Hallo")
+        case .listThatLoads:
+            serviceAnswer = (200, [LLMHeader("Content-Type", "application/json")],
+                             Data(#"{"object":"list","data":[{"id":"gpt-6-luna"}]}"#.utf8))
+        case .testThatFails, .listThatFails:
+            serviceAnswer = (401, [LLMHeader("Content-Type", "application/json")],
+                             Data(#"{"error":{"message":"Incorrect API key provided"}}"#.utf8))
+        default:
+            serviceAnswer = nil
+        }
+        let view = try showPage()
+        defer {
+            window?.contentView = nil
+            window?.close()
+            window = nil
+            spin()
+        }
+        let keyField = try field(at: 1, in: view)
+        XCTAssertTrue(keyField is NSSecureTextField, label)
+        if content != .empty {
+            type(content.text, into: keyField)
+        }
+        XCTAssertEqual(page.enteredKey, content.text, label)
+
+        switch action {
+        case .save:
+            page.saveEnteredKey()
+        case .pressReturn:
+            window?.makeFirstResponder(keyField)
+            spin()
+            pressReturn(in: keyField)
+        case .remove:
+            page.removeKey()
+        case .testThatWorks, .testThatFails:
+            page.runTest()
+            XCTAssertTrue(waitUntil { !self.page.isTesting }, label)
+        case .listThatLoads, .listThatFails:
+            page.loadModels()
+            XCTAssertTrue(waitUntil { !self.page.isLoadingModels }, label)
+        case .otherService:
+            page.selectProvider(LLMProvider.anthropic.id)
+        case .pageCloses:
+            closePage()
+        case .windowNoLongerKey:
+            NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        }
+
+        let expected = Self.keyAfter(action, stored: stored, content: content)
+        let key = { self.keysThere[openAI] ?? nil }
+        // Return goes through the field's action; a change shows once it has come through
+        _ = waitUntil { key() == expected }
+        spin()
+        XCTAssertEqual(key(), expected, "\(label); stored: \(storedKeys)")
+        XCTAssertEqual(Set(keysThere.keys).subtracting([openAI]), [], "\(label): another service got a key")
+
+        // A typed key is never lost silently while no key is stored: it is stored, or the field
+        // still holds it. Only a stored key lets the page drop it, and says so beforehand.
+        if content == .filled, key() != content.text {
+            if stored == nil || ![.otherService, .pageCloses].contains(action) {
+                XCTAssertEqual(page.enteredKey, content.text, "\(label): the typed key was lost")
+            }
+        }
+    }
+
     // MARK: Leaving the window
 
     /// Translate in the mirror window uses what the field shows, also when the settings window
@@ -339,7 +460,9 @@ final class TextSettingsViewTests: XCTestCase {
                                              key: { [weak self] in self?.keysThere[$0] ?? nil },
                                              set: { [weak self] key, provider in
                                                  self?.storedKeys.append((key, provider))
-                                                 self?.keysThere[provider] = key.map { .some($0) }
+                                                 // like the keychain: trimmed, and an empty key removes
+                                                 let key = key?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                                 self?.keysThere[provider] = key.isEmpty ? nil : .some(key)
                                                  return true
                                              })
         let answer = serviceAnswer
