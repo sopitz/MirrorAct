@@ -14,11 +14,17 @@ struct UnreadArea: Equatable {
         /// came into view while content scrolled: read at once when it can hold a line
         case strip
         /// a block was cut off at an edge, or two blocks may be one paragraph: read once all of
-        /// it can be seen, or once the picture rests
+        /// it can be seen, or else once its scrolling area has rested for `restDelay` (only when
+        /// it was asked for before that: one asked for while the area rests already waits for
+        /// its next movement and the rest after it, `ReadingPlan.dueAtRest`)
         case reread
-        /// was read while it moved fast (the link loses detail then): read again once it rests
+        /// was read while it moved fast (the link loses detail then), or not found again while it
+        /// moved: read again once all that moves over or under it rests
         case confirm
-        /// where a paragraph may go on: read once the picture rests, if nothing read it before
+        /// where a paragraph may go on: read once its scrolling area has not moved up or down for
+        /// `restDelay`, if nothing read it before – when it was asked for before that rest began;
+        /// asked for while the area rests already, it waits for its next movement and the rest
+        /// after it (`ReadingPlan.dueAtRest`)
         case rest
     }
 
@@ -272,8 +278,9 @@ final class ReadingPlan {
         return areaMotion(area.areaID, area.rect, vertically)
     }
 
-    /// Once the picture has rested for `restDelay`; once for each time it comes to rest: an area
-    /// that was asked for while it rested waits for the next movement
+    /// Once what the place lies in (`lastMotion`: its scrolling area, or the content near it) has
+    /// rested for `restDelay`; once for each time it comes to rest: a place asked for after that
+    /// rest began (while it rests already) is not due before the next movement, nil until then
     private func dueAtRest(_ area: UnreadArea, lastMotion: TimeInterval) -> TimeInterval? {
         let rest = lastMotion + configuration.restDelay
         return area.since <= rest ? max(area.since, rest) : nil

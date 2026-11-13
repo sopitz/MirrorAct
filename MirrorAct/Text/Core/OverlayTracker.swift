@@ -222,9 +222,12 @@ final class OverlayTracker {
         var thinStripDelay: TimeInterval = 0.04
         /// what was read while moving fast is read again this long after it stopped
         var confirmDelay: TimeInterval = 0.25
-        /// the picture rests this long after it last moved: what is read then stays as it is.
-        /// Places that could not be seen completely while it moved are read once it rests, and
-        /// text at an edge of the view is taken as far as it shows.
+        /// a scrolling area rests this long after its content last moved (a place outside of every
+        /// area: after the content near it last moved): what is read then stays as it is. Places
+        /// that could not be seen completely while it moved, and where a paragraph may go on, are
+        /// read once it has rested this long – when they were asked for before that; one asked
+        /// for while it rests already is read after its next movement, once it rests again
+        /// (`ReadingPlan.dueAtRest`). Text at an edge of the view is taken as far as it shows.
         var restDelay: TimeInterval = 0.3
         /// Rest is decided for each scrolling area (a ticker beside a page does not keep the page
         /// from resting). A movement is up or down (`isVertical`) when it moves by at least this
