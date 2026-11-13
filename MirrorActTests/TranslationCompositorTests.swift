@@ -712,6 +712,58 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertEqual(fitting.lines.joined(), sentence)
     }
 
+    /// The line that ends with an ellipsis is set in the direction of its paragraph, also when
+    /// it starts with a word of the other direction: in Arabic it stays at the right with the
+    /// ellipsis at its left end, in English at the left with the ellipsis at its right end.
+    func testTheEllipsisLineKeepsTheDirectionOfItsParagraph() throws {
+        /// The first mask of the text, of the widths tried, whose last line starts with `word`
+        func mask(_ text: String, lastLineStartingWith word: String, language: String) throws -> BlockTextMask {
+            for width in 120...420 {
+                guard let mask = BlockTextMask(text: text, width: width, height: 30, lineCount: 1, language: language),
+                      !mask.fits, mask.lines.count >= 2, mask.lines.last?.hasPrefix(word) == true else { continue }
+                return mask
+            }
+            throw XCTSkip("no width puts \(word) at the start of the last line")
+        }
+        /// The columns of the last line with ink, and how many rows the ink of its first and of
+        /// its last 3 columns spans: an ellipsis is a row of dots, lower than any letter
+        func lastLine(of mask: BlockTextMask) throws -> (minX: Int, maxX: Int, leftHeight: Int, rightHeight: Int) {
+            let rows = (0..<mask.height).filter { y in (0..<mask.width).contains { mask.pixels[y * mask.width + $0] > 64 } }
+            // the rows of the last line: those after the last empty row between two lines of ink
+            let gap = try XCTUnwrap(rows.indices.dropFirst().last { rows[$0] > rows[$0 - 1] + 1 }, "\(mask.lines)")
+            let lineRows = rows[gap...]
+            let columns = (0..<mask.width).filter { x in lineRows.contains { mask.pixels[$0 * mask.width + x] > 64 } }
+            let minX = try XCTUnwrap(columns.first), maxX = try XCTUnwrap(columns.last)
+            func height(_ xs: ClosedRange<Int>) -> Int {
+                let inked = lineRows.filter { y in xs.contains { mask.pixels[y * mask.width + $0] > 64 } }
+                return (inked.last ?? 0) - (inked.first ?? 0) + 1
+            }
+            return (minX, maxX, height(minX...minX + 2), height(maxX - 2...maxX))
+        }
+
+        let arabic = String(repeating: "مرحبا بك في التطبيق الجديد الذي يعرض شاشة iPhone ويترجم كل النصوص التي تظهر عليها ", count: 3)
+        let rightToLeft = try mask(arabic, lastLineStartingWith: "iPhone", language: "ar")
+        let right = try lastLine(of: rightToLeft)
+        let dots = Int((rightToLeft.fontSize * 0.3).rounded(.up))
+        XCTAssertGreaterThan(right.maxX, rightToLeft.width - 6, "flush right: \(rightToLeft.lines)")
+        // read first, "iPhone" stands at the right; the ellipsis ends the line at the left
+        XCTAssertLessThanOrEqual(right.leftHeight, dots, "\(rightToLeft.lines)")
+        XCTAssertGreaterThan(right.rightHeight, dots, "\(rightToLeft.lines)")
+
+        let english = String(repeating: "MirrorAct shows the screen of the phone and the words שלום עולם and translates all of it ", count: 3)
+        let leftToRight = try mask(english, lastLineStartingWith: "שלום", language: "en")
+        let left = try lastLine(of: leftToRight)
+        XCTAssertLessThan(left.minX, 4, "flush left: \(leftToRight.lines)")
+        XCTAssertLessThanOrEqual(left.rightHeight, dots, "\(leftToRight.lines)")
+        XCTAssertGreaterThan(left.leftHeight, dots, "\(leftToRight.lines)")
+
+        // the direction of a paragraph is that of its first letter; digits and punctuation have none
+        for (text, rightToLeft) in [("iPhone مرحبا", false), ("مرحبا iPhone", true), ("« 123 שלום »", true),
+                                    ("12:30 Uhr", false), ("…", false), ("\u{200F}iPhone", true), ("日本語 עברית", false)] {
+            XCTAssertEqual(BlockTextMask.isRightToLeft(text), rightToLeft, text)
+        }
+    }
+
     /// A piece of a paragraph that is also known as a block of its own (read once whole, once
     /// in pieces) would cover the lines of the paragraph's translation with its box. A block
     /// that lies within a larger one is left out; blocks that merely touch are both drawn.

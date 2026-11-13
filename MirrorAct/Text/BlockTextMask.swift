@@ -49,6 +49,7 @@ struct BlockTextMask {
         let largest = max(1, lineHeight * BlockTextMask.largestFontShare)
         let smallest = min(largest, max(lineHeight * BlockTextMask.smallestFontShare, BlockTextMask.smallestFontSize))
         let lineEnds = BlockTextMask.wordKeepingLineEnds(in: text, language: language)
+        let rightToLeft = BlockTextMask.isRightToLeft(text)
 
         // The largest font that fits: usually the first one tried. Otherwise halve the range
         // between a size that fits and one that does not (see `largest`).
@@ -57,7 +58,8 @@ struct BlockTextMask {
         // at which the lines fit the block and no more words are broken than at the smallest
         // size: so that it is no smaller than it has to be, and breaks no word it need not.
         func set(_ fontSize: CGFloat) -> Layout {
-            Layout(text, fontSize: fontSize, in: box, lineHeight: lineHeight, lineEnds: lineEnds, language: language)
+            Layout(text, fontSize: fontSize, in: box, lineHeight: lineHeight, lineEnds: lineEnds,
+                   rightToLeft: rightToLeft, language: language)
         }
         let first = set(largest)
         var layout = first
@@ -118,6 +120,8 @@ struct BlockTextMask {
         let framesetter: CTFramesetter
         /// where a line may end without breaking a word (see `wordKeepingLineEnds`)
         let lineEnds: Set<Int>
+        /// the direction of the paragraph (see `isRightToLeft`)
+        let rightToLeft: Bool
         /// what the text needs when it is broken into lines of the width of the block
         let size: CGSize
         /// all lines fit into the block
@@ -128,18 +132,29 @@ struct BlockTextMask {
         var fits: Bool { fitsBox && brokenWords == 0 }
 
         /// `lineEnds`: where a line may end without breaking a word, in UTF-16 units as Core
-        /// Text counts its ranges (see `wordKeepingLineEnds`)
+        /// Text counts its ranges (see `wordKeepingLineEnds`); `rightToLeft`: the direction of the paragraph
         init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat, lineEnds: Set<Int>,
-             language: String?) {
+             rightToLeft: Bool, language: String?) {
             // The language picks the fonts for the characters the system font does not have
             // (Hiragino for Japanese, PingFang SC or TC for Chinese) and their local forms.
             let font = CTFontCreateUIFontForLanguage(.system, fontSize, language as CFString?)
                 ?? CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
-            // White, because the picture is a mask. No paragraph style: the defaults are what
-            // is wanted, lines broken between words and aligned at the side the script starts from.
+            // The direction of the paragraph is given, not left to Core Text: a line set on its
+            // own (the one that ends with an ellipsis) would otherwise take the direction of its
+            // own first letter, and an Arabic line that starts with "iPhone" would be set from
+            // the left. Otherwise the defaults: lines broken between words and aligned at the
+            // side the paragraph starts from.
+            let direction = rightToLeft ? CTWritingDirection.rightToLeft : .leftToRight
+            let paragraph = withUnsafePointer(to: direction) { value in
+                var setting = CTParagraphStyleSetting(spec: .baseWritingDirection,
+                                                      valueSize: MemoryLayout<CTWritingDirection>.size, value: value)
+                return CTParagraphStyleCreate(&setting, 1)
+            }
+            // white, because the picture is a mask
             var attributes: [NSAttributedString.Key: Any] = [
                 NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font,
                 NSAttributedString.Key(rawValue: kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
+                NSAttributedString.Key(rawValue: kCTParagraphStyleAttributeName as String): paragraph,
             ]
             if let language {
                 attributes[NSAttributedString.Key(rawValue: kCTLanguageAttributeName as String)] = language
@@ -158,6 +173,7 @@ struct BlockTextMask {
             self.string = string
             self.framesetter = framesetter
             self.lineEnds = lineEnds
+            self.rightToLeft = rightToLeft
             self.size = size
             fitsBox = size.height <= box.height + slack && size.width <= box.width + 0.5
             // A word wider than the block is broken by Core Text between two letters, without
@@ -217,6 +233,38 @@ struct BlockTextMask {
         }
         return ends
     }
+
+    /// Whether a paragraph is written from the right: its first letter of a definite direction
+    /// is one of a script written from the right (Arabic, Hebrew and the like). Digits, marks,
+    /// spaces and punctuation have no direction of their own and are passed over; a text
+    /// without any letter is written from the left. This is the rule by which Core Text finds
+    /// the direction of a paragraph itself (Unicode's bidirectional algorithm, P2 and P3).
+    static func isRightToLeft(_ text: String) -> Bool {
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 0x200E: return false // left-to-right mark
+            case 0x200F: return true // right-to-left mark
+            default: break
+            }
+            let letter: Bool
+            switch scalar.properties.generalCategory {
+            case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter: letter = true
+            default: letter = false
+            }
+            guard letter else { continue }
+            return scriptsFromTheRight.contains { $0.contains(scalar.value) }
+        }
+        return false
+    }
+
+    /// The blocks of the scripts that are written from the right
+    private static let scriptsFromTheRight: [ClosedRange<UInt32>] = [
+        0x0590...0x08FF,   // Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan, Mandaic and Arabic extensions
+        0xFB1D...0xFDFF,   // Hebrew and Arabic presentation forms
+        0xFE70...0xFEFF,   // Arabic presentation forms B
+        0x10800...0x10FFF, // Phoenician, Aramaic, Kharoshthi, Avestan, Old Turkic, Hanifi Rohingya, Yezidi …
+        0x1E800...0x1EFFF, // Mende Kikakui, Adlam, Arabic mathematical letters
+    ]
 
     /// The blocks of the scripts that are written without spaces between words, or (Korean)
     /// that may be broken between any two syllables
@@ -297,13 +345,8 @@ struct BlockTextMask {
             // to go on instead of just stopping in the middle of a sentence
             var origins = [CGPoint](repeating: .zero, count: lines.count)
             CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
-            // A line of a text written from the right stays aligned at the right
-            let lastRun = (CTLineGetGlyphRuns(last) as? [CTRun])?.first {
-                let range = CTRunGetStringRange($0)
-                return range.location <= CTLineGetStringRange(last).location
-                    && CTLineGetStringRange(last).location < range.location + range.length
-            }
-            if origins[lines.count - 1].x > 0.5 || lastRun.map({ CTRunGetStatus($0).contains(.rightToLeft) }) == true {
+            // A line of a paragraph written from the right stays aligned at the right
+            if layout.rightToLeft {
                 origins[lines.count - 1].x = CGFloat(CTLineGetPenOffsetForFlush(ending.line, 1, Double(width)))
             }
             lines[lines.count - 1] = ending.line
