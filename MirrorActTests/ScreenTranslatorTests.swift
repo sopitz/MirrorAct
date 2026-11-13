@@ -223,6 +223,40 @@ final class ScreenTranslatorTests: XCTestCase {
         XCTAssertEqual(MirrorSession.statusBar(of: .wireless), .heightOfPicture)
     }
 
+    /// Android's settings in landscape: the icon of "Verbundene Geräte" read as "LoD" (a band of
+    /// the picture read alone) is not sent, so no translation is drawn over the icon; its row is
+    func testTheIconOfASettingsRowIsNotTranslated() throws {
+        let landscape = CGSize(width: 2400, height: 1080)
+        let lines = [("LoD", 105.0, 471.0, 63.0, 38.0), ("Verbundene Geräte", 206.0, 437.0, 460.0, 49.0),
+                     ("Bluetooth, Kopplung", 209.0, 505.0, 328.0, 42.0)].map { text, x, y, w, h in
+            RecognizedLine(text: text, rect: CGRect(x: x / landscape.width, y: y / landscape.height,
+                                                    width: w / landscape.width, height: h / landscape.height))
+        }
+        let frame = try TestFrames.blank(width: 2400, height: 1080, format: kCVPixelFormatType_32BGRA)
+        XCTAssertEqual(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: [], statusBar: .longerSide)
+            .map(\.text), ["Verbundene Geräte", "Bluetooth, Kopplung"])
+        // Text copies it: it keeps what could be a real short word there
+        XCTAssertTrue(TextLayout.plainText(lines, imageSize: landscape, statusBar: .longerSide)
+            .components(separatedBy: "\n").contains("LoD"))
+    }
+
+    /// The stated limit of Translate: a weekday centred before two opening times (Vision's boxes on
+    /// a rendered page of 1080 × 2400) is taken for the icon of a row and stays untranslated. Text
+    /// copies it.
+    func testAWeekdayBeforeTwoOpeningTimesIsCopiedButNotTranslated() throws {
+        let phone = CGSize(width: 1080, height: 2400)
+        let lines = [("Mo", 56.0, 1266.0, 70.0, 49.0), ("09:00 - 12:00", 212.0, 1234.0, 293.0, 61.0),
+                     ("14:00 - 18:00", 216.0, 1289.0, 227.0, 48.0)].map { text, x, y, w, h in
+            RecognizedLine(text: text, rect: CGRect(x: x / phone.width, y: y / phone.height,
+                                                    width: w / phone.width, height: h / phone.height))
+        }
+        let frame = try TestFrames.blank(width: 1080, height: 2400, format: kCVPixelFormatType_32BGRA)
+        XCTAssertFalse(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: [], statusBar: .longerSide)
+            .contains { $0.text.contains("Mo") })
+        XCTAssertTrue(TextLayout.plainText(lines, imageSize: phone, statusBar: .longerSide)
+            .components(separatedBy: "\n").contains("Mo"))
+    }
+
     func testWithoutAFrameTranslateDoesNotStart() {
         var messages: [String] = []
         translator.onMessage = { messages.append($0) }

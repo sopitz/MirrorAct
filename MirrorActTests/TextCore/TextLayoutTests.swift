@@ -239,6 +239,152 @@ final class TextLayoutTests: XCTestCase {
         ].joined(separator: "\n"))
     }
 
+    // MARK: Icons of rows
+
+    /// Android's settings, light theme: the icons of "Verbundene Geräte", "Apps" and "Ton &
+    /// Vibration" read as "Cou", "::" and "+)", each centred between the title and the line
+    /// below it. They are not translated; the rows are (Text copies them:
+    /// `testIconsOfRowsOfTwoLinesAreCopied`).
+    func testIconsOfRowsOfTwoLinesAreNotTranslated() {
+        let lines = [
+            line("Verbundene Geräte", 202, 823, 453, 49),
+            RecognizedLine(text: "Cou", rect: CGRect(x: 105 / phone.width, y: 848 / phone.height,
+                                                     width: 63 / phone.width, height: 49 / phone.height), confidence: 0.3),
+            line("Bluetooth, Kopplung", 206, 893, 331, 42),
+            line("Apps", 206, 1074, 125, 52),
+            line("::", 105, 1116, 56, 49),
+            line("Assistant, kürzlich geöffnete Apps,", 206, 1141, 575, 42),
+            line("Ton & Vibration", 209, 1528, 362, 49),
+            line("+)", 108, 1552, 59, 45),
+            line("Lautstärke und Haptik", 202, 1598, 369, 38),
+        ]
+        let rows = ["Verbundene Geräte", "Bluetooth, Kopplung", "Apps", "Assistant, kürzlich geöffnete Apps,",
+                    "Ton & Vibration", "Lautstärke und Haptik"]
+        XCTAssertEqual(TextLayout.content(lines, imageSize: phone, for: .translating).map(\.text), rows)
+        let blocks = TextLayout.blocks(TextLayout.content(lines, imageSize: phone, for: .translating), imageSize: phone)
+        XCTAssertFalse(blocks.contains { $0.text.contains("Cou") })
+        // the key of the VPN row read as "OT" (a region of the picture read alone), at font scale 1
+        let vpn = [line("OT", 68, 1600, 54, 32), line("VPN", 190, 1570, 106, 42), line("Kein VPN", 192, 1636, 154, 30)]
+        XCTAssertEqual(TextLayout.content(vpn, imageSize: phone, for: .translating).map(\.text), ["VPN", "Kein VPN"])
+        // font scale 1.3: the icon of "Netzwerk & Internet" read as "の"
+        let network = [line("Netzwerk & Internet", 212, 638, 546, 77), line("の", 98, 673, 80, 77),
+                       line("Mobile Daten, WLAN, Hotspot", 213, 729, 648, 52)]
+        XCTAssertEqual(TextLayout.content(network, imageSize: phone, for: .translating).map(\.text),
+                       ["Netzwerk & Internet", "Mobile Daten, WLAN, Hotspot"])
+    }
+
+    /// The same row written from the right: the icon stands right of the two lines
+    func testTheIconOfARowWrittenFromTheRightIsNotTranslated() {
+        let lines = [
+            line("الأجهزة المتصلة", 425, 823, 453, 49),
+            line("Cou", 912, 848, 63, 49),
+            line("البلوتوث والإقران", 543, 893, 331, 42),
+        ]
+        XCTAssertEqual(TextLayout.content(lines, imageSize: phone, for: .translating).map(\.text),
+                       ["الأجهزة المتصلة", "البلوتوث والإقران"])
+    }
+
+    /// Text keeps what Translate leaves out as icons of rows: a short word or initials centred
+    /// before a row of two lines are real text, and nothing in the lines tells them from an icon.
+    /// The lines are what Vision read on rendered pages of 1080 × 2400 (a weekday before two
+    /// opening times, a value in a table cell beside two lines, a city name, avatars).
+    func testShortWordsCentredBeforeRowsOfTwoLinesAreCopied() {
+        let hours = [line("Mo", 56, 1266, 70, 49), line("09:00 - 12:00", 212, 1234, 293, 61),
+                     line("14:00 - 18:00", 216, 1289, 227, 48)]
+        let cell = [line("Ja", 49, 1057, 63, 52), line("Kostenlose Lieferung", 216, 1033, 415, 52),
+                    line("ab 30 € Bestellwert", 213, 1081, 314, 49)]
+        let city = [line("東京", 59, 1472, 87, 45), line("晴れのち曇り", 216, 1444, 262, 57),
+                    line("最高気温 15度", 219, 1500, 219, 45)]
+        let avatars = [line("AB", 84, 230, 63, 45), line("Anna Berger", 219, 206, 251, 53),
+                       line("Bis morgen um acht!", 219, 265, 317, 38),
+                       line("JK", 77, 645, 70, 42), line("Jonas Keller", 216, 618, 245, 50),
+                       line("Danke, hat geklappt", 219, 677, 307, 45)]
+        for (lines, word) in [(hours, "Mo"), (cell, "Ja"), (city, "東京"), (avatars, "AB"), (avatars, "JK")] {
+            XCTAssertTrue(TextLayout.plainText(lines, imageSize: phone).components(separatedBy: "\n").contains(word), word)
+            XCTAssertTrue(TextLayout.content(lines, imageSize: phone).map(\.text).contains(word), word)
+            // the stated limit of Translate: such a word stays untranslated
+            XCTAssertFalse(TextLayout.content(lines, imageSize: phone, for: .translating).map(\.text).contains(word), word)
+        }
+    }
+
+    /// The accepted limit of Text: the icon of a row of two lines read as characters is copied as a
+    /// stray line, so that no real short word in the same place is lost. Android's settings: the
+    /// Google row (dark theme) with its icon read as "G", and "Ton & Vibration" with "+)".
+    func testIconsOfRowsOfTwoLinesAreCopied() {
+        let lines = [
+            line("Google", 209, 369, 171, 61), line("G", 108, 391, 56, 59), line("Services & preferences", 206, 440, 383, 42),
+            line("Ton & Vibration", 209, 1528, 362, 49), line("+)", 108, 1552, 59, 45),
+            line("Lautstärke und Haptik", 202, 1598, 369, 38),
+        ]
+        let copied = TextLayout.plainText(lines, imageSize: phone).components(separatedBy: "\n")
+        XCTAssertTrue(copied.contains("G"))
+        XCTAssertTrue(copied.contains("+)"))
+        XCTAssertEqual(TextLayout.content(lines, imageSize: phone).count, lines.count)
+        XCTAssertEqual(TextLayout.content(lines, imageSize: phone, for: .translating).map(\.text),
+                       ["Google", "Services & preferences", "Ton & Vibration", "Lautstärke und Haptik"])
+    }
+
+    /// Short words set apart before their text, in a column, stay: their middle is that of their
+    /// line, moved by descenders or capitals at most a quarter of the line ("go" 0.23, "x:y"
+    /// 0.25 of the lower box; Vision's boxes on Android)
+    func testShortWordsInAColumnAreContent() {
+        let lines = [
+            line("Zahnarzt um zehn Uhr", 174, 1577, 484, 49), line("Mo", 45, 1577, 80, 49),
+            line("Abendessen mit Anna", 188, 1685, 463, 49), line("Fr", 52, 1688, 49, 45),
+            line("Kaffee für das Büro", 188, 1797, 411, 49), line("5", 49, 1800, 31, 42),
+            line("Milch und Eier", 188, 1908, 303, 45), line("2x", 49, 1908, 59, 49),
+            line("Gegensatz zu gestern", 188, 2131, 456, 53), line("Im", 49, 2131, 63, 42),
+        ]
+        XCTAssertEqual(TextLayout.content(lines, imageSize: phone, for: .translating).count, lines.count)
+        let tight = [
+            line("Anna", 167, 1797, 125, 45), line("by", 35, 1797, 70, 59),
+            line("Weiter", 174, 1876, 157, 54), line("go", 35, 1887, 73, 56),
+            line("Name", 188, 1964, 143, 50), line("my", 38, 1974, 80, 45),
+        ]
+        XCTAssertEqual(TextLayout.content(tight, imageSize: phone, for: .translating).count, tight.count)
+        let low = [line("Verhältnis", 139, 358, 255, 55), line("x:y", 38, 373, 73, 49),
+                   line("$5k", 42, 447, 94, 52), line("Budget", 164, 450, 188, 52)]
+        XCTAssertEqual(TextLayout.content(low, imageSize: phone, for: .translating).count, low.count)
+    }
+
+    /// A value right of a row of two lines (written from the left) and a short word before the
+    /// first line of an item of two lines stay
+    func testValuesAndWordsBesideRowsOfTwoLinesAreContent() {
+        let value = [
+            line("Speicher", 206, 1319, 244, 50), line("45 % belegt", 206, 1385, 300, 42),
+            line("2 GB", 900, 1352, 110, 45),
+        ]
+        XCTAssertEqual(TextLayout.content(value, imageSize: phone, for: .translating).count, 3)
+        let item = [
+            line("Mo", 45, 1577, 80, 49), line("Zahnarzt um zehn Uhr, danach zur", 174, 1577, 700, 49),
+            line("Apotheke am Markt", 174, 1640, 400, 49),
+        ]
+        XCTAssertEqual(TextLayout.content(item, imageSize: phone, for: .translating).count, 3)
+    }
+
+    /// Numbers centred before a row of two lines (a chart, a value, a shopping list) are content
+    func testNumbersBeforeRowsOfTwoLinesAreContent() {
+        let lines = [
+            line("1", 56, 230, 28, 45), line("Blinding Lights", 216, 197, 297, 67), line("The Weeknd", 216, 254, 203, 48),
+            line("2", 56, 433, 38, 52), line("Flowers", 209, 407, 168, 55), line("Miley Cyrus", 216, 466, 189, 45),
+            line("12°", 52, 1206, 181, 98), line("Bewölkt", 366, 1202, 167, 56), line("H15° T8°", 365, 1256, 179, 46),
+            line("83 %", 59, 1422, 202, 77), line("Akku", 362, 1411, 112, 53), line("Noch etwa 1 Tag", 366, 1463, 258, 51),
+            line("2x", 52, 1645, 63, 49), line("Milch", 216, 1617, 115, 49), line("1,5 % Fett, 1 Liter", 216, 1673, 268, 46),
+            line("1 EL", 48, 1847, 95, 54), line("Olivenöl", 205, 1822, 182, 58), line("extra vergine", 216, 1877, 206, 49),
+        ]
+        XCTAssertEqual(TextLayout.content(lines, imageSize: phone, for: .translating).count, lines.count)
+    }
+
+    /// Only short readings, before two lines of one row, count as icons
+    func testLabelsAndWordsBeforeOtherLinesAreContent() {
+        let label = [line("Adresse", 40, 850, 170, 45), line("Hauptstraße 10", 300, 823, 330, 49), line("8001 Zürich", 300, 880, 250, 49)]
+        XCTAssertEqual(TextLayout.content(label, imageSize: phone, for: .translating).count, 3)
+        let apart = [line("Ja", 40, 900, 50, 45), line("Kostenlose Lieferung", 200, 823, 400, 49), line("ab 30 € Bestellwert", 200, 960, 330, 42)]
+        XCTAssertEqual(TextLayout.content(apart, imageSize: phone, for: .translating).count, 3)
+        let ragged = [line("Ja", 40, 852, 50, 45), line("Kostenlose Lieferung", 130, 823, 400, 49), line("ab 30 € Bestellwert", 200, 893, 330, 42)]
+        XCTAssertEqual(TextLayout.content(ragged, imageSize: phone, for: .translating).count, 3)
+    }
+
     func testOnlyTextWithLettersIsTranslated() {
         XCTAssertFalse(TextLayout.isTranslatable("9:41"))
         XCTAssertFalse(TextLayout.isTranslatable("€ 12.50"))

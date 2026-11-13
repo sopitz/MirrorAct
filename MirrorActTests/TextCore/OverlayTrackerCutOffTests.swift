@@ -49,7 +49,7 @@ final class OverlayTrackerCutOffTests: XCTestCase {
                 region.contains(CGRect(x: line.rect.minX * phone.width, y: line.rect.minY * phone.height,
                                        width: line.rect.width * phone.width, height: line.rect.height * phone.height))
             }
-            let blocks = TextLayout.blocks(TextLayout.content(inside, imageSize: phone), imageSize: phone)
+            let blocks = TextLayout.blocks(TextLayout.content(inside, imageSize: phone, for: .translating), imageSize: phone)
                 .filter { TextLayout.isTranslatable($0.text) }
                 .map { block in
                     RecognizedBlock(text: block.text, rect: CGRect(x: block.rect.minX * phone.width,

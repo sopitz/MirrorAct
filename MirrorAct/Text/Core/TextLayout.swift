@@ -68,13 +68,14 @@ enum TextLayout {
     }
 
     /// All text the way it reads when pasted somewhere: one paragraph per line (its lines on the
-    /// screen joined), in reading order. Left out: the status bar (`content`), lines cut off at
-    /// the top or bottom edge of the picture (within `screenEdgeShare` of it), and lines read as
-    /// garbage because only a part of them shows (`TextBlock.isGarbled`).
+    /// screen joined), in reading order. Left out: the status bar (`content` for `.copying`, which
+    /// keeps the icons of rows read as characters), lines cut off at the top or bottom edge of the
+    /// picture (within `screenEdgeShare` of it), and lines read as garbage because only a part of
+    /// them shows (`TextBlock.isGarbled`).
     static func plainText(_ lines: [RecognizedLine], imageSize: CGSize,
                           statusBar: StatusBar = .heightOfPicture) -> String {
         let edge = Double(imageSize.height) * screenEdgeShare
-        let kept = content(lines, imageSize: imageSize, statusBar: statusBar).filter { line in
+        let kept = content(lines, imageSize: imageSize, statusBar: statusBar, for: .copying).filter { line in
             let top = Double(line.rect.minY * imageSize.height), bottom = Double(line.rect.maxY * imageSize.height)
             return top > edge && bottom < Double(imageSize.height) - edge
         }
@@ -92,14 +93,87 @@ enum TextLayout {
         case longerSide
     }
 
-    /// The lines that show what is on the screen, for copying and for translating: all but those
-    /// of the status bar (whose box ends within the top `statusBarShare` of the picture's height,
-    /// or of its longer side for `StatusBar.longerSide`: a clock and icons, read as letters)
-    static func content(_ lines: [RecognizedLine], imageSize: CGSize,
-                        statusBar: StatusBar = .heightOfPicture) -> [RecognizedLine] {
+    /// What the lines of `content` are for. Copying and translating weigh a short reading centred
+    /// before a row of two lines differently (`isRowIcon`), because nothing in the lines tells a
+    /// real word there from an icon read as letters.
+    enum Purpose {
+        /// Text, the copy: no real text may be lost. Opening hours copied without their weekdays
+        /// are worse than a stray "G" in the copy, so the icons of rows stay.
+        case copying
+        /// Translate, what is sent and drawn: a translation drawn over an icon is worse than a
+        /// short word left untranslated, so the icons of rows are left out.
+        case translating
+    }
+
+    /// The lines that show what is on the screen: all but those of the status bar (whose box ends
+    /// within the top `statusBarShare` of the picture's height, or of its longer side for
+    /// `StatusBar.longerSide`: a clock and icons, read as letters), and for `.translating` also the
+    /// icons of rows read as characters (`isRowIcon`). `.copying`, the default, keeps those: the
+    /// icon of such a row can come along as a stray character, and no short word or initials
+    /// before a row of two lines are lost.
+    static func content(_ lines: [RecognizedLine], imageSize: CGSize, statusBar: StatusBar = .heightOfPicture,
+                        for purpose: Purpose = .copying) -> [RecognizedLine] {
         let side = statusBar == .longerSide ? max(imageSize.width, imageSize.height) : imageSize.height
         let limit = Double(side) * statusBarShare
-        return lines.filter { Double($0.rect.maxY * imageSize.height) > limit }
+        let shown = lines.filter { Double($0.rect.maxY * imageSize.height) > limit }
+        guard purpose == .translating else { return shown }
+        return shown.filter { !isRowIcon($0, among: shown, imageSize: imageSize) }
+    }
+
+    /// Whether `line` is the icon of a row of two lines (a title and a line below it, as on a
+    /// settings screen) that Vision read as a character or a few, which `content` leaves out for
+    /// `.translating` only: it holds at most `rowIconCharacters` besides spaces and no decimal
+    /// digit, and it stands before two lines that follow each other (the lower one less than `paragraphGap` of the higher box below the upper one, their leading
+    /// edges within `alignment` of the higher box) with its middle between theirs, and its middle
+    /// lies further than `rowIconOffset` of the lower box (its own or the line's) from the middle
+    /// of every line it stands before. Before means: left of them, less than `rowIconGap` of the
+    /// higher box away (boxes may overlap by `rowIconOverlap` of its height); or right of them when
+    /// they are written from right to left. An icon is centred on its row; a short word set apart
+    /// in a column ("Mo", "5", "2x") sits on the line of its text, which its descenders or capitals
+    /// move by at most about a quarter of a line. Measured with Vision on Android (settings, light
+    /// and dark, font scales 1 and 1.3, portrait and landscape; rows of 100 short first words set
+    /// 0.6 to 1.4 of their size before their text): the icons read as "Cou", "LoD", "OT", "+)",
+    /// "®", "G", "の" lay 0.35 to 0.6 of the lower box from the nearest middle, the words at most
+    /// 0.25 ("x:y", "go"). It holds no decimal digit: a number centred before a row of two lines is
+    /// a rank, a step, a quantity or a value (charts, instructions, shopping lists, a temperature);
+    /// of the icons only "4)" and "1)" were read with a digit. A short word or initials centred
+    /// before a row of two lines (a value in a table cell centred in its height, a weekday before
+    /// two opening times, "東京", the initials in an avatar) are taken for an icon too: without the
+    /// picture's pixels nothing tells them apart. So only Translate leaves them out, where such a
+    /// word stays untranslated rather than a label covering an icon; Text copies them, and with
+    /// them the icon of such a row as a stray character, rather than lose a real word.
+    static func isRowIcon(_ line: RecognizedLine, among lines: [RecognizedLine], imageSize: CGSize) -> Bool {
+        guard line.text.unicodeScalars.filter({ $0 != " " }).count <= rowIconCharacters else { return false }
+        // a number is a rank, a step, a quantity or a value set before its row, never an icon
+        guard !line.text.unicodeScalars.contains(where: { $0.properties.numericType == .decimal }) else { return false }
+        func pixels(_ rect: CGRect) -> CGRect {
+            CGRect(x: rect.minX * imageSize.width, y: rect.minY * imageSize.height,
+                   width: rect.width * imageSize.width, height: rect.height * imageSize.height)
+        }
+        let icon = pixels(line.rect)
+        guard icon.height > 0 else { return false }
+        // the lines it stands before, with whether they lie on its right
+        let column: [(rect: CGRect, onRight: Bool)] = lines.compactMap { other in
+            guard other != line else { return nil }
+            let rect = pixels(other.rect)
+            let reach = rowIconGap * max(icon.height, rect.height)
+            let onRight = rect.minX >= icon.maxX - rowIconOverlap * icon.height && rect.minX - icon.maxX < reach
+            let onLeft = isRightToLeft(other.text) && rect.maxX <= icon.minX + rowIconOverlap * icon.height
+                && icon.minX - rect.maxX < reach
+            return onRight || onLeft ? (rect, onRight) : nil
+        }
+        for side in [true, false] {
+            let beside = column.filter { $0.onRight == side }.map(\.rect)
+            let level = { (rect: CGRect) in Double(rect.midY - icon.midY) / Double(min(rect.height, icon.height)) }
+            guard !beside.contains(where: { abs(level($0)) <= rowIconOffset }),
+                  let upper = beside.filter({ level($0) < 0 }).max(by: { $0.midY < $1.midY }),
+                  let lower = beside.filter({ level($0) > 0 }).min(by: { $0.midY < $1.midY }) else { continue }
+            let higher = Double(max(upper.height, lower.height))
+            let lead = side ? abs(Double(upper.minX - lower.minX)) : abs(Double(upper.maxX - lower.maxX))
+            let gap = Double(lower.minY - upper.maxY)
+            if gap > -overlap * higher, gap < paragraphGap * higher, lead < alignment * higher { return true }
+        }
+        return false
     }
 
     /// Joins the lines of a paragraph. `imageSize` in pixels, because x and y of the rects have
@@ -402,6 +476,14 @@ enum TextLayout {
     /// height of the top or bottom edge is cut off there
     static let statusBarShare = 0.04
     static let screenEdgeShare = 0.004
+    /// `isRowIcon`: an icon read as at most this many characters (besides spaces) …
+    static let rowIconCharacters = 3
+    /// … stands less than this share of the higher box before each line of its row (their boxes
+    /// may reach into its box by `rowIconOverlap` of its height) …
+    static let rowIconGap = 3.0
+    static let rowIconOverlap = 0.2
+    /// … with its middle further from theirs than this share of the lower box
+    static let rowIconOffset = 0.3
 
     /// The size of the text of a line (about the height of its font, in the units of `width`),
     /// measured from its width: `width` divided by `widthUnits`. nil when the text is too short to

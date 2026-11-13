@@ -848,7 +848,7 @@ final class TrackingBench {
                            confidence: root.reportsConfidence ? line.confidence : nil)
         }
         var blocks: [RecognizedBlock] = []
-        for block in TextLayout.blocks(TextLayout.content(lines, imageSize: size), imageSize: size)
+        for block in TextLayout.blocks(TextLayout.content(lines, imageSize: size, for: .translating), imageSize: size)
         where TextLayout.isTranslatable(block.text) {
             let rect = CGRect(x: (block.rect.minX * size.width).rounded(), y: (block.rect.minY * size.height).rounded(),
                               width: (block.rect.width * size.width).rounded(),
