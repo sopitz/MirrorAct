@@ -1498,16 +1498,23 @@ final class OverlayTracker {
     }
 
     /// A reading at `rect` (thumbnail pixels of the current frame) is a part of a paragraph that
-    /// is known and can be seen: it lies inside it and its words are the paragraph's (a line or a
-    /// word of it read alone). The index of that paragraph, nil if there is none.
+    /// is known and can be seen: it lies inside it and its words are a run of the paragraph's
+    /// words (a line or a word of it read alone, `TextSimilarity.isRun`). The index of that
+    /// paragraph, nil if there is none.
     private func knownWhole(of rect: CGRect, text: String) -> Int? {
+        knownContainer(of: rect) { TextSimilarity.isRun(text, of: $0.text) }
+    }
+
+    /// The first known block that can be seen, is larger than a reading at `rect` and holds it
+    /// (`Configuration.containedShare` of it), and for which `accepts` holds
+    private func knownContainer(of rect: CGRect, where accepts: (Block) -> Bool) -> Int? {
         let area = rect.width * rect.height
         guard area > 0 else { return nil }
         for (index, block) in tracked.enumerated() where block.seen != nil && block.lostSince == nil {
             let known = thumbnailRect(of: block)
             let common = known.intersection(rect)
             guard !common.isNull, common.width * common.height >= configuration.containedShare * area,
-                  known.width * known.height > area, TextSimilarity.isRelated(block.text, text) else { continue }
+                  known.width * known.height > area, accepts(block) else { continue }
             return index
         }
         return nil
@@ -1737,6 +1744,16 @@ final class OverlayTracker {
         guard let index = match else {
             // A part of a paragraph that is known, read alone (a line, a word): the paragraph stays.
             if let whole = knownWhole(of: rect, text: block.text) { return whole }
+            // A line of it whose words are mostly the paragraph's but not a run of them (a counter,
+            // a status in it changed): the paragraph stays until its place, read again, says how it
+            // reads now. (Read with it by the same pass, it is a part of it after all.)
+            let text = block.text, readAt = block.readAt
+            if let changed = knownContainer(of: rect, where: { TextSimilarity.isRelated($0.text, text) }) {
+                if tracked[changed].readAt != readAt {
+                    askToReadPlace(thumbnailRect(of: tracked[changed]), attempts: attempts, time: time)
+                }
+                return changed
+            }
             // A reading that holds blocks known before (lines of the paragraph read earlier) takes
             // their place, and shows the translation of the largest of them until its own is there.
             var largest: Block?
@@ -2021,6 +2038,20 @@ enum TextSimilarity {
             }
         }
         return Double(common) >= relatedWordShare * Double(min(a.count, b.count))
+    }
+
+    /// The words of `part` are a run of the words of `whole`, but for a misread letter or two
+    /// (`isNearlySame` against each run of as many words): a line or a piece of a line of that
+    /// paragraph read alone, not a line of it that changed
+    static func isRun(_ part: String, of whole: String) -> Bool {
+        let piece = words(part), all = words(whole)
+        guard !piece.isEmpty, piece.count <= all.count else { return false }
+        let joined = piece.joined(separator: " ")
+        for start in 0...(all.count - piece.count)
+        where isNearlySame(all[start..<(start + piece.count)].joined(separator: " "), joined) {
+            return true
+        }
+        return false
     }
 
     private static func words(_ text: String) -> [String] {

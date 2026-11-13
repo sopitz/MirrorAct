@@ -219,6 +219,43 @@ final class OverlayTrackerReadingTests: XCTestCase {
         }
     }
 
+    /// A line inside a known paragraph whose words are mostly the paragraph's but not a run of
+    /// them (a counter or a status in it changed) is no part of it: the paragraph is read again
+    /// and its new text translated, instead of the old translation staying over the new text
+    func testAChangedLineThatSharesMostWordsHasTheParagraphReadAgain() throws {
+        let screen = SyntheticScreen(seed: 29)
+        let tracker = OverlayTracker()
+        let whole = Self.paragraph(4, 6, offset: 0, text: "Status online since today Anna is reachable now")
+        try readAtRest(tracker, screen, offset: 0, blocks: [whole], time: 0)
+        let frame = changed(screen, offset: 0, below: 5, mark: 1)
+        _ = tracker.advance(frame, scale: scale, time: 3)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        tracker.finishRecognition(request, blocks: [SyntheticScreen.block(5, offset: 0, text: "since yesterday Anna is")],
+                                  time: 3.6)
+        // (changed by more than a misread letter in ten: `TextSimilarity.isNearlySame`)
+        let newWhole = Self.paragraph(4, 6, offset: 0, text: "Status away since yesterday Anna is not reachable")
+        let after = idle(tracker, frame: frame, from: 3.6, seconds: 3, answer: { region in
+            region.contains(newWhole.rect) ? [newWhole] : []
+        })
+        XCTAssertTrue(after.regions.contains { $0.contains(whole.rect) }, "\(after.regions)")
+        XCTAssertEqual(tracker.blocks.map(\.text), [newWhole.text])
+        XCTAssertEqual(after.sent, [newWhole.text])
+    }
+
+    /// A piece of a paragraph is a run of its words, but for a misread letter; a line whose
+    /// words changed is not, even when it shares most of them
+    func testARunOfAParagraphsWords() {
+        let whole = "Status online since today Anna is reachable now"
+        XCTAssertTrue(TextSimilarity.isRun("since today Anna is", of: whole))
+        XCTAssertTrue(TextSimilarity.isRun("Since tuday Anna is", of: whole))
+        XCTAssertTrue(TextSimilarity.isRun("now", of: whole))
+        XCTAssertFalse(TextSimilarity.isRun("since yesterday Anna is", of: whole))
+        XCTAssertFalse(TextSimilarity.isRun("today since Anna is", of: whole))
+        XCTAssertFalse(TextSimilarity.isRun(whole + " again", of: whole))
+        XCTAssertFalse(TextSimilarity.isRun("", of: whole))
+        XCTAssertTrue(TextSimilarity.isRun("Dunkles Design, Schrift-", of: "Dunkles Design, Schrift- größe, Helligkeit"))
+    }
+
     /// A paragraph of which only its first line was taken (the rest was not in view then) is
     /// read whole once a reading finds more of it, also when that reading is cut off itself:
     /// the line alone must not keep the paragraph from being read
