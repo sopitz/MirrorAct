@@ -242,6 +242,49 @@ final class OverlayTrackerReadingTests: XCTestCase {
         XCTAssertEqual(after.sent, [newWhole.text])
     }
 
+    /// A strip read while the page glides holds the last line of a translated paragraph and the
+    /// line that came in below it (Android, seed 4 of the bench: a 4-line paragraph and a 2-line
+    /// reading over its last line). The piece does not take the paragraph's place or its
+    /// translation, which would be drawn over the wrong lines: the paragraph stays, and the two
+    /// places are read again together
+    func testAPieceOverTheLastLineOfAParagraphDoesNotTakeItsPlace() throws {
+        let screen = SyntheticScreen(seed: 30)
+        let tracker = OverlayTracker()
+        let whole = Self.paragraph(4, 7, offset: 0, text: "alpha beta gamma delta epsilon zeta eta theta")
+        try readAtRest(tracker, screen, offset: 0, blocks: [whole], time: 0)
+        // (something changes between lines 7 and 8, in one row of tiles: the pass reads both)
+        var frame = screen.thumbnail(offset: 0, noiseSeed: 7)
+        let line7 = SyntheticScreen.block(7, offset: 0, text: "").rect
+        let y = (Int(line7.maxY) / scale + 8) / 8 * 8 + 1
+        for row in y..<(y + 2) {
+            for x in 4..<196 where (x + 1) % 4 != 0 {
+                frame[x, row] = 0
+            }
+        }
+        _ = tracker.advance(frame, scale: scale, time: 3)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        let piece = Self.paragraph(7, 8, offset: 0, text: "zeta eta theta iota")
+        XCTAssertTrue(request.region.contains(piece.rect), "\(request.region)")
+        XCTAssertFalse(request.region.contains(whole.rect), "only a part of the paragraph is read")
+        tracker.finishRecognition(request, blocks: [piece], time: 3.6)
+
+        XCTAssertEqual(tracker.blocks.map(\.text), [whole.text], "the paragraph stays")
+        let placed = tracker.advance(frame, scale: scale, time: 3.7).placed
+        XCTAssertEqual(placed.map(\.text), ["T " + whole.text])
+        let drawn = try XCTUnwrap(placed.first)
+        XCTAssertEqual(drawn.rect.minY, whole.rect.minY, accuracy: 2 * Double(scale),
+                       "the translation stays on the paragraph's lines")
+        // (read again together, the two places come back as one paragraph)
+        let longer = Self.paragraph(4, 8, offset: 0, text: "alpha beta gamma delta epsilon zeta eta theta iota")
+        let after = idle(tracker, frame: frame, from: 3.7, seconds: 3, answer: { region in
+            region.contains(longer.rect) ? [longer] : []
+        })
+        XCTAssertTrue(after.regions.contains { $0.contains(longer.rect) }, "\(after.regions)")
+        XCTAssertLessThanOrEqual(after.regions.count, 2, "\(after.regions)")
+        XCTAssertEqual(tracker.blocks.map(\.text), [longer.text])
+        XCTAssertEqual(after.sent, [longer.text])
+    }
+
     /// A piece of a paragraph is a run of its words, but for a misread letter; a line whose
     /// words changed is not, even when it shares most of them
     func testARunOfAParagraphsWords() {

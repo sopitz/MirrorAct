@@ -1558,8 +1558,11 @@ final class OverlayTracker {
     /// paragraph read alone gives way to the paragraph, otherwise the earlier reading gives way
     /// to the later one (the place shows something else now). Two texts one pass found apart
     /// both stay (their boxes overlap: a label in a paragraph's box, a tall line over the one
-    /// below it); `TranslationCompositor.drawnBlocks` decides what is drawn. The one that stays
-    /// shows the translation of the other until it has its own, when their texts are related.
+    /// below it); `TranslationCompositor.drawnBlocks` decides what is drawn. Two readings of
+    /// related text that overlap in part (a strip with the last line of a paragraph and the line
+    /// below it) are pieces of one text: the larger stays, and both places are read again
+    /// together. The one that stays shows the translation of the other until it has its own,
+    /// when their texts are related and it covers most of the other's place.
     /// A later reading that lies inside a larger block gives way to it (one word of a paragraph,
     /// read while its place was not read whole), and a block that gives way to a reading that
     /// covers only a part of it: in both cases the larger place is read again
@@ -1586,6 +1589,13 @@ final class OverlayTracker {
                 } else if tracked[first].readAt == tracked[second].readAt {
                     // (read apart in one pass: two texts)
                     continue
+                } else if related {
+                    // (pieces of one text that overlap in part, such as a strip with the last line
+                    // of a paragraph and the line below it: the larger stays, and both places are
+                    // read again together)
+                    let firstRect = thumbnailRect(of: tracked[first]), secondRect = thumbnailRect(of: tracked[second])
+                    loser = firstRect.width * firstRect.height < secondRect.width * secondRect.height ? first : second
+                    places.append(firstRect.union(secondRect))
                 } else {
                     let older = tracked[first].readAt < tracked[second].readAt ? first : second
                     let newer = older == first ? second : first
@@ -1604,7 +1614,10 @@ final class OverlayTracker {
                     }
                 }
                 let winner = loser == first ? second : first
-                if related, shownTranslation(of: tracked[winner]) == nil {
+                // (a translation is handed on only to what covers most of the place it was drawn on)
+                let loserArea = loser == first ? a.width * a.height : b.width * b.height
+                if related, shared >= configuration.containedShare * loserArea,
+                   shownTranslation(of: tracked[winner]) == nil {
                     tracked[winner].earlier = shownTranslation(of: tracked[loser])
                 }
                 dropped.insert(loser)
@@ -1828,17 +1841,20 @@ final class OverlayTracker {
             tracked[index] = old
             return index
         }
+        let oldRect = thumbnailRect(of: old)
+        let common = oldRect.intersection(rect)
+        let coversOld = !common.isNull
+            && common.width * common.height >= configuration.containedShare * oldRect.width * oldRect.height
         if TextSimilarity.isRelated(old.text, block.text) {
-            block.earlier = shownTranslation(of: old)
+            // (the old translation is shown only where the new reading covers most of its place)
+            if coversOld { block.earlier = shownTranslation(of: old) }
             block.id = old.id
         } else {
             block.id = nextBlockID
             nextBlockID += 1
         }
         if block.areaID < 0 { block.areaID = old.areaID }
-        let oldRect = thumbnailRect(of: old)
-        let common = oldRect.intersection(rect)
-        if common.isNull || common.width * common.height < configuration.containedShare * oldRect.width * oldRect.height {
+        if !coversOld {
             // (the rest of the older block was not read: what is there now is read whole)
             askToReadPlace(oldRect.union(rect), attempts: attempts, time: time)
         }
