@@ -185,6 +185,14 @@ final class AppleTranslationEngineTests: XCTestCase {
         }
     }
 
+    /// Waits for `task` to end, without hanging the tests should it never end
+    private func waitFor(_ task: Task<Void, Never>?, file: StaticString = #filePath, line: UInt = #line) async throws {
+        guard let task else { return }
+        let done = Box<Bool>(false)
+        Task { await task.value; done.value = true }
+        try await waitUntil({ done.value }, file: file, line: line)
+    }
+
     private static let german = "Das ist ein ganz gewöhnlicher deutscher Satz über das Wetter von heute und von morgen."
     private static let danish = "Dette er en helt almindelig dansk sætning om vejret i dag og i morgen eftermiddag."
 
@@ -443,76 +451,107 @@ final class AppleTranslationEngineTests: XCTestCase {
     }
 
     /// Translating turned off while one pair is asked for and another waits for its turn: the one
-    /// that waits ends at once, and nothing is asked anymore
-    func testHostsThatWaitForTheirTurnEndWhenTranslatingIsTurnedOff() async throws {
+    /// that waits ends without asking, and the question that is up closes with its view. Its
+    /// call does not return then (macOS never answers it): the host does not wait for it.
+    func testTurningTranslatingOffClosesTheQuestionAndEndsTheHostsThatWait() async throws {
         let macOS = FakeMacOS(supported: ["de", "en", "fr"])
         let engine = engine(answeredBy: macOS)
         let client = AppleTranslationClient(engine: engine)
         let request = Task { try await client.translate([Self.english, Self.french], into: self.language("de")) }
         try await waitUntil { engine.hosts.count == 2 }
-        var served: [UUID: Task<Void, Never>] = [:]
+        var served: [Task<Void, Never>] = []
         for host in engine.hosts {
-            served[host.id] = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+            served.append(Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) })
         }
         _ = try await request.value
         try await waitUntil { engine.hostsWaitingToLoad == 1 }
         let asked = try XCTUnwrap(macOS.preparing.first)
         client.cancel()
-        // the one in line goes without asking
-        let other = try XCTUnwrap(served.keys.first { $0 != asked })
-        await served[other]?.value
+        // the view that asked is gone at once, which closes the question
+        XCTAssertFalse(engine.hosts.contains { $0.id == asked })
+        for task in served { try await waitFor(task) }
+        XCTAssertTrue(engine.hosts.isEmpty)
         XCTAssertEqual(engine.hostsWaitingToLoad, 0)
-        // the question that is up has to be answered (closing it is not up to the app)
-        XCTAssertEqual(engine.hosts.map(\.id), [asked])
-        macOS.finish(asked, installing: false)
-        await served[asked]?.value
         XCTAssertEqual(macOS.asked, [asked])
+        // what macOS does with the call afterwards changes nothing
+        XCTAssertEqual(macOS.preparing, [asked])
+        macOS.finish(asked, installing: true)
+        try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertTrue(engine.hosts.isEmpty)
     }
 
-    /// Translating turned off and on again while macOS still asks about a pair: the question
-    /// stays, and no second one is queued behind it for the same pair. The new turn is told,
-    /// as the first one was, that the languages are loading.
-    func testAPairWhoseQuestionIsStillUpIsNotAskedForAgain() async throws {
+    /// The question closes when nobody wants the pair any more, and the window of the views goes
+    /// back to its place outside of the screens. Turned on again, the pair is asked for anew at
+    /// once: the call of the closed question, which never returns, does not hold it up.
+    func testTheQuestionClosesWhenTranslatingIsTurnedOffAndComesBackWhenItIsTurnedOn() async throws {
+        try XCTSkipIf(NSScreen.screens.isEmpty, "no screen")
         let macOS = FakeMacOS(supported: ["de", "en"])
         let engine = engine(answeredBy: macOS)
-        // a job no view takes is not waited for long
+        engine.pickUpLimit = 3
+        let window = NSWindow(contentRect: NSRect(x: -400, y: -400, width: 1, height: 1), styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        engine.makeWindow = { _ in window }
+        func isOnAScreen() -> Bool { NSScreen.screens.contains { $0.frame.intersects(window.frame) } }
+
+        var served: [Task<Void, Never>] = []
+        var askedFor: [UUID] = []
+        for round in 1...3 {
+            let label = "round \(round)"
+            let client = AppleTranslationClient(engine: engine)
+            let request = Task { try await client.translate([Self.english], into: self.language("de")) }
+            try await waitUntil { engine.hosts.count == 1 }
+            let host = engine.hosts[0]
+            XCTAssertFalse(askedFor.contains(host.id), label)
+            served.append(Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) })
+            _ = try await request.value
+            try await waitUntil { macOS.asked.count == round }
+            askedFor.append(host.id)
+            XCTAssertTrue(isOnAScreen(), label)
+            XCTAssertGreaterThan(window.level.rawValue, NSWindow.Level.floating.rawValue, label)
+
+            client.cancel()
+            XCTAssertTrue(engine.hosts.isEmpty, label)
+            try await waitFor(served.last)
+            XCTAssertFalse(isOnAScreen(), label)
+            XCTAssertEqual(window.level, .normal, label)
+        }
+        // every question was a new one; none of them was answered
+        XCTAssertEqual(macOS.asked, askedFor)
+        XCTAssertEqual(macOS.preparing, askedFor)
+        for id in askedFor { macOS.finish(id, installing: false) }
+    }
+
+    /// Another window that still translates into the same pair keeps the question
+    func testTheQuestionStaysWhileAnotherWindowWantsThePair() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        let engine = engine(answeredBy: macOS)
         engine.pickUpLimit = 3
         let first = AppleTranslationClient(engine: engine)
-        let firstNotices = Box<[String]>([])
-        first.notify = { message in MainActor.assumeIsolated { firstNotices.value.append(message) } }
         let request = Task { try await first.translate([Self.english], into: self.language("de")) }
         try await waitUntil { engine.hosts.count == 1 }
         let host = engine.hosts[0]
         let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
         _ = try await request.value
         try await waitUntil { macOS.preparing.count == 1 }
-        XCTAssertEqual(firstNotices.value.count, 1)
-        first.cancel()
-
         let second = AppleTranslationClient(engine: engine)
-        let secondNotices = Box<[String]>([])
-        second.notify = { message in MainActor.assumeIsolated { secondNotices.value.append(message) } }
-        let answered = Box<Bool>(false)
-        let again = Task {
-            defer { answered.value = true }
-            return try await second.translate([Self.english], into: self.language("de"))
-        }
-        try await waitUntil { answered.value || engine.hosts.count > 1 }
+        // asks during the question: "not now", and no second question
+        let again = try await second.translate([Self.english], into: language("de"))
+        XCTAssertEqual(again, [nil])
+        first.cancel()
         XCTAssertEqual(engine.hosts.map(\.id), [host.id])
-        // "not now": asked again once the question is answered
-        let translations = try await again.value
-        XCTAssertEqual(translations, [nil])
-        XCTAssertEqual(engine.hosts.map(\.id), [host.id])
-        // the same notice ("Loading English for translating …"), once
-        XCTAssertEqual(secondNotices.value, firstNotices.value)
-        _ = try await second.translate([Self.english], into: language("de"))
-        XCTAssertEqual(secondNotices.value, firstNotices.value)
-
-        macOS.finish(host, installing: false)
-        await served.value
-        XCTAssertTrue(engine.hosts.isEmpty)
+        // a window that translates other languages does not keep it
+        let third = AppleTranslationClient(engine: engine)
+        let other = Task { try await third.translate([Self.french], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 2 }
         second.cancel()
+        XCTAssertFalse(engine.hosts.contains { $0.id == host.id })
+        try await waitFor(served)
+        third.cancel()
+        _ = try await other.value
+        XCTAssertTrue(engine.hosts.isEmpty)
+        macOS.finish(host, installing: false)
     }
 
     // MARK: Languages of the texts (the language recognizer of macOS; needs no download)

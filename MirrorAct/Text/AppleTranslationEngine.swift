@@ -70,6 +70,9 @@ final class AppleTranslationEngine: ObservableObject {
     private var ending: Set<UUID> = []
     /// hosts that wait for macOS to load their languages
     private var loading: Set<UUID> = []
+    /// hosts whose prepareTranslation has not returned yet: macOS shows its question. Giving
+    /// nil stops waiting for the call (see `ask`).
+    private var questions: [UUID: AppleTranslationFirstAnswer<Result<Void, Error>>] = [:]
     /// the host that asks macOS to load its languages right now, and those that wait for their
     /// turn, oldest first
     private var loadingTurn: UUID?
@@ -220,7 +223,8 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// `AppleTranslationClient.cancel`: its jobs are answered "not now" at once; the sessions stay
-    /// for the other clients, and end once no client is left.
+    /// for the other clients, and end once no client is left. A question of macOS about loading
+    /// languages closes as soon as no client wants its pair any more.
     func cancel(_ client: AppleTranslationClient) {
         clients[ObjectIdentifier(client)] = nil
         // (a client that went away without cancelling counts as gone as well)
@@ -229,6 +233,12 @@ final class AppleTranslationEngine: ObservableObject {
         waiting.removeAll { $0.client === client }
         running.removeAll { $0.client === client }
         for job in jobs { job.finish(job.postponed) }
+        // a question of macOS about languages nobody wants any more goes away with its view
+        let wanted = Set(activeClients.flatMap(\.pairs))
+        for host in hosts where questions[host.id] != nil && !wanted.contains(host.pair) {
+            Log.info("Translation: closing the question about the languages for \(host.pair)")
+            remove(host)
+        }
         guard clients.isEmpty else { return }
         declined.removeAll()
         pairSupport.removeAll()
@@ -304,8 +314,8 @@ final class AppleTranslationEngine: ObservableObject {
             if Self.clock < until { return true }
             blockedUntil[pair] = nil
         }
-        // also while a host that ends waits for the answer to its question: a new host would only
-        // ask a second time, and macOS would show the second question after the first
+        // also while another host of the pair waits for its languages: a new host would only ask
+        // a second time (a host whose question is up and nobody wants is removed, see `cancel`)
         return isLoading(pair)
     }
 
@@ -414,8 +424,10 @@ final class AppleTranslationEngine: ObservableObject {
 
     /// Takes a host out of the list, which ends its view and with it the session. Never while the
     /// session is in use: `serve` does this when it is done, everyone else only for a host whose
-    /// view has not started.
+    /// view has not started, or whose view waits for the answer to the question of macOS.
     private func remove(_ host: AppleTranslationHost) {
+        // the question closes with the view, and its call never returns: `serve` goes on without it
+        questions.removeValue(forKey: host.id)?.give(nil)
         signals.removeValue(forKey: host.id)?.wake.finish()
         serving.remove(host.id)
         ending.remove(host.id)
@@ -425,8 +437,9 @@ final class AppleTranslationEngine: ObservableObject {
         hosts.removeAll { $0.id == host.id }
     }
 
+    /// (a host that was taken out of the list ends as well)
     private func isEnding(_ host: AppleTranslationHost) -> Bool {
-        Task.isCancelled || ending.contains(host.id)
+        Task.isCancelled || ending.contains(host.id) || signals[host.id] == nil
     }
 
     private func setLoading(_ isLoading: Bool, for host: AppleTranslationHost) {
@@ -484,7 +497,8 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// `serve` with what it does on the session handed in, so that the tests can run it without one
-    func serve(_ host: AppleTranslationHost, prepare: () async throws -> Void, work: () async -> Void) async {
+    func serve(_ host: AppleTranslationHost, prepare: @escaping () async throws -> Void,
+               work: () async -> Void) async {
         // a host that was given up meanwhile, or a second session for the same view
         guard signals[host.id] != nil, !serving.contains(host.id) else { return }
         serving.insert(host.id)
@@ -499,7 +513,7 @@ final class AppleTranslationEngine: ObservableObject {
 
     /// Makes sure the languages of the pair are on this Mac. macOS asks the user before it loads
     /// them. false = this host cannot translate.
-    private func load(_ host: AppleTranslationHost, prepare: () async throws -> Void) async -> Bool {
+    private func load(_ host: AppleTranslationHost, prepare: @escaping () async throws -> Void) async -> Bool {
         var status = await availability.status(host.source, host.target, host.strategy)
         if status == .supported, !isEnding(host) {
             setLoading(true, for: host)
@@ -517,10 +531,14 @@ final class AppleTranslationEngine: ObservableObject {
             var failure: Error?
             if asks {
                 Log.info("Translation: asking macOS to load the languages for \(host.pair)")
-                do {
-                    try await prepare()
-                } catch {
+                switch await ask(host, prepare) {
+                case nil:
+                    // translating was turned off, and the question closed with the view
+                    return false
+                case .failure(let error):
                     failure = error
+                case .success:
+                    break
                 }
             }
             // The turn is for the question, which is gone once prepareTranslation returns: the
@@ -567,6 +585,29 @@ final class AppleTranslationEngine: ObservableObject {
         noteUntranslatable(host.source, to: clients(using: host.pair))
         finishWaitingJobs(of: host.pair) { $0.unchanged }
         return false
+    }
+
+    /// prepareTranslation, which returns once the user has answered the question of macOS. nil =
+    /// the host was removed meanwhile. Only taking the view away closes the question, and then
+    /// the call never returns; TranslationSession.cancel() neither closes it nor ends the call.
+    /// So the call runs on its own, and the host does not wait for it: it ends, and a new host for
+    /// the pair brings up a new question at once.
+    private func ask(_ host: AppleTranslationHost,
+                     _ prepare: @escaping () async throws -> Void) async -> Result<Void, Error>? {
+        let answer = await withCheckedContinuation { continuation in
+            let first = AppleTranslationFirstAnswer<Result<Void, Error>>(continuation)
+            questions[host.id] = first
+            Task {
+                do {
+                    try await prepare()
+                    first.give(.success(()))
+                } catch {
+                    first.give(.failure(error))
+                }
+            }
+        }
+        questions[host.id] = nil
+        return answer
     }
 
     /// The user closed the question of macOS or its progress window: not now. Nothing is asked
