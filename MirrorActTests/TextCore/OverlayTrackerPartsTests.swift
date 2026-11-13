@@ -563,6 +563,78 @@ final class OverlayTrackerFollowingTests: XCTestCase {
         }
     }
 
+    /// The screen of `SyntheticScreen` with the page scrolled by `offset`; without `tabBar`, the
+    /// page reaches down to a thin plain strip with a pill in it at the lower edge of the screen
+    /// (where a keyboard was), with it the bottom bar of `SyntheticScreen` lies over the page
+    private static func screenWithTabBar(_ screen: SyntheticScreen, offset: Int, tabBar: Bool, noise: UInt64) -> LumaImage {
+        var image = screen.thumbnail(offset: offset)
+        let page = SyntheticPage.thumbnail(screen.page, pageWidth: SyntheticScreen.width, left: 0, top: offset,
+                                           width: SyntheticScreen.width, height: SyntheticScreen.height,
+                                           scale: SyntheticScreen.scale)
+        let width = SyntheticScreen.width / 2, height = SyntheticScreen.height / 2
+        if !tabBar {
+            for y in (SyntheticScreen.bottomBar / 2)..<height {
+                for x in 0..<width {
+                    let isPill = y >= height - 6 && y < height - 3 && x >= 70 && x < 130
+                    image[x, y] = y >= height - 10 ? (isPill ? 40 : 225) : page[x, y]
+                }
+            }
+        }
+        return SyntheticPage.noisy(image, amount: 2, seed: noise)
+    }
+
+    /// A paragraph runs under the bottom bar, and the box of its reading ends a pixel or two
+    /// inside the bar (it takes in the bar's edge). The bar came only after the page had moved
+    /// down to the lower edge of the screen (a keyboard went away), so the scrolling area still
+    /// reaches down there: nothing tells that the reading is cut off at the bar. The page moves
+    /// down while the reading is on its way; carried with it to the frame shown when the pass
+    /// ends, the lowest line has slid under the bar, and the box reaches into the bar as far as
+    /// the page moved. The rows of the patch at its lower edge show the bar as the bar shows
+    /// there still, but they stayed where they were read: what lies over the text behind them is
+    /// found all the same, and nothing is drawn over the bar.
+    func testAReadingCarriedUnderTheBottomBarIsCutAtTheBar() throws {
+        let screen = SyntheticScreen(seed: 12)
+        let tracker = OverlayTracker()
+        let bar = SyntheticScreen.bottomBar
+        // line 10 shows 10 frame pixels above the bar when the pass starts, none when it ends
+        let start = SyntheticScreen.firstLine + 10 * SyntheticScreen.linePitch - (bar - 10)
+        var time = 0.0
+        // the page scrolls up to its place without the bar, rests, and the bar comes
+        for frame in 0..<8 {
+            _ = tracker.advance(Self.screenWithTabBar(screen, offset: start - 8 * (8 - frame), tabBar: false,
+                                                      noise: UInt64(frame + 1)), scale: scale, time: time)
+            time += 1.0 / 60
+        }
+        for frame in 0..<4 {
+            _ = tracker.advance(Self.screenWithTabBar(screen, offset: start, tabBar: frame > 0, noise: UInt64(frame + 11)),
+                                scale: scale, time: time)
+            time += 1.0 / 60
+        }
+        time += 1
+        let request = try XCTUnwrap(tracker.beginRecognition(time: time))
+        // the page moves down by 14 frame pixels while the reading is on its way
+        let offset = start - 14
+        time += 1.0 / 60
+        _ = tracker.advance(Self.screenWithTabBar(screen, offset: offset, tabBar: true, noise: 21), scale: scale, time: time)
+        // lines 9 and 10 as one paragraph, in the pixels of the frame the pass started on, down
+        // to 5 frame pixels into the bar
+        let top = SyntheticScreen.block(9, offset: start, text: "").rect.minY
+        let paragraph = RecognizedBlock(text: "Nine and ten",
+                                        rect: CGRect(x: Double(SyntheticScreen.lineLeft), y: top,
+                                                     width: Double(SyntheticScreen.lineRight - SyntheticScreen.lineLeft),
+                                                     height: Double(bar + 5) - top),
+                                        lineCount: 2)
+        tracker.finishRecognition(request, blocks: [paragraph], time: time + 0.01)
+        // (its translation is known: the paragraph was translated before)
+        tracker.setTranslation("T Nine and ten", for: "Nine and ten")
+        // the page rests: no frame comes, the translation is drawn into the last one
+        let update = tracker.advance(Self.screenWithTabBar(screen, offset: offset, tabBar: true, noise: 21), scale: scale,
+                                     time: time + 0.1)
+        let placed = try XCTUnwrap(update.placed.first { $0.text == "T Nine and ten" }, "the paragraph is translated")
+        let drawn = placed.visibleRect ?? placed.rect
+        XCTAssertLessThanOrEqual(drawn.maxY, Double(bar + scale), "nothing is drawn over the bar: \(drawn)")
+    }
+
     /// A paragraph read again keeps its block and translation when the reading differs by a
     /// letter or the rectangle by a pixel; text that grew shows the old translation as stale
     /// until its own is there; other text replaces it

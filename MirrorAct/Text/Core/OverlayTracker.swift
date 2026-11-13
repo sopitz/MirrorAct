@@ -307,6 +307,22 @@ final class OverlayTracker {
         /// a block a pass found found within this many thumbnail pixels of where the probes say
         /// it went
         var carryRadius = 2
+        /// Of a block a pass found that was carried up or down to where its text went, up to this
+        /// many rows at its top or bottom edge are left out of what shows of it when the frame
+        /// there fits them clearly better where they were read than where they were carried, or
+        /// anywhere within a pixel up or down of it (at most a third as different, and at least
+        /// `stillEdgeDifference` grey levels different where carried): they did not move with
+        /// the text, so they are the edge of a bar that the box of the reading took in. Rows that
+        /// fit both places alike (plain ones) may lie between such a row and the edge; a row that
+        /// fits better where carried ends the search. What shows of the rest is then judged as
+        /// usual, from its new edge: the edge rows of a bar, which show the bar as it shows there
+        /// still, would otherwise hide that the text behind them slid under it. Within a pixel
+        /// of where it was read nothing tells the two places apart, so a block carried by less
+        /// than about two pixels keeps all its rows. Only the reading itself is judged so: a
+        /// later frame judges the whole block again (`moveBlocks`), so a block that keeps moving
+        /// under the bar may show over it again until it is read at rest.
+        var stillEdgeRows = 3
+        var stillEdgeDifference = 8.0
         /// two blocks whose visible parts share more than this share of the smaller one are
         /// readings of the same text: only one of them is kept, unless one pass read them apart
         var overlapLimit = 0.2
@@ -1998,7 +2014,13 @@ final class OverlayTracker {
             // (it must fit about as well as a block that is seen does, to be taken)
             block.fit = configuration.fitBase + configuration.sureFitTexture * block.texture
         } else {
-            guard let (seen, fit) = check(block, in: current, x: x, y: y), !mustShowWhole || seen == inner else {
+            // (judged without the rows at its edges that stayed where they were read)
+            var judged = block
+            if abs(y - Double(patchRect.y)) >= 1 {
+                judged.inner = withoutStillEdges(of: patch, inner: inner, readAt: (Double(patchRect.x), Double(patchRect.y)),
+                                                 carriedTo: (x, y), in: current)
+            }
+            guard let (seen, fit) = check(judged, in: current, x: x, y: y), !mustShowWhole || seen == inner else {
                 return nil
             }
             block.seen = seen
@@ -2056,6 +2078,44 @@ final class OverlayTracker {
             }
         }
         return moved > still
+    }
+
+    /// `inner` without the rows at its top and bottom edge that did not move with a block carried
+    /// from `readAt` to `carriedTo` in `current` (`Configuration.stillEdgeRows`)
+    private func withoutStillEdges(of patch: BlockPatch, inner: ThumbnailRect, readAt: (x: Double, y: Double),
+                                   carriedTo: (x: Double, y: Double), in current: LumaImage) -> ThumbnailRect {
+        /// whether a row fits clearly better where it was read (true), where it was carried
+        /// (false), or both alike (nil)
+        func stayed(_ row: Int) -> Bool? {
+            let line = ThumbnailRect(x: inner.x, y: row, width: inner.width, height: 1)
+            guard let still = matcher.difference(patch, in: current, x: readAt.x, y: readAt.y, part: line, squared: false)
+            else { return nil }
+            // (where carried, the best of the places within a pixel up or down: a row at the edge of
+            // a glyph fits worse when the block lies a fraction of a pixel off)
+            var carried = Double.infinity
+            for offset in [-1.0, -0.5, 0, 0.5, 1] {
+                guard let difference = matcher.difference(patch, in: current, x: carriedTo.x, y: carriedTo.y + offset,
+                                                          part: line, squared: false) else { continue }
+                carried = min(carried, difference)
+            }
+            guard carried.isFinite else { return nil }
+            if carried >= configuration.stillEdgeDifference, 3 * still <= carried { return true }
+            if still >= configuration.stillEdgeDifference, 3 * carried <= still { return false }
+            return nil
+        }
+        var top = inner.y, bottom = inner.maxY
+        for row in inner.y..<min(inner.maxY, inner.y + configuration.stillEdgeRows) {
+            guard let verdict = stayed(row) else { continue }
+            if !verdict { break }
+            top = row + 1
+        }
+        for row in stride(from: inner.maxY - 1, through: max(top, inner.maxY - configuration.stillEdgeRows), by: -1) {
+            guard let verdict = stayed(row) else { continue }
+            if !verdict { break }
+            bottom = row
+        }
+        guard bottom > top else { return inner }
+        return ThumbnailRect(x: inner.x, y: top, width: inner.width, height: bottom - top)
     }
 
     private static func meanTexture(of patch: BlockPatch, inner: ThumbnailRect) -> Double {

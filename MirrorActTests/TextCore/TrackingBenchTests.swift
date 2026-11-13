@@ -1039,6 +1039,20 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.score, 75)
     }
 
+    /// Seed 15 of keyboard: a paragraph runs under the tab bar that the keyboard leaves behind as
+    /// it goes, and is read while the page still moves down. The box of the reading takes in the
+    /// bar's edge; carried down with the page, it reached 14 pixels into the bar, and those edge
+    /// rows, which show the bar as it shows there still, hid that the lowest line had slid under
+    /// it (21 frames until the next reading at rest).
+    func testKeyboardSeed15() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("keyboard", seed: 15)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 75)
+    }
+
     /// Seed 13 of largeTitle: the label to go back, misread once while the bar has no title, stays
     /// where it is when the titled bar takes over. Both bars show it with the same misreading;
     /// with one of their own each, its translation counted as drawn over text that is not on the
