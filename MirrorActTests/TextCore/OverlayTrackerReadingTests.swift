@@ -639,6 +639,66 @@ final class OverlayTrackerReadingTests: XCTestCase {
         }
     }
 
+    /// A still page; a change below a heading has its place read, and that pass misses the
+    /// heading (the recognizer misses a line now and then). The heading still shows as it was
+    /// read: it stays, its place is read once more, and the next pass finds it.
+    func testAHeadingAPassMissedOnceAtRestStays() throws {
+        let screen = SyntheticScreen(seed: 34)
+        let tracker = OverlayTracker()
+        let heading = SyntheticScreen.block(4, offset: 0, text: "Willkommen im Testlabor")
+        let body = Self.paragraph(6, 8, offset: 0, text: "Diese Seite ist ein Prüfstand für die Texterkennung")
+        try readAtRest(tracker, screen, offset: 0, blocks: [heading, body], time: 0)
+        let frame = changed(screen, offset: 0, below: 4, mark: 1)
+        _ = tracker.advance(frame, scale: scale, time: 3)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        XCTAssertTrue(request.region.contains(heading.rect), "\(request.region)")
+        tracker.finishRecognition(request, blocks: [], time: 3.6)
+        XCTAssertTrue(tracker.blocks.map(\.text).contains(heading.text), "kept after one miss")
+        XCTAssertTrue(tracker.advance(frame, scale: scale, time: 3.65).placed.contains { $0.text == "T " + heading.text })
+        let after = idle(tracker, frame: frame, from: 3.65, seconds: 3, answer: { region in
+            [heading, body].filter { region.contains($0.rect) }
+        })
+        XCTAssertEqual(after.regions.count, 1, "its place is read once more: \(after.regions)")
+        XCTAssertEqual(Set(tracker.blocks.map(\.text)), [heading.text, body.text])
+        XCTAssertEqual(after.sent, [])
+        // (missed by that pass as well, it is gone)
+        let other = OverlayTracker()
+        try readAtRest(other, screen, offset: 0, blocks: [heading, body], time: 0)
+        _ = other.advance(frame, scale: scale, time: 3)
+        let first = try XCTUnwrap(other.beginRecognition(time: 3.5))
+        other.finishRecognition(first, blocks: [], time: 3.6)
+        _ = idle(other, frame: frame, from: 3.6, seconds: 3, answer: { region in
+            [body].filter { region.contains($0.rect) }
+        })
+        XCTAssertFalse(other.blocks.map(\.text).contains(heading.text))
+    }
+
+    /// … but a heading that really went away (its place shows the plain page now) is removed by
+    /// the pass that finds nothing there, without reading its place again
+    func testAHeadingThatWentAwayIsRemovedAtOnce() throws {
+        let screen = SyntheticScreen(seed: 34)
+        let tracker = OverlayTracker()
+        let heading = SyntheticScreen.block(4, offset: 0, text: "Willkommen im Testlabor")
+        let body = Self.paragraph(6, 8, offset: 0, text: "Diese Seite ist ein Prüfstand für die Texterkennung")
+        try readAtRest(tracker, screen, offset: 0, blocks: [heading, body], time: 0)
+        var frame = changed(screen, offset: 0, below: 4, mark: 1)
+        let line = heading.rect
+        for y in Int(line.minY) / scale..<Int(line.maxY) / scale {
+            for x in Int(line.minX) / scale..<Int(line.maxX) / scale {
+                frame[x, y] = 240
+            }
+        }
+        _ = tracker.advance(frame, scale: scale, time: 3)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        XCTAssertTrue(request.region.contains(heading.rect), "\(request.region)")
+        tracker.finishRecognition(request, blocks: [], time: 3.6)
+        XCTAssertEqual(tracker.blocks.map(\.text), [body.text])
+        let after = idle(tracker, frame: frame, from: 3.6, seconds: 3, answer: { region in
+            [body].filter { region.contains($0.rect) }
+        })
+        XCTAssertEqual(after.regions, [])
+    }
+
     /// The end of a page whose ground below its last line shows no movement (it stops there
     /// while it springs back) is not taken for a bar: a translation there is not cut off
     func testTheEndOfAPageIsNoBar() {

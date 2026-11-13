@@ -365,6 +365,9 @@ final class OverlayTracker {
         /// `dropOverlaps` keeps both of while both readings stay (a reading with other text gives a
         /// new block, which starts without partners)
         var apartFrom: Set<Int> = []
+        /// a pass at rest did not find it although its text still showed: the next one that
+        /// misses it removes it (`finishRecognition`)
+        var missedOnce = false
     }
 
     /// A part of the screen whose content was seen to move as one (the view of a page between
@@ -1089,6 +1092,13 @@ final class OverlayTracker {
         return fit <= configuration.fitBase + configuration.fitTexture * texture ? (seen, fit) : nil
     }
 
+    /// All of a block shows where it is, and its patch still fits the picture there
+    private func stillShows(_ block: Block, in current: LumaImage) -> Bool {
+        guard block.seen == block.inner, block.lostSince == nil,
+              let (seen, _) = check(block, in: current, x: block.x, y: block.y) else { return false }
+        return seen == block.inner
+    }
+
     /// A place lies inside the frame and inside its scrolling area with room to spare: nothing
     /// that does not move with it can reach it in this frame
     private func isWellInside(_ rect: CGRect, motion: Int) -> Bool {
@@ -1378,18 +1388,29 @@ final class OverlayTracker {
         let inner = CGRect(x: pass.region.x, y: pass.region.y, width: pass.region.width, height: pass.region.height)
             .insetBy(dx: configuration.cutEdge, dy: configuration.cutEdge)
         let bounds = CGRect(x: 0, y: 0, width: current.width, height: current.height)
-        tracked.removeAll { block in
-            guard !taken.contains(block.id), let start = pass.startRects[block.id] else { return false }
-            let gone = start.minX >= inner.minX && start.minY >= inner.minY && start.maxX <= inner.maxX
-                && start.maxY <= inner.maxY
-            if gone, !restedThrough(pass, area: block.areaID, around: start, vertically: false) {
+        var gone: Set<Int> = []
+        for index in tracked.indices {
+            let block = tracked[index]
+            guard !taken.contains(block.id), let start = pass.startRects[block.id],
+                  start.minX >= inner.minX, start.minY >= inner.minY, start.maxX <= inner.maxX,
+                  start.maxY <= inner.maxY else { continue }
+            if !restedThrough(pass, area: block.areaID, around: start, vertically: false) {
                 // (read while the picture moved, a line may have been missed: its place is read
                 // again once it rests)
                 plan.add(UnreadArea(rect: thumbnailRect(of: block).intersection(bounds), kind: .confirm, since: time,
                                     areaID: block.areaID))
+            } else if !block.missedOnce, stillShows(block, in: current) {
+                // (at rest, and its text still shows as it was read: the recognizer missed it this
+                // once. It stays, and its place is read again; missed again, it is gone.)
+                tracked[index].missedOnce = true
+                let air = configuration.rereadAir
+                plan.add(UnreadArea(rect: thumbnailRect(of: block).insetBy(dx: -air, dy: -air).intersection(bounds),
+                                    kind: .reread, since: time, attempts: rereadAttempt, areaID: block.areaID))
+                continue
             }
-            return gone
+            gone.insert(block.id)
         }
+        if !gone.isEmpty { tracked.removeAll { gone.contains($0.id) } }
         dropOverlaps(attempts: rereadAttempt, time: time)
         askToReadParagraphsTogether(taken, time: time)
         if pass.whileMovingFast, let bounds = pass.probes.currentBounds {
@@ -1952,6 +1973,7 @@ final class OverlayTracker {
             if old.areaID < 0 { old.areaID = block.areaID }
             old.colors = block.colors
             old.readAt = block.readAt
+            old.missedOnce = false
             // (read once without anything that may continue it, it is complete)
             old.openEdges &= block.openEdges
             tracked[index] = old
