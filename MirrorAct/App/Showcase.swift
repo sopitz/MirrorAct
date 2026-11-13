@@ -11,7 +11,8 @@ import SwiftUI
 @MainActor
 enum Showcase {
     static let notification = Notification.Name("io.github.sopitz.MirrorAct.showcase")
-    private static let scale: CGFloat = 2
+    /// Pixels per point of the pictures: that of the pictures in docs/, whatever the displays are
+    static let defaultScale: CGFloat = 2
 
     static func install() {
         DistributedNotificationCenter.default().addObserver(forName: notification, object: nil, queue: .main) { note in
@@ -21,7 +22,8 @@ enum Showcase {
     }
 
     /// session: session whose image is used (default: the frontmost mirror window)
-    static func export(to dir: URL, session chosen: MirrorSession? = nil) {
+    /// scale: pixels per point of every picture, independent of the displays attached
+    static func export(to dir: URL, session chosen: MirrorSession? = nil, scale: CGFloat = defaultScale) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let live = chosen ?? AppModel.shared.keyMirror?.session
         let screen = live?.sink.latest.flatMap(FrameRenderer.cgImage(from:))
@@ -43,9 +45,9 @@ enum Showcase {
             }
         }
 
-        write(mirror(screen: screen, profile: profile, session: session), dir, "mirror.png")
-        write(startWindow(), dir, "start-window.png")
-        if let editor = editor(screen: screen, model: model) { write(editor, dir, "editor.png") }
+        write(mirror(screen: screen, profile: profile, session: session, scale: scale), dir, "mirror.png")
+        write(startWindow(scale: scale), dir, "start-window.png")
+        if let editor = editor(screen: screen, model: model, scale: scale) { write(editor, dir, "editor.png") }
         write(framed(screen: screen, profile: profile), dir, "framed.png")
         Log.info("Showcase: \(dir.path) (live frame: \(live?.sink.latest != nil))")
     }
@@ -53,38 +55,39 @@ enum Showcase {
     // MARK: Shots
 
     /// Mirror window with tool rail and open style panel on a desktop
-    private static func mirror(screen: CGImage, profile: DeviceProfile, session: MirrorSession) -> CGImage? {
+    private static func mirror(screen: CGImage, profile: DeviceProfile, session: MirrorSession,
+                               scale: CGFloat) -> CGImage? {
         let canvas = CGSize(width: 1400, height: 900)
-        let device = deviceImage(screen: screen, profile: profile, height: 780)
+        let device = deviceImage(screen: screen, profile: profile, height: 780, scale: scale)
         let chrome = MirrorChrome()
         chrome.hovering = true
         let actions = MirrorActions(close: {}, present: {}, zoomIn: {}, zoomOut: {}, actualSize: {}, lifeSize: {},
                                     pixelPerfect: {}, fitToScreen: {}, saveScreenshot: {}, copyScreenshot: {},
                                     screenshotFile: { nil }, toggleRecording: {}, disconnect: {})
-        let rail = snapshot(MirrorToolRail(session: session, chrome: chrome, actions: actions).padding(12))
+        let rail = snapshot(MirrorToolRail(session: session, chrome: chrome, actions: actions).padding(12), scale: scale)
         let panel = snapshot(StylePanel(session: session, actions: actions)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
-            .padding(12))
+            .padding(12), scale: scale)
 
-        return compose(canvas) { ctx in
+        return compose(canvas, scale: scale) { ctx in
             wallpaper(ctx, canvas)
             guard let device, let rail, let panel else { return }
-            let d = size(of: device), r = size(of: rail), p = size(of: panel)
+            let d = size(of: device, scale), r = size(of: rail, scale), p = size(of: panel, scale)
             let width = d.width + 10 + r.width - 24 + 14 + p.width - 24
             let x = (canvas.width - width) / 2
             let deviceRect = CGRect(x: x, y: (canvas.height - d.height) / 2, width: d.width, height: d.height)
-            draw(device, in: deviceRect, ctx, shadow: true)
+            draw(device, in: deviceRect, ctx, shadow: true, scale: scale)
             let railRect = CGRect(x: deviceRect.maxX + 10 - 12, y: deviceRect.midY - r.height / 2, width: r.width, height: r.height)
-            draw(rail, in: railRect, ctx, shadow: false)
+            draw(rail, in: railRect, ctx, shadow: false, scale: scale)
             let panelRect = CGRect(x: railRect.maxX - 12 + 14 - 12, y: deviceRect.midY - p.height / 2 + 20,
                                    width: p.width, height: p.height)
-            draw(panel, in: panelRect, ctx, shadow: true)
+            draw(panel, in: panelRect, ctx, shadow: true, scale: scale)
         }
     }
 
     /// Start window with sample devices
-    private static func startWindow() -> CGImage? {
+    private static func startWindow(scale: CGFloat) -> CGImage? {
         let preview = LauncherView.Preview(cards: [
             .init(id: "1", name: "iPhone 13 Pro", modelIdentifier: "iPhone14,2", status: String(localized: "Ready via cable"),
                   state: .ready, transport: .cable, cableDevice: nil),
@@ -94,12 +97,12 @@ enum Showcase {
                   state: .offline, transport: .cable, cableDevice: nil),
         ], status: String(localized: "1 device via cable · mirroring wirelessly"), pin: "4826")
         let size = CGSize(width: 760, height: 520)
-        guard let content = snapshot(LauncherView(preview: preview), size: size) else { return nil }
-        return windowShot(content, size: size, title: nil, canvas: CGSize(width: 960, height: 700))
+        guard let content = snapshot(LauncherView(preview: preview), size: size, scale: scale) else { return nil }
+        return windowShot(content, size: size, title: nil, canvas: CGSize(width: 960, height: 700), scale: scale)
     }
 
     /// Editor with a screenshot on a gradient
-    private static func editor(screen: CGImage, model: String) -> CGImage? {
+    private static func editor(screen: CGImage, model: String, scale: CGFloat) -> CGImage? {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("iPhone Screenshot.png")
         guard FrameRenderer.writePNG(screen, to: file), let document = EditorDocument(urls: [file]) else { return nil }
         document.modelSelection = model
@@ -108,9 +111,9 @@ enum Showcase {
                                     padding: 0.14, shadow: true, aspect: .landscape16x9)
         document.refresh()
         let size = CGSize(width: 1120, height: 700)
-        guard let content = snapshot(EditorView(document: document), size: size) else { return nil }
+        guard let content = snapshot(EditorView(document: document), size: size, scale: scale) else { return nil }
         return windowShot(content, size: size, title: String(localized: "Edit – \(document.title)"),
-                          canvas: CGSize(width: 1320, height: 900))
+                          canvas: CGSize(width: 1320, height: 900), scale: scale)
     }
 
     /// Result: screenshot with frame, gradient and shadow (16:9)
@@ -122,8 +125,8 @@ enum Showcase {
 
     // MARK: Building blocks
 
-    /// Device in its frame at the requested height (points), rendered at double resolution
-    private static func deviceImage(screen: CGImage, profile: DeviceProfile, height: CGFloat) -> CGImage? {
+    /// Device in its frame at the requested height (points), rendered at `scale` pixels per point
+    private static func deviceImage(screen: CGImage, profile: DeviceProfile, height: CGFloat, scale: CGFloat) -> CGImage? {
         let source = CGSize(width: screen.width, height: screen.height)
         let unit = FrameLayout(profile: profile, screenSize: source, showFrame: true).totalSize
         let factor = height * scale / unit.height
@@ -133,31 +136,61 @@ enum Showcase {
                                     style: FrameStyle(bezelColor: AppSettings.shared.style.bezelColor))
     }
 
-    /// draw a real SwiftUI view in an invisible window (including native controls)
-    private static func snapshot<V: View>(_ view: V, size: CGSize? = nil) -> CGImage? {
-        let host = NSHostingView(rootView: view.environment(\.colorScheme, .dark))
-        host.frame = CGRect(origin: .zero, size: size ?? host.fittingSize)
-        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    /// Draws a real SwiftUI view, native controls included, at `scale` pixels per point
+    static func snapshot<V: View>(_ view: V, size: CGSize? = nil, scale: CGFloat) -> CGImage? {
+        capture(NSHostingView(rootView: view.environment(\.colorScheme, .dark)), size: size, scale: scale)
+    }
+
+    /// Draws a view in an invisible window at `scale` pixels per point (its fitting size when
+    /// `size` is nil), laid out and drawn as on a display of that scale, whatever the displays
+    /// attached are. NSView.cacheDisplay asks AppKit views to draw into the bitmap at its own
+    /// scale, but takes what SwiftUI drew (text, symbols, shapes) from its layers, whose scale
+    /// is the window's backingScaleFactor: with a window on a 1x display a 2x bitmap alone gets
+    /// a blurred enlargement of them.
+    static func capture(_ view: NSView, size: CGSize? = nil, scale: CGFloat) -> CGImage? {
+        let window = FixedScaleWindow(scale: scale, contentRect: CGRect(origin: .zero, size: size ?? view.fittingSize))
         window.isOpaque = false
         window.backgroundColor = .clear
         window.appearance = NSAppearance(named: .darkAqua)
-        window.contentView = host
+        window.contentView = view
+        // measured in the window, where SwiftUI rounds to the pixels of `scale`
+        if size == nil { window.setContentSize(view.fittingSize) }
         window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
         window.orderFrontRegardless()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        host.layoutSubtreeIfNeeded()
         defer { window.orderOut(nil) }
-        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
-        host.cacheDisplay(in: host.bounds, to: rep)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        view.layoutSubtreeIfNeeded()
+
+        let bounds = view.bounds
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int((bounds.width * scale).rounded(.up)),
+                                         pixelsHigh: Int((bounds.height * scale).rounded(.up)), bitsPerSample: 8,
+                                         samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        rep.size = bounds.size
+        view.cacheDisplay(in: bounds, to: rep)
         return rep.cgImage
     }
 
+    /// SwiftUI takes the scale it lays out at and draws its layers at from the window's
+    /// backingScaleFactor, which this window reports as `scale` instead of its screen's.
+    private final class FixedScaleWindow: NSWindow {
+        private let scale: CGFloat
+
+        init(scale: CGFloat, contentRect: CGRect) {
+            self.scale = scale
+            super.init(contentRect: contentRect, styleMask: [.borderless], backing: .buffered, defer: false)
+        }
+
+        override var backingScaleFactor: CGFloat { scale }
+    }
+
     /// Window content with corners, title bar and shadow on the desktop
-    private static func windowShot(_ content: CGImage, size: CGSize, title: String?, canvas: CGSize) -> CGImage? {
+    private static func windowShot(_ content: CGImage, size: CGSize, title: String?, canvas: CGSize,
+                                   scale: CGFloat) -> CGImage? {
         let titleHeight: CGFloat = title == nil ? 0 : 28
         let frame = CGRect(x: (canvas.width - size.width) / 2, y: (canvas.height - size.height - titleHeight) / 2,
                            width: size.width, height: size.height + titleHeight)
-        return compose(canvas) { ctx in
+        return compose(canvas, scale: scale) { ctx in
             wallpaper(ctx, canvas)
             let path = CGPath(roundedRect: frame, cornerWidth: 12, cornerHeight: 12, transform: nil)
             ctx.saveGState()
@@ -179,7 +212,8 @@ enum Showcase {
                 let bounds = text.size()
                 drawText(text, at: CGPoint(x: frame.midX - bounds.width / 2, y: frame.minY + (titleHeight - bounds.height) / 2), ctx)
             }
-            draw(content, in: CGRect(x: frame.minX, y: frame.minY + titleHeight, width: size.width, height: size.height), ctx, shadow: false)
+            draw(content, in: CGRect(x: frame.minX, y: frame.minY + titleHeight, width: size.width, height: size.height), ctx,
+                 shadow: false, scale: scale)
             ctx.restoreGState()
             ctx.addPath(path)
             ctx.setStrokeColor(CGColor(gray: 1, alpha: 0.12))
@@ -209,8 +243,8 @@ enum Showcase {
                                options: [])
     }
 
-    /// Drawing surface in points (top left, y down), double resolution
-    private static func compose(_ size: CGSize, _ draw: (CGContext) -> Void) -> CGImage? {
+    /// Drawing surface in points (top left, y down), `scale` pixels per point
+    private static func compose(_ size: CGSize, scale: CGFloat, _ draw: (CGContext) -> Void) -> CGImage? {
         let width = Int(size.width * scale), height = Int(size.height * scale)
         guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -222,11 +256,11 @@ enum Showcase {
         return ctx.makeImage()
     }
 
-    private static func size(of image: CGImage) -> CGSize {
+    private static func size(of image: CGImage, _ scale: CGFloat) -> CGSize {
         CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)
     }
 
-    private static func draw(_ image: CGImage, in rect: CGRect, _ ctx: CGContext, shadow: Bool) {
+    private static func draw(_ image: CGImage, in rect: CGRect, _ ctx: CGContext, shadow: Bool, scale: CGFloat) {
         ctx.saveGState()
         if shadow {
             ctx.setShadow(offset: CGSize(width: 0, height: -12 * scale), blur: 36 * scale, color: CGColor(gray: 0, alpha: 0.5))
