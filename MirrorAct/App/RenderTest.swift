@@ -295,6 +295,8 @@ enum RenderTest {
             block(8, "Dieser Absatz ist oben abgeschnitten, als läge eine Titelleiste darüber: nur der sichtbare Teil wird gezeichnet.",
                   CGRect(x: 117, y: 1620, width: 936, height: 180), lines: 3,
                   visible: CGRect(x: 117, y: 1680, width: 936, height: 120), colors: .blackOnWhite),
+            // the title on that bar: within the paragraph's rectangle, but where it is hidden
+            block(15, "Titelleiste", CGRect(x: 117, y: 1624, width: 260, height: 44)),
             // written from the right: aligned at the right
             block(9, "مرحبا بالعالم، هذه ترجمة", CGRect(x: 117, y: 1900, width: 936, height: 72),
                   colors: BlockColors(background: RGBColor(red: 44, green: 44, blue: 46), foreground: .white)),

@@ -72,7 +72,7 @@ final class TranslationCompositor: @unchecked Sendable {
         CVBufferPropagateAttachments(source, copy)
 
         let language = self.language
-        let blocks = Self.withoutBlocksInsideOthers(blocks)
+        let blocks = Self.drawnBlocks(blocks, frameWidth: width, frameHeight: height)
         let drawn = biPlanar
             ? drawVideo(blocks, into: copy, width: width, height: height, fullRange: fullRange, language: language)
             : drawBGRA(blocks, into: copy, width: width, height: height, language: language)
@@ -180,30 +180,56 @@ final class TranslationCompositor: @unchecked Sendable {
 
     // MARK: Drawing
 
-    /// The blocks without those that lie (three quarters of them or more) within a larger
-    /// block, or within one of the same size that comes later. Such a block is a piece of a
-    /// paragraph that is also known whole, for example when the text recognition read it once
-    /// in pieces and once whole: its box would cover lines of the paragraph's translation, and
-    /// its text is part of that translation anyway.
-    private static func withoutBlocksInsideOthers(_ blocks: [PlacedBlock]) -> [PlacedBlock] {
-        // (a rectangle that cannot be drawn hides nothing)
-        func area(_ rect: CGRect) -> CGFloat { BlockPlacement.textSize(of: rect) == nil ? 0 : rect.width * rect.height }
-        let areas = blocks.map { area($0.rect.standardized) }
-        var kept: [PlacedBlock] = []
-        kept.reserveCapacity(blocks.count)
+    /// The blocks that get drawn, in their order, with their places in the frame. Left out are
+    /// those that draw nothing, and those of which three quarters or more of what they would
+    /// paint is painted over by a larger block that is drawn (or by one of the same size that
+    /// comes later). Such a block is a piece of a paragraph that is also known whole, for
+    /// example when the text recognition read it once in pieces and once whole: its box would
+    /// cover lines of the paragraph's translation, and its text is part of that translation.
+    ///
+    /// What counts is what a block paints, not its whole rectangle: a paragraph that scrolled
+    /// half under a title bar is drawn only below the bar, and a label on the bar that lies
+    /// within the paragraph's rectangle stays.
+    static func drawnBlocks(_ blocks: [PlacedBlock], frameWidth: Int,
+                            frameHeight: Int) -> [(block: PlacedBlock, placement: BlockPlacement)] {
+        var placed: [(index: Int, size: Int, placement: BlockPlacement)] = []
+        placed.reserveCapacity(blocks.count)
         for (index, block) in blocks.enumerated() {
-            let inside = areas[index] > 0 && blocks.indices.contains { other in
-                other != index && (areas[other] > areas[index] || (areas[other] == areas[index] && other > index))
-                    && area(blocks[other].rect.standardized.intersection(block.rect.standardized)) * 4 >= areas[index] * 3
-            }
-            if !inside { kept.append(block) }
+            // (a translation of nothing but spaces has no text mask, and so no box either)
+            guard block.text.contains(where: { !$0.isWhitespace }),
+                  let placement = BlockPlacement(rect: block.rect, visibleRect: block.visibleRect,
+                                                 lineCount: block.lineCount, frameWidth: frameWidth,
+                                                 frameHeight: frameHeight) else { continue }
+            placed.append((index, placement.text.width * placement.text.height, placement))
         }
-        return kept
+        // Larger blocks first, of the same size the later one first: a block is only compared
+        // with the blocks that are drawn, so that none is left out for one that is left out
+        // itself. (Sorted by the whole rectangle, which says which block is the paragraph and
+        // which its piece; what they paint is compared below.)
+        let order = placed.indices.sorted { a, b in
+            placed[a].size != placed[b].size ? placed[a].size > placed[b].size : placed[a].index > placed[b].index
+        }
+        var drawn = [Bool](repeating: false, count: placed.count)
+        var kept: [Int] = []
+        kept.reserveCapacity(placed.count)
+        for candidate in order {
+            let area = placed[candidate].placement.area
+            let pixels = area.width * area.height
+            let covered = kept.contains { larger in
+                let shared = placed[larger].placement.area.intersection(area)
+                return !shared.isEmpty && shared.width * shared.height * 4 >= pixels * 3
+            }
+            if !covered {
+                drawn[candidate] = true
+                kept.append(candidate)
+            }
+        }
+        return placed.indices.filter { drawn[$0] }.map { (blocks[placed[$0].index], placed[$0].placement) }
     }
 
     /// 4:2:0 video: the first plane is the brightness of every pixel, the second the color of
     /// every 2 × 2 pixels
-    private func drawVideo(_ blocks: [PlacedBlock], into frame: CVPixelBuffer, width: Int, height: Int,
+    private func drawVideo(_ blocks: [(block: PlacedBlock, placement: BlockPlacement)], into frame: CVPixelBuffer, width: Int, height: Int,
                            fullRange: Bool, language: String?) -> Bool {
         guard let luma = CVPixelBufferGetBaseAddressOfPlane(frame, 0),
               let chromaBase = CVPixelBufferGetBaseAddressOfPlane(frame, 1),
@@ -214,10 +240,8 @@ final class TranslationCompositor: @unchecked Sendable {
         let chroma = ChromaPlane(base: chromaBase, bytesPerRow: CVPixelBufferGetBytesPerRowOfPlane(frame, 1),
                                  width: CVPixelBufferGetWidthOfPlane(frame, 1),
                                  height: CVPixelBufferGetHeightOfPlane(frame, 1))
-        for block in blocks {
-            guard let placement = BlockPlacement(rect: block.rect, visibleRect: block.visibleRect,
-                                                 lineCount: block.lineCount, frameWidth: width, frameHeight: height),
-                  let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
+        for (block, placement) in blocks {
+            guard let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
                                          height: placement.text.height, lineCount: block.lineCount,
                                          language: language) else { continue }
             // the values the frame had there, so a box has exactly the brightness and color of what surrounds it
@@ -242,7 +266,7 @@ final class TranslationCompositor: @unchecked Sendable {
         return true
     }
 
-    private func drawBGRA(_ blocks: [PlacedBlock], into frame: CVPixelBuffer, width: Int, height: Int,
+    private func drawBGRA(_ blocks: [(block: PlacedBlock, placement: BlockPlacement)], into frame: CVPixelBuffer, width: Int, height: Int,
                           language: String?) -> Bool {
         guard let base = CVPixelBufferGetBaseAddress(frame),
               let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
@@ -250,10 +274,8 @@ final class TranslationCompositor: @unchecked Sendable {
                                       bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                                           | CGBitmapInfo.byteOrder32Little.rawValue) else { return false }
         Self.flip(context, height: height)
-        for block in blocks {
-            guard let placement = BlockPlacement(rect: block.rect, visibleRect: block.visibleRect,
-                                                 lineCount: block.lineCount, frameWidth: width, frameHeight: height),
-                  let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
+        for (block, placement) in blocks {
+            guard let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
                                          height: placement.text.height, lineCount: block.lineCount,
                                          language: language) else { continue }
             Self.draw(text.mask, at: placement, background: .rgb(block.colors.background),

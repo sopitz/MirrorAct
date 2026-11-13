@@ -739,6 +739,89 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertTrue(picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [paragraph, twin]))) == alone)
     }
 
+    /// A block is left out only where a block that is drawn paints over it: what counts is the
+    /// part of each block that is visible, not its whole rectangle. A label on a title bar
+    /// stays when the paragraph that scrolled beneath the bar would enclose it.
+    func testABlockIsLeftOutOnlyWhereAnotherPaintsOverIt() throws {
+        func placed(_ id: Int, _ rect: CGRect, lines: Int = 1, visibleFrom top: CGFloat? = nil) -> PlacedBlock {
+            let visible = top.map { CGRect(x: rect.minX, y: $0, width: rect.width, height: rect.maxY - $0) }
+            return PlacedBlock(id: id, text: "Text \(id)", rect: rect, visibleRect: visible, lineCount: lines,
+                               colors: darkOnLight)
+        }
+        // a paragraph of three lines (its box reaches 12 pixels beyond it) and blocks around it
+        let paragraph = CGRect(x: 40, y: 100, width: 1000, height: 300)
+        let title = CGRect(x: 240, y: 130, width: 200, height: 50)
+        let piece = CGRect(x: 50, y: 300, width: 900, height: 58)
+        // three quarters of it within the paragraph, the rest below it
+        let overhanging = CGRect(x: 50, y: 340, width: 900, height: 80)
+        // below the paragraph by most of its box: the middle of three
+        let middle = CGRect(x: 40, y: 300, width: 1000, height: 130)
+        let lowest = CGRect(x: 40, y: 402, width: 1000, height: 26)
+        let cases: [(label: String, blocks: [PlacedBlock], drawn: [Int])] = [
+            ("both visible: the label is part of the paragraph",
+             [placed(1, paragraph, lines: 3), placed(2, title)], [1]),
+            ("both visible, the smaller one first",
+             [placed(2, title), placed(1, paragraph, lines: 3)], [1]),
+            ("the paragraph is under a bar from which the label is read",
+             [placed(1, paragraph, lines: 3, visibleFrom: 200), placed(2, title)], [1, 2]),
+            ("a piece in the visible part of a paragraph under a bar",
+             [placed(1, paragraph, lines: 3, visibleFrom: 200), placed(3, piece)], [1]),
+            ("a piece partly hidden within a visible paragraph",
+             [placed(1, paragraph, lines: 3), placed(3, piece, visibleFrom: 330)], [1]),
+            ("only the part of a block below the paragraph is visible",
+             [placed(1, paragraph, lines: 3), placed(4, overhanging, visibleFrom: 400)], [1, 4]),
+            ("the same block when all of it is visible",
+             [placed(1, paragraph, lines: 3), placed(4, overhanging)], [1]),
+            ("both under the bar, the piece where the paragraph is visible",
+             [placed(1, paragraph, lines: 3, visibleFrom: 200),
+              placed(5, CGRect(x: 50, y: 180, width: 900, height: 58), visibleFrom: 200)], [1]),
+            ("both under the bar, the label where the paragraph is hidden",
+             [placed(1, paragraph, lines: 3, visibleFrom: 200), placed(2, title, visibleFrom: 140)], [1, 2]),
+            ("equal rectangles: the later one", [placed(1, paragraph, lines: 3), placed(6, paragraph, lines: 3)], [6]),
+            ("equal rectangles, the earlier one partly hidden",
+             [placed(1, paragraph, lines: 3, visibleFrom: 250), placed(6, paragraph, lines: 3)], [6]),
+            ("equal rectangles, the later one partly hidden: the other one shows the rest",
+             [placed(6, paragraph, lines: 3), placed(1, paragraph, lines: 3, visibleFrom: 250)], [6, 1]),
+            ("three nested blocks, all visible",
+             [placed(7, CGRect(x: 60, y: 140, width: 500, height: 100), lines: 2), placed(2, title),
+              placed(1, paragraph, lines: 3)], [1]),
+            ("three nested blocks, the outer one hidden where the other two are",
+             [placed(1, paragraph, lines: 3, visibleFrom: 260),
+              placed(7, CGRect(x: 60, y: 120, width: 500, height: 100), lines: 2), placed(2, title)], [1, 7]),
+            ("three in a row: the lowest is not hidden by the middle one, which is left out",
+             [placed(1, paragraph, lines: 3), placed(8, middle, lines: 2), placed(9, lowest)], [1, 9]),
+            ("a block outside the frame hides nothing",
+             [placed(10, CGRect(x: 0, y: 1300, width: 1080, height: 600), lines: 6),
+              placed(11, CGRect(x: 100, y: 1190, width: 200, height: 40))], [11]),
+        ]
+        for item in cases {
+            let drawn = TranslationCompositor.drawnBlocks(item.blocks, frameWidth: 1080, frameHeight: 1200)
+            XCTAssertEqual(drawn.map(\.block.id), item.drawn, item.label)
+        }
+
+        // Many blocks: the labels of a list under a bar, partly within a long paragraph that
+        // scrolled beneath it, and the pieces of that paragraph below the bar
+        let long = placed(1, CGRect(x: 0, y: 0, width: 1080, height: 1200), lines: 20, visibleFrom: 300)
+        var many = [long]
+        for row in 0..<40 {
+            for column in 0..<10 {
+                let id = 100 + row * 10 + column
+                let rect = CGRect(x: CGFloat(column) * 108 + 4, y: CGFloat(row) * 30 + 2, width: 100, height: 26)
+                many.append(placed(id, rect))
+            }
+        }
+        let drawn = TranslationCompositor.drawnBlocks(many, frameWidth: 1080, frameHeight: 1200)
+        // the paragraph, and the labels in the 10 rows above its visible part
+        XCTAssertEqual(drawn.map(\.block.id), [1] + Array(100..<200))
+
+        // in a frame: the label on the bar is drawn over the paragraph beneath it
+        let source = try videoFrame(width: 1080, height: 600)
+        let hidden = placed(1, paragraph, lines: 3, visibleFrom: 200)
+        let alone = picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [hidden])))
+        let withTitle = picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [hidden, placed(2, title)])))
+        XCTAssertFalse(withTitle == alone)
+    }
+
     // MARK: The copy
 
     func testCopyHasFormatSizeAndAttachmentsOfTheFrame() throws {
