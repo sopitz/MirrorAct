@@ -506,6 +506,35 @@ final class LanguageMatchingTests: XCTestCase {
                        screen("de", letters: 20))
     }
 
+    /// A screen on which nothing decides a language (Android's Modell page: "Modell", "Modell",
+    /// "Seriennummer" read together are German at 0.47) is taken to be in the likeliest one, with
+    /// no letters behind it: never enough to ask for it
+    func testWhenNothingDecidesTheScreenIsInTheLikeliestLanguage() {
+        let undecided = [LanguageMatching.Finding(guess: language("nb"), letters: 6),
+                         LanguageMatching.Finding(guess: language("de"), letters: 12),
+                         LanguageMatching.Finding(letters: 18, weight: 0)]
+        let joint = LanguageMatching.Finding(guess: language("de"), letters: 24)
+        XCTAssertEqual(LanguageMatching.screenGuess(of: undecided, joint: joint), language("de"))
+        // without a joint reading: the text with the most letters in words
+        XCTAssertEqual(LanguageMatching.screenGuess(of: undecided, joint: nil), language("de"))
+        XCTAssertNil(LanguageMatching.screenGuess(of: [LanguageMatching.Finding(letters: 18, weight: 0)], joint: nil))
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: undecided + [joint], before: nil, guess: language("de")),
+                       screen("de", letters: 0))
+        // what is known goes first
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: undecided, before: screen("fr"), guess: language("de")), screen("fr"))
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("en", letters: 13)], before: nil, guess: language("de")),
+                       screen("en", letters: 13))
+        XCTAssertNil(LanguageMatching.screenLanguage(of: undecided, before: nil, guess: language("und")))
+        // a guess is no reason to ask for the language, and a real screen replaces it
+        let plan = LanguageMatching.Plan(findings: undecided, screen: screen("de", letters: 0), target: language("en"),
+                                         supported: supported)
+        XCTAssertEqual(plan.groups.map(\.indices), [[0, 1, 2]])
+        XCTAssertEqual(plan.groups.map(\.mayAskForTheLanguage), [false])
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("fr", letters: LanguageMatching.lettersToChangeTheScreensLanguage)],
+                                                       before: screen("de", letters: 0)),
+                       screen("fr", letters: LanguageMatching.lettersToChangeTheScreensLanguage))
+    }
+
     // MARK: A request
 
     func testTextsAreGroupedByLanguageInTheOrderOfTheRequest() {

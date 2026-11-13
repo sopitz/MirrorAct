@@ -1057,6 +1057,30 @@ final class AppleTranslationEngineTests: XCTestCase {
         client.cancel()
     }
 
+    /// Turned on over a page of single words (Android's Modell page): nothing decides a language,
+    /// and the words are translated from the likeliest one where its pair is on this Mac, without
+    /// a question; where it is not, they wait, and macOS is not asked either
+    func testSingleWordsAloneUseAPairThatIsOnThisMac() async throws {
+        let modell = ["Modell", "Modell", "sdk_gphone64_arm64", "Seriennummer", "EMULATOR37X1X11X0"]
+        for installed in [true, false] {
+            let macOS = FakeMacOS(supported: ["de", "en", "nb", "sv"])
+            if installed { macOS.install("de") }
+            let engine = engine(answeredBy: macOS)
+            engine.pickUpLimit = 0.2
+            let client = AppleTranslationClient(engine: engine)
+            let request = Task { try await client.translate(modell, into: self.language("en")) }
+            if installed {
+                try await waitUntil { engine.hosts.count == 1 }
+                XCTAssertEqual(engine.hosts[0].source.languageCode?.identifier, "de")
+            }
+            _ = try await request.value
+            XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["de"], "installed: \(installed)")
+            XCTAssertTrue(macOS.asked.isEmpty)
+            if !installed { XCTAssertTrue(engine.hosts.isEmpty) }
+            client.cancel()
+        }
+    }
+
     /// A paragraph in another language keeps its own pair, and a screen in that language may
     /// have it loaded; a single word of it may not
     func testOnlyEnoughTextAsksForALanguageThatIsNotOnThisMac() async throws {

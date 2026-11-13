@@ -408,6 +408,18 @@ enum LanguageMatching {
         return Wording(joining: undecided)
     }
 
+    /// The most likely language of a screen on which no text decides one: the guess of the
+    /// `jointWording` (`joint`) if there is one, otherwise the guess of the text with the most
+    /// letters in words (the first of several)
+    static func screenGuess(of findings: [Finding], joint: Finding?) -> Locale.Language? {
+        if let joint { return joint.guess }
+        var best: Finding?
+        for finding in findings where finding.guess != nil && finding.weight > (best?.weight ?? 0) {
+            best = finding
+        }
+        return best?.guess
+    }
+
     /// The language of the screen after a request with these findings (those of its texts, and
     /// the one of `jointWording`), when it was `before`. The letters in words of the findings
     /// with a decided language are added up by language; texts that decide nothing take no part.
@@ -415,7 +427,11 @@ enum LanguageMatching {
     /// `before`, otherwise the one that comes first. It replaces the language of `before` only
     /// with at least `lettersToChangeTheScreensLanguage` letters, and more than this request has
     /// in the language of `before`. The letters kept are the most any request had for the language.
-    static func screenLanguage(of findings: [Finding], before: ScreenLanguage?) -> ScreenLanguage? {
+    /// When nothing at all is known, the screen is taken to be in `guess` (the most likely
+    /// language of its words, see `screenGuess`) with 0 letters: its texts can be translated
+    /// where the translator has the language at hand, and it is never asked for.
+    static func screenLanguage(of findings: [Finding], before: ScreenLanguage?,
+                               guess: Locale.Language? = nil) -> ScreenLanguage? {
         var languages: [(language: Locale.Language, letters: Int)] = []
         for finding in findings {
             guard let language = finding.decided, !isUndetermined(language) else { continue }
@@ -434,7 +450,10 @@ enum LanguageMatching {
             let winsTie = entry.letters == current.letters && before.map { key($0.language) == key(entry.language) } == true
             if entry.letters > current.letters || winsTie { best = entry }
         }
-        guard let best else { return before }
+        guard let best else {
+            if before == nil, let guess, !isUndetermined(guess) { return ScreenLanguage(language: guess, letters: 0) }
+            return before
+        }
         guard let before else { return ScreenLanguage(language: best.language, letters: best.letters) }
         if key(best.language) == key(before.language) {
             return ScreenLanguage(language: before.language, letters: max(before.letters, best.letters))

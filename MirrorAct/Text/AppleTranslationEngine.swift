@@ -991,12 +991,15 @@ final class AppleTranslationEngine: ObservableObject {
                     constraints: constraints, supported: supported)
         }
         var evidence = findings
-        if let joint = LanguageMatching.jointWording(of: wordings, findings: findings) {
+        var joint: LanguageMatching.Finding?
+        if let words = LanguageMatching.jointWording(of: wordings, findings: findings) {
             // a list of settings for example: together the labels are long enough
-            evidence.append(finding(for: joint, letters: joint.letters, with: recognizer, constraints: constraints,
-                                    supported: supported))
+            joint = finding(for: words, letters: words.letters, with: recognizer, constraints: constraints,
+                            supported: supported)
+            evidence.append(joint!)
         }
-        return (findings, LanguageMatching.screenLanguage(of: evidence, before: before))
+        let guess = LanguageMatching.screenGuess(of: findings, joint: joint)
+        return (findings, LanguageMatching.screenLanguage(of: evidence, before: before, guess: guess))
     }
 
     /// What the recognizer says about the words of a text with `letters` letters in all
