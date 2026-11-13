@@ -346,4 +346,65 @@ final class OverlayTrackerRestTests: XCTestCase {
         XCTAssertEqual(after.sent, [])
         XCTAssertEqual(Set(after.placed), ["T " + title.text, "T " + row.text])
     }
+
+    /// A translated paragraph of six lines on a still page; a pass at rest reads its first five
+    /// lines as one paragraph and the last line as another (the recognizer split the paragraph,
+    /// as on the phone after flings to the end of the page), the next one reads it whole. The
+    /// five lines hold most of the paragraph's place but leave its last line out: the
+    /// paragraph's place is read again whole, and in the end it is one block with the whole text
+    /// and its translation. (Taken as covering it, the five lines kept the place, and the last
+    /// line stayed a piece of its own for good.)
+    func testAReadingThatLeavesOutTheLastLineHasTheParagraphReadAgain() {
+        let screen = SyntheticScreen(seed: 43)
+        let scale = SyntheticScreen.scale
+        let tracker = OverlayTracker()
+        func lines(_ first: Int, _ last: Int, _ text: String) -> RecognizedBlock {
+            RecognizedBlock(text: text, rect: SyntheticScreen.block(first, offset: 0, text: "").rect
+                .union(SyntheticScreen.block(last, offset: 0, text: "").rect), lineCount: last - first + 1)
+        }
+        let whole = lines(4, 9, "one two three four five six seven eight nine ten eleven twelve")
+        let five = lines(4, 8, "one two three four five six seven eight nine ten")
+        let frame = screen.thumbnail(offset: 0, noiseSeed: 7)
+        var time = 0.0, sent: [String] = [], regions: [CGRect] = []
+        var answer: (CGRect) -> [RecognizedBlock] = { region in region.contains(whole.rect) ? [whole] : [] }
+        func run(until end: TimeInterval, frame: LumaImage) {
+            while time < end {
+                time += 1.0 / 30
+                _ = tracker.advance(frame, scale: scale, time: time)
+                if let due = tracker.recognitionDue, due <= time, let request = tracker.beginRecognition(time: time) {
+                    regions.append(request.region)
+                    tracker.finishRecognition(request, blocks: answer(request.region), time: time + 0.05)
+                }
+                for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                    sent.append(text)
+                    tracker.setTranslation("T " + text, for: text)
+                }
+            }
+        }
+        run(until: 2, frame: frame)
+        XCTAssertEqual(tracker.blocks.map(\.translation), ["T " + whole.text])
+        // something changes around the paragraph (a frame drawn in the gaps above and below it
+        // and beside its lines), and the pass that reads it splits the paragraph
+        var changed = frame
+        let above = Int(SyntheticScreen.block(4, offset: 0, text: "").rect.minY) / scale - 8
+        let below = Int(SyntheticScreen.block(9, offset: 0, text: "").rect.maxY) / scale + 2
+        for x in 4..<196 where x % 4 != 0 {
+            changed[x, above] = 0
+            changed[x, below] = 0
+        }
+        for y in above..<below { changed[193, y] = 0 }
+        let last = lines(9, 9, "eleven twelve")
+        var split = true
+        answer = { region in
+            guard region.contains(whole.rect) else { return [] }
+            defer { split = false }
+            return split ? [five, last] : [whole]
+        }
+        regions = []
+        run(until: 6, frame: changed)
+        XCTAssertGreaterThanOrEqual(regions.filter { $0.contains(whole.rect) }.count, 2, "\(regions)")
+        XCTAssertEqual(tracker.blocks.map(\.text), [whole.text])
+        let placed = tracker.advance(changed, scale: scale, time: time + 0.1).placed.map(\.text)
+        XCTAssertEqual(placed, ["T " + whole.text])
+    }
 }

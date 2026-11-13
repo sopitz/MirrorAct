@@ -2296,8 +2296,16 @@ final class OverlayTracker {
         }
         let oldRect = thumbnailRect(of: old)
         let common = oldRect.intersection(rect)
+        // (it covers the old block when it holds most of its place, and, read at rest, leaves out
+        // no line of it: a reading of the first five of six lines – the recognizer split the
+        // paragraph, a pass whose region ended between them – holds more than `containedShare`
+        // of it, but the last line would stay unread and untranslated. While the picture moves,
+        // what was read is read again once it rests anyway.)
+        let oldLine = oldRect.height / Double(max(1, old.lineCount))
+        let leftOut = common.isNull ? oldRect.height : max(common.minY - oldRect.minY, oldRect.maxY - common.maxY)
         let coversOld = !common.isNull
             && common.width * common.height >= configuration.containedShare * oldRect.width * oldRect.height
+            && (!block.textAtRest || leftOut < 0.5 * oldLine)
         if changedInPlace || TextSimilarity.isRelated(old.text, block.text) {
             // (the old translation is shown only where the new reading covers most of its place)
             if coversOld { block.earlier = shownTranslation(of: old) }
