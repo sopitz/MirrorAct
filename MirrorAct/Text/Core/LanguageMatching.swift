@@ -208,19 +208,22 @@ enum LanguageMatching {
     /// Characters that join the parts of one word ("E-Mail", "aujourd’hui", "スクリーン・タイム")
     private static let joiners: Set<Character> = ["-", "\u{2010}", "\u{2011}", "'", "\u{2019}", "\u{30FB}"]
 
-    /// The words of `text`. It is split at white space into tokens. A token with a digit in it
-    /// ("arm64", "5G", "12:30"), or with one of `identifierMarks` ("sdk_gphone", an e-mail address,
-    /// a URL), is no word. Every other character that is neither a letter nor one of `joiners`
-    /// separates two words ("、" in Japanese), except between two letters of a script with case:
-    /// there it makes the token a name or an address ("example.com", "z.B.", "Ton&Vibration"),
-    /// and the token is no word. Joiners at the ends of a word are dropped. A word in which a
-    /// lowercase letter is directly followed by an uppercase one ("AndroidWifi", "iPhone", "YouTube") is
-    /// a name, and one of two or more letters without a lowercase one ("WLAN", "IMEI", "OK") an
-    /// acronym: neither counts.
+    /// The words of `text`. It is split at white space into tokens, and each token into parts
+    /// (`parts`): letters of a script without case (Chinese, Japanese, Thai …) apart from
+    /// everything else, so that a number or a Latin name inside a sentence of such a script
+    /// ("3件", "iPhoneを") drops out alone and leaves the rest of the sentence. A part with a digit
+    /// in it ("arm64", "5G", "12:30"), or with one of `identifierMarks` ("sdk_gphone", an e-mail
+    /// address, a URL), is no word. Every other character that is neither a letter nor one of
+    /// `joiners` separates two words ("、" in Japanese), except between two letters of a script
+    /// with case: there it makes the part a name or an address ("example.com", "z.B.",
+    /// "Ton&Vibration"), and the part is no word. Joiners at the ends of a word are dropped. A
+    /// word in which a lowercase letter is directly followed by an uppercase one ("AndroidWifi",
+    /// "iPhone", "YouTube") is a name, and one of two or more letters without a lowercase one
+    /// ("WLAN", "IMEI", "OK") an acronym: neither counts.
     static func wording(of text: String) -> Wording {
         var words: [String] = []
         var letters = 0, cased = 0
-        for token in text.split(whereSeparator: { $0.isWhitespace }) {
+        for token in text.split(whereSeparator: { $0.isWhitespace }).flatMap(parts(of:)) {
             guard !token.contains(where: { isDigit($0) || identifierMarks.contains($0) }) else { continue }
             var runs: [String] = []
             var run = ""
@@ -260,6 +263,33 @@ enum LanguageMatching {
         }
         return Wording(text: words.joined(separator: " "), words: words.count, letters: letters,
                        isCased: cased * 2 >= letters)
+    }
+
+    /// A token cut where a letter of a script without case (a letter that is not `isCased`)
+    /// meets a character that is not one, in either direction. A joiner belongs to the part it
+    /// follows (to the next one at the start of the token). A token without such letters, as in
+    /// Latin, Greek or Cyrillic text, is one part: "2025年11月13日のお知らせ" gives "2025", "年",
+    /// "11", "月", "13", "日のお知らせ"; "iPhoneを最新の…。" gives "iPhone", "を最新の…", "。".
+    private static func parts(of token: Substring) -> [Substring] {
+        var parts: [Substring] = []
+        var start = token.startIndex
+        // whether the part so far is of letters without case; nil while it has only joiners
+        var uncased: Bool?
+        var index = token.startIndex
+        while index < token.endIndex {
+            let character = token[index]
+            if !joiners.contains(character) {
+                let kind = character.isLetter && !character.isCased
+                if let current = uncased, current != kind {
+                    parts.append(token[start..<index])
+                    start = index
+                }
+                uncased = kind
+            }
+            index = token.index(after: index)
+        }
+        if start < token.endIndex { parts.append(token[start...]) }
+        return parts
     }
 
     /// how many letters of an alphabet one character of Chinese, Japanese or Korean stands for:

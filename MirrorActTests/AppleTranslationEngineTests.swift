@@ -1028,6 +1028,26 @@ final class AppleTranslationEngineTests: XCTestCase {
         XCTAssertEqual(found.screen?.language.languageCode?.identifier, "de")
     }
 
+    /// Japanese and Chinese set no spaces between words: a date, a number or a brand name in a
+    /// sentence must not take the whole sentence with it
+    func testSentencesWithoutSpacesKeepTheirLanguageAroundNumbersAndNames() {
+        let japanese = ["2025年11月13日のお知らせ", "新しいメッセージが3件あります。確認してください。",
+                        "iPhoneを最新のバージョンにアップデートしてください。", "YouTubeで動画を見る"]
+        let screen = languages(of: japanese)
+        XCTAssertEqual(screen.findings.map { $0.decided?.languageCode?.identifier }, ["ja", "ja", "ja", "ja"])
+        XCTAssertEqual(screen.screen?.language.languageCode?.identifier, "ja")
+        let plan = LanguageMatching.Plan(findings: screen.findings, screen: screen.screen, target: language("en"),
+                                         supported: supported)
+        XCTAssertEqual(plan.groups.map(\.indices), [[0, 1, 2, 3]])
+        XCTAssertEqual(plan.groups.map(\.mayAskForTheLanguage), [true])
+        // a Japanese paragraph with a number on a German page keeps its language
+        let page = languages(of: ["Heute kochen wir eine einfache Gemüsesuppe, die schnell fertig ist und allen schmeckt.",
+                                  "この料理は30分で作れます。野菜をたくさん使った、体にやさしいスープです。",
+                                  "请将iPhone更新到最新版本以获得更好的体验，这样可以使用所有的新功能。"])
+        XCTAssertEqual(page.findings.map { $0.decided?.languageCode?.identifier }, ["de", "ja", "zh"])
+        XCTAssertTrue(page.findings.allSatisfy(\.standsApart))
+    }
+
     /// Android's About phone and its Modell page, as Vision read them. The recognizer takes the
     /// model name for Indonesian and "Telefonnummer" for Norwegian; neither is a language of the
     /// screen, and macOS is asked about neither (no download question, no word about Apple

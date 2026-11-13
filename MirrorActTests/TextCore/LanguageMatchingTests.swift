@@ -290,7 +290,7 @@ final class LanguageMatchingTests: XCTestCase {
     func testOnlyWordsSpeakForALanguage() {
         for identifier in ["sdk_gphone64_arm64", "EMULATOR37X1X11X0", "SM-G991B", "A2848", "anna.mueller@example.com",
                            "https://www.example.com/help", "www.example.org", "192.168.1.20", "12,99 €", "03.03.2025",
-                           "12:30", "AndroidWifi", "iPhone", "YouTube", "WhatsApp", "IMEI", "WLAN", "OK", "3月3日(月)",
+                           "12:30", "AndroidWifi", "iPhone", "YouTube", "WhatsApp", "IMEI", "WLAN", "OK",
                            "#hashtag", "a=b", "C:\\Users", "~/Documents", "z.B.", "Ton&Vibration", "", " – "] {
             let wording = LanguageMatching.wording(of: identifier)
             XCTAssertEqual(wording.words, 0, identifier)
@@ -331,6 +331,39 @@ final class LanguageMatchingTests: XCTestCase {
         // the digits of every script are digits
         XCTAssertEqual(LanguageMatching.wording(of: "Version ٣").words, 1)
         XCTAssertEqual(LanguageMatching.wording(of: "Seite ７").text, "Seite")
+    }
+
+    /// A sentence of a script without spaces is one token: a number or a Latin name in it drops
+    /// out alone, and the rest of the sentence still speaks for its language
+    func testNumbersAndNamesInASentenceWithoutSpacesLeaveTheRest() {
+        let weight = LanguageMatching.denseLetterWeight
+        let cases: [(text: String, words: String, letters: Int)] = [
+            ("2025年11月13日のお知らせ", "年 月 日のお知らせ", 8 * weight),
+            ("新しいメッセージが3件あります。確認してください。", "新しいメッセージが 件あります 確認してください", 22 * weight),
+            ("iPhoneを最新のバージョンにアップデートしてください。", "を最新のバージョンにアップデートしてください", 22 * weight),
+            ("YouTubeで動画を見る", "で動画を見る", 6 * weight),
+            ("この料理は30分で作れます。", "この料理は 分で作れます", 11 * weight),
+            ("请将iPhone更新到最新版本以获得更好的体验。", "请将 更新到最新版本以获得更好的体验", 17 * weight),
+            ("您有3条新消息，请及时查看。", "您有 条新消息 请及时查看", 11 * weight),
+            ("3월 13일에 만나요", "월 일에 만나요", 6 * weight),
+            ("3月3日(月)", "月 日 月", 3 * weight),
+        ]
+        for entry in cases {
+            let wording = LanguageMatching.wording(of: entry.text)
+            XCTAssertEqual(wording.text, entry.words, entry.text)
+            XCTAssertEqual(wording.letters, entry.letters, entry.text)
+            XCTAssertFalse(wording.isCased, entry.text)
+        }
+        // a date alone is too little to decide
+        XCTAssertFalse(LanguageMatching.wording(of: "3月3日(月)").canDecide)
+        XCTAssertTrue(LanguageMatching.wording(of: "2025年11月13日のお知らせ").canDecide)
+        // a Latin word next to them is a word of its own, and a name or a number in it is none
+        XCTAssertEqual(words("Wi-Fi設定"), "Wi-Fi 設定")
+        XCTAssertEqual(words("iOS17に対応"), "に対応")
+        XCTAssertEqual(words("example.comで検索"), "で検索")
+        XCTAssertEqual(words("スクリーン・タイム"), "スクリーン・タイム")
+        // in a script with case nothing changes: a token with a digit is no word
+        XCTAssertEqual(words("arm64 Version2 Seite"), "Seite")
     }
 
     func testTheWordsOfSeveralTextsAreReadTogether() {
