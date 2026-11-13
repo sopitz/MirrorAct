@@ -632,7 +632,7 @@ final class AppleTranslationEngine: ObservableObject {
     /// until this returns; that is why nobody else removes a host that is served.
     func serve(_ host: AppleTranslationHost, with session: TranslationSession) async {
         await serve(host, prepare: { try await session.prepareTranslation() },
-                    work: { await self.work(for: host, with: session) })
+                    work: { await self.work(for: host, calling: { try await session.translations(from: $0) }) })
     }
 
     /// `serve` with what it does on the session handed in, so that the tests can run it without one
@@ -772,8 +772,9 @@ final class AppleTranslationEngine: ObservableObject {
         finishWaitingJobs(of: host.pair) { $0.postponed }
     }
 
-    /// Translates the jobs of the pair as they come, until the host has to end.
-    private func work(for host: AppleTranslationHost, with session: TranslationSession) async {
+    /// Translates the jobs of the pair as they come, until the host has to end. `call` is
+    /// `translations(from:)` of the host's session; the tests answer in its place.
+    func work(for host: AppleTranslationHost, calling call: AppleTranslationCall) async {
         guard let signal = signals[host.id] else { return }
         var idle = idleTimer(for: host)
         // woken once when the host was made, so jobs that were queued before the view started are seen
@@ -781,7 +782,7 @@ final class AppleTranslationEngine: ObservableObject {
             idle.cancel()
             var intact = true
             while intact, !isEnding(host), let job = takeJob(for: host.pair) {
-                intact = await run(job, on: session, for: host)
+                intact = await run(job, calling: call, for: host)
             }
             if !intact || isEnding(host) { break }
             idle = idleTimer(for: host)
@@ -800,7 +801,7 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// One call on the session. false = the session may be broken and is not used again.
-    private func run(_ job: AppleTranslationJob, on session: TranslationSession, for host: AppleTranslationHost) async -> Bool {
+    private func run(_ job: AppleTranslationJob, calling call: AppleTranslationCall, for host: AppleTranslationHost) async -> Bool {
         var requests: [TranslationSession.Request] = []
         for (index, text) in job.texts.enumerated() {
             requests.append(TranslationSession.Request(sourceText: text, clientIdentifier: String(index)))
@@ -818,7 +819,7 @@ final class AppleTranslationEngine: ObservableObject {
         }
         let start = Self.clock
         do {
-            let responses = try await session.translations(from: requests)
+            let responses = try await call(requests)
             Log.info("Translation: Apple \(job.pair): \(job.texts.count) texts in \(Self.milliseconds(since: start)) ms")
             var translations = [String?](repeating: nil, count: job.texts.count)
             for (position, response) in responses.enumerated() {
@@ -1136,6 +1137,9 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
         }
     }
 }
+
+/// `translations(from:)` of a session: what `AppleTranslationEngine.work` asks of it
+typealias AppleTranslationCall = @MainActor ([TranslationSession.Request]) async throws -> [TranslationSession.Response]
 
 /// Apple's kinds of translation models. Before macOS 26.4 there are only the on-device ones,
 /// and nothing is said about the kind.
