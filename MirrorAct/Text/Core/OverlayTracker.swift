@@ -273,7 +273,7 @@ final class OverlayTracker {
         /// it went
         var carryRadius = 2
         /// two blocks whose visible parts share more than this share of the smaller one are
-        /// readings of the same text: only one of them is kept
+        /// readings of the same text: only one of them is kept, unless one pass read them apart
         var overlapLimit = 0.2
     }
 
@@ -1545,8 +1545,10 @@ final class OverlayTracker {
 
     /// One block per text: of two blocks that can be seen and lie over each other, a part of a
     /// paragraph read alone gives way to the paragraph, otherwise the earlier reading gives way
-    /// to the later one (the place shows something else now). The one that stays shows the
-    /// translation of the other until it has its own, when their texts are related.
+    /// to the later one (the place shows something else now). Two texts one pass found apart
+    /// both stay (their boxes overlap: a label in a paragraph's box, a tall line over the one
+    /// below it); `TranslationCompositor.drawnBlocks` decides what is drawn. The one that stays
+    /// shows the translation of the other until it has its own, when their texts are related.
     private func dropOverlaps() {
         var visible: [CGRect?] = tracked.map { $0.lostSince == nil ? visibleRect(of: $0) : nil }
         var dropped = Set<Int>()
@@ -1565,8 +1567,11 @@ final class OverlayTracker {
                     // (a part read alone inside its paragraph)
                     let firstRect = thumbnailRect(of: tracked[first]), secondRect = thumbnailRect(of: tracked[second])
                     loser = firstRect.width * firstRect.height < secondRect.width * secondRect.height ? first : second
+                } else if tracked[first].readAt == tracked[second].readAt {
+                    // (read apart in one pass: two texts)
+                    continue
                 } else {
-                    loser = tracked[first].readAt <= tracked[second].readAt ? first : second
+                    loser = tracked[first].readAt < tracked[second].readAt ? first : second
                 }
                 let winner = loser == first ? second : first
                 if related, shownTranslation(of: tracked[winner]) == nil {

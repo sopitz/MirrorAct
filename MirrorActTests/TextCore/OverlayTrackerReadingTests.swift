@@ -89,6 +89,71 @@ final class OverlayTrackerReadingTests: XCTestCase {
         XCTAssertEqual(placed.map(\.text), ["T Something new"])
     }
 
+    /// Runs the passes that become due on a still frame for `seconds`, each answered with
+    /// `answer(region)`, and translates what is asked for. Returns the regions read and the
+    /// texts sent.
+    private func idle(_ tracker: OverlayTracker, frame: LumaImage, from start: TimeInterval, seconds: Double,
+                      answer: (CGRect) -> [RecognizedBlock]) -> (regions: [CGRect], sent: [String]) {
+        var regions: [CGRect] = [], sent: [String] = []
+        var time = start
+        while time < start + seconds {
+            time += 1.0 / 30
+            _ = tracker.advance(frame, scale: scale, time: time)
+            if let due = tracker.recognitionDue, due <= time, let request = tracker.beginRecognition(time: time) {
+                regions.append(request.region)
+                tracker.finishRecognition(request, blocks: answer(request.region), time: time + 0.05)
+            }
+            for text in tracker.textsAwaitingTranslation(limit: 50, time: time + 0.05) {
+                sent.append(text)
+                tracker.setTranslation("T " + text, for: text)
+            }
+        }
+        return (regions, sent)
+    }
+
+    /// Two texts that one pass found apart are two texts, also when their boxes overlap (a
+    /// label, a badge or the time in the box of a paragraph's short last line): both stay,
+    /// in either order, and the paragraph's translation is drawn
+    func testTextsReadApartInOnePassBothStay() throws {
+        let screen = SyntheticScreen(seed: 25)
+        let whole = Self.paragraph(4, 6, offset: 0, text: "alpha beta gamma delta epsilon zeta")
+        let line6 = SyntheticScreen.block(6, offset: 0, text: "").rect
+        let label = RecognizedBlock(text: "Sponsored offer",
+                                    rect: CGRect(x: line6.maxX - 100, y: line6.minY, width: 100, height: line6.height))
+        for order in [[whole, label], [label, whole]] {
+            let tracker = OverlayTracker()
+            try readAtRest(tracker, screen, offset: 0, blocks: order, time: 0)
+            XCTAssertEqual(Set(tracker.blocks.map(\.text)), [whole.text, label.text], "order \(order.map(\.text))")
+            let frame = screen.thumbnail(offset: 0, noiseSeed: 7)
+            let placed = tracker.advance(frame, scale: scale, time: 2).placed
+            XCTAssertTrue(placed.contains { $0.text == "T " + whole.text }, "order \(order.map(\.text))")
+            // (and they stay so on the still screen, without reading it again and again)
+            let after = idle(tracker, frame: frame, from: 2, seconds: 3, answer: { _ in order })
+            XCTAssertEqual(after.regions, [])
+            XCTAssertEqual(Set(tracker.blocks.map(\.text)), [whole.text, label.text])
+        }
+    }
+
+    /// A row of a settings list, as Vision read it on an Android phone: the title with its icon
+    /// as one line ("E Display & Touchbedienung", the icon read as a letter) in a box twice the
+    /// usual height (100 px in a picture 1080 px wide), which reaches into the summary line right
+    /// below it. Both are read in one pass; the title stays and is translated.
+    func testATallTitleBoxOverTheSummaryBelowItStays() throws {
+        let screen = SyntheticScreen(seed: 26)
+        let line4 = SyntheticScreen.block(4, offset: 0, text: "").rect
+        let line5 = SyntheticScreen.block(5, offset: 0, text: "").rect
+        // (from the top of the title line to half into the summary line)
+        let title = RecognizedBlock(text: "E Display & Touchbedienung",
+                                    rect: CGRect(x: line4.minX, y: line4.minY, width: line4.width * 0.8,
+                                                 height: line5.minY + line5.height / 2 - line4.minY))
+        let summary = SyntheticScreen.block(5, offset: 0, text: "Dunkles Design, Schriftgröße, Helligkeit")
+        let tracker = OverlayTracker()
+        try readAtRest(tracker, screen, offset: 0, blocks: [title, summary], time: 0)
+        XCTAssertEqual(Set(tracker.blocks.map(\.text)), [title.text, summary.text])
+        let placed = tracker.advance(screen.thumbnail(offset: 0, noiseSeed: 7), scale: scale, time: 2).placed
+        XCTAssertTrue(placed.contains { $0.text == "T " + title.text }, "\(placed.map(\.text))")
+    }
+
     /// A paragraph of which only its first line was taken (the rest was not in view then) is
     /// read whole once a reading finds more of it, also when that reading is cut off itself:
     /// the line alone must not keep the paragraph from being read
