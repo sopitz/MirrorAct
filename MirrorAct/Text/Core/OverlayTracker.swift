@@ -261,9 +261,10 @@ final class OverlayTracker {
         /// line plus `rereadAir` beyond each cut edge, and `rereadAir` beyond the others
         var rereadReach = 0.7
         var rereadAir = 4.0
-        /// two blocks are lines of one paragraph when the gap between them is less than this share
-        /// of a line and their lines differ in height by less than `sameLineHeight` (as
-        /// `TextLayout.blocks` joins lines)
+        /// two blocks may be lines of one paragraph, and are read again together, when the gap
+        /// between them is less than this share of a line and their lines differ in height by less
+        /// than `sameLineHeight` (a rough test on the boxes; `TextLayout.blocks` then decides by the
+        /// size of the text)
         var paragraphGap = 0.7
         var sameLineHeight = 0.25
         /// a new reading takes the place of a known block it covers this much of, when their
@@ -1630,7 +1631,9 @@ final class OverlayTracker {
     }
 
     /// Two pieces of text may be lines of one paragraph: right above each other, with lines of
-    /// about the same height and a gap of less than most of a line (as `TextLayout.blocks` joins them)
+    /// about the same height and a gap of less than most of a line. (A rough test on the boxes
+    /// alone: `TextLayout.blocks` decides by the size of the text, the gap and the alignment
+    /// whether lines are one paragraph, once they are read together.)
     private func mayContinue(_ rect: CGRect, lineHeight: Double, _ other: CGRect, otherLineHeight: Double) -> Bool {
         guard other.minX < rect.maxX, rect.minX < other.maxX else { return false }
         let gap = max(other.minY - rect.maxY, rect.minY - other.maxY)
