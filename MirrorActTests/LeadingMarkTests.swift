@@ -134,6 +134,58 @@ final class LeadingMarkTests: XCTestCase {
         XCTAssertFalse(LeadingMark.sitsLikeText(icon, markText: "E", restText: rest))
     }
 
+    /// The magnifier of Android's search field, read as "Q" with the field's text (light theme,
+    /// font scale 1; the parts as measured in the frame): the tip of its handle ends on the
+    /// baseline, but few of its columns do, and a Q's tail would end lower. It goes. A real Q
+    /// set apart before a word ("Q   Questions", measured the same way) ends below the baseline
+    /// with half of its columns on it, and stays.
+    func testTheMagnifierOfASearchFieldGoesAndAQStays() {
+        let field = "In Einstellungen suchen"
+        let magnifier = LeadingMark.Parts(
+            mark: CGRect(x: 113, y: 155, width: 46, height: 46), rest: CGRect(x: 193, y: 159, width: 547, height: 51),
+            widestGapInRest: 20, restBaseline: 199,
+            markColumnEnds: [177, 180, 181, 183, 184, 185, 186, 187, 187, 188, 188, 188, 189, 189, 189, 189, 189, 189,
+                             189, 189, 189, 189, 188, 188, 187, 187, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195,
+                             196, 197, 198, 199, 200, 201, 200, 199, 198, 198])
+        XCTAssertTrue(LeadingMark.standsApart(magnifier, restText: field, markOnLeft: true))
+        XCTAssertFalse(LeadingMark.sitsLikeText(magnifier, markText: "Q", restText: field))
+        // (any other letter that ends on the baseline sits like text)
+        XCTAssertTrue(LeadingMark.sitsLikeText(magnifier, markText: "O", restText: field))
+        let questions = LeadingMark.Parts(
+            mark: CGRect(x: 44, y: 2270, width: 21, height: 30), rest: CGRect(x: 98, y: 2270, width: 162, height: 30),
+            widestGapInRest: 4, restBaseline: 2296,
+            markColumnEnds: [2289, 2291, 2293, 2294, 2294, 2295, 2296, 2296, 2296, 2296, 2296, 2296, 2296, 2296, 2297,
+                             2298, 2299, 2299, 2300, 2300, 2299])
+        XCTAssertTrue(LeadingMark.standsApart(questions, restText: "Questions", markOnLeft: true))
+        XCTAssertTrue(LeadingMark.sitsLikeText(questions, markText: "Q", restText: "Questions"))
+    }
+
+    /// A Q set apart before a word, drawn in the system font and in Helvetica at 2x and 3x, stays
+    /// wherever Vision reads it with its word as one line
+    func testAQSetApartBeforeAWordStays() throws {
+        var together = 0
+        for scale: CGFloat in [2, 3] {
+            for font in [nil, "Helvetica"] as [String?] {
+                for gap: CGFloat in [0.6, 1.0, 1.4] {
+                    var columns = Columns(scale: scale, fontName: font, gap: gap)
+                    columns.words = [("Q", "Questions"), ("Q", "Quellen"), ("Q", "Quartal 3")]
+                    let (frame, rows) = try columns.frame()
+                    let height = CGFloat(CVPixelBufferGetHeight(frame))
+                    let read = try Self.visionLines(frame)
+                    let found = try TextRecognizer.lines(in: frame)
+                    for row in rows {
+                        func onRow(_ rect: CGRect) -> Bool { abs(rect.midY * height - row.rest.midY) < row.rest.height / 2 }
+                        guard read.contains(where: { onRow($0.rect) && $0.text.hasPrefix("Q ") }) else { continue }
+                        together += 1
+                        XCTAssertTrue(found.contains { onRow($0.rect) && $0.text.hasPrefix("Q ") },
+                                      "\(scale)x \(font ?? "system") gap \(gap): \(found.filter { onRow($0.rect) }.map(\.text))")
+                    }
+                }
+            }
+        }
+        XCTAssertGreaterThan(together, 6, "Vision read too few Qs with their word")
+    }
+
     func testWhatCountsAsALoneCharacter() {
         func mark(_ text: String) -> String? { LeadingMark.split(text).map { String(text[$0.mark]) } }
         XCTAssertEqual(mark("E Display & Touchbedienung"), "E")
@@ -324,11 +376,13 @@ final class LeadingMarkTests: XCTestCase {
         var fontName: String?
         var gap: CGFloat
         var size: CGFloat = 17
+        /// the word and the text of each row
+        var words = Columns.rows
 
         /// The frame and, in frame pixels, every row's word and text
         func frame() throws -> (CVPixelBuffer, [(first: String, word: CGRect, rest: CGRect)]) {
             let widthPt: CGFloat = 390, rowPt = size * 2.4
-            let heightPt = CGFloat(Self.rows.count) * rowPt + 60
+            let heightPt = CGFloat(words.count) * rowPt + 60
             let width = Int((widthPt * scale).rounded()), height = Int((heightPt * scale).rounded())
             let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
                                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -344,7 +398,7 @@ final class LeadingMarkTests: XCTestCase {
             let font = try XCTUnwrap(fontName.map { NSFont(name: $0, size: size) } ?? NSFont.systemFont(ofSize: size))
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(white: 0.1, alpha: 1)]
             var drawn: [(first: String, word: CGRect, rest: CGRect)] = []
-            for (index, (first, rest)) in Self.rows.enumerated() {
+            for (index, (first, rest)) in words.enumerated() {
                 let top = 30 + CGFloat(index) * rowPt
                 let wordSize = (first as NSString).size(withAttributes: attributes)
                 (first as NSString).draw(at: NSPoint(x: 24, y: top), withAttributes: attributes)

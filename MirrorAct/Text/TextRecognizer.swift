@@ -151,6 +151,14 @@ struct LumaRaster {
 /// below the baseline, with at most 0.24 of their columns on it. Signs and symbols ("•", "→",
 /// "©", "€") keep the rule of the gap: a sign set apart from a word is mostly an icon, and
 /// leaving it out loses no word.
+///
+/// A "Q" sits like text only by its columns: the tail of a Q ends below the baseline and its
+/// bowl on it, while the magnifier of a search field, which Vision reads as "Q", ends with the
+/// tip of its handle on the baseline like a word and with few columns there. Measured with
+/// Vision on Android (Roboto, font scales 1 and 1.3, light and dark): 60 Qs before a word
+/// ended 0.10 to 0.13 of the text's size below the baseline with 0.54 to 0.65 of their columns
+/// on it; the magnifier before "In Einstellungen suchen" and "Search settings" (56 readings)
+/// ended from 0.03 above to 0.04 below it, with 0.07 to 0.22 of its columns there.
 enum LeadingMark {
     /// The least gap between the character's ink and the rest's, in units of the size of the
     /// rest's text (`TextLayout.textSize` of its ink width)
@@ -396,14 +404,15 @@ enum LeadingMark {
 
     /// Whether the character is a word set on the rest's line: it has a letter or a digit, its
     /// ink is no higher than text, and it ends on the rest's baseline (or enough of its columns
-    /// do). False when the baseline was not measured.
+    /// do; for a "Q" only its columns, see above). False when the baseline was not measured.
     static func sitsLikeText(_ parts: Parts, markText: String, restText: String) -> Bool {
         guard markText.contains(where: { $0.isLetter || $0.isNumber }), let baseline = parts.restBaseline,
               let size = TextLayout.textSize(of: restText, width: Double(parts.rest.width)), size > 0,
               Double(parts.mark.height) <= textHeight * size else { return false }
         let tolerance = baselineTolerance * size
         func onLine(_ y: CGFloat) -> Bool { abs(Double(y - baseline)) <= tolerance }
-        if onLine(parts.mark.maxY) { return true }
+        // (the tail of a Q ends below the baseline: a "Q" whose lowest ink ends on it is a magnifier)
+        if markText != "Q", onLine(parts.mark.maxY) { return true }
         let ends = parts.markColumnEnds
         return !ends.isEmpty && Double(ends.filter(onLine).count) >= onBaseline * Double(ends.count)
     }
