@@ -86,6 +86,8 @@ final class MirrorSession: ObservableObject, Identifiable {
     var onClose: (() -> Void)?
 
     private var toastTask: Task<Void, Never>?
+    /// shown in place of the toast whenever no toast is up, until it is withdrawn
+    private var lastingNotice: String?
 
     init(id: String, kind: Kind, deviceName: String, modelIdentifier: String?, muted: Bool) {
         self.id = id
@@ -106,6 +108,7 @@ final class MirrorSession: ObservableObject, Identifiable {
             MainActor.assumeIsolated { self?.state = .live }
         }
         translator.onMessage = { [weak self] message in self?.showToast(message) }
+        translator.onStatus = { [weak self] status in self?.showLastingNotice(status) }
         translator.$isActive.assign(to: &$isTranslating)
     }
 
@@ -153,7 +156,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         translateResumeExpiry = nil
         if toast == Self.translateResumeNotice {
             toastTask?.cancel()
-            toast = nil
+            toast = lastingNotice
         }
     }
 
@@ -183,8 +186,19 @@ final class MirrorSession: ObservableObject, Identifiable {
         toastTask?.cancel()
         toastTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            self?.toast = nil
+            guard !Task.isCancelled, let self else { return }
+            self.toast = self.lastingNotice
+        }
+    }
+
+    /// A notice that stays until it is replaced or withdrawn with nil ("macOS asks whether it may
+    /// download …"). A toast goes over it for its time.
+    func showLastingNotice(_ text: String?) {
+        let isShown = toast == nil || toast == lastingNotice
+        lastingNotice = text
+        if isShown {
+            toastTask?.cancel()
+            toast = text
         }
     }
 

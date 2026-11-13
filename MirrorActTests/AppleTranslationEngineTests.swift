@@ -554,6 +554,77 @@ final class AppleTranslationEngineTests: XCTestCase {
         macOS.finish(host, installing: false)
     }
 
+    /// For as long as macOS asks, the turn is told so, and that nothing is loaded before the user
+    /// answers; once the answer lets the languages come, that they are on their way; once they are
+    /// there, nothing. A turn that asks only while the question is up is told the same.
+    func testTheTurnIsToldForAsLongAsMacOSAsksAndTheLanguagesLoad() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        let engine = engine(answeredBy: macOS)
+        engine.pickUpLimit = 3
+        let first = AppleTranslationClient(engine: engine)
+        let notices = Box<[String]>([])
+        let statuses = Box<[String?]>([])
+        first.notify = { message in MainActor.assumeIsolated { notices.value.append(message) } }
+        first.notifyStatus = { status in MainActor.assumeIsolated { statuses.value.append(status) } }
+        let request = Task { try await first.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let asking = AppleTranslationEngine.askingNotice(host.source, host.target)
+        let downloading = AppleTranslationEngine.downloadingNotice(host.source, host.target)
+        XCTAssertNotEqual(asking, downloading)
+        let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+        _ = try await request.value
+        try await waitUntil { macOS.preparing.count == 1 }
+        XCTAssertEqual(statuses.value, [asking])
+
+        let second = AppleTranslationClient(engine: engine)
+        let secondStatuses = Box<[String?]>([])
+        second.notifyStatus = { status in MainActor.assumeIsolated { secondStatuses.value.append(status) } }
+        let again = try await second.translate([Self.english], into: language("de"))
+        XCTAssertEqual(again, [nil])
+        XCTAssertEqual(secondStatuses.value, [asking])
+        // asked again meanwhile: nothing new to say
+        _ = try await first.translate([Self.english], into: language("de"))
+        XCTAssertEqual(statuses.value, [asking])
+
+        macOS.finish(host, installing: false)
+        try await waitUntil { statuses.value.count == 2 }
+        XCTAssertEqual(statuses.value, [asking, downloading])
+        XCTAssertEqual(secondStatuses.value, [asking, downloading])
+        macOS.installEverything()
+        try await waitUntil { statuses.value.count == 3 }
+        XCTAssertEqual(statuses.value, [asking, downloading, nil])
+        XCTAssertEqual(secondStatuses.value, [asking, downloading, nil])
+        // all of it said lastingly, none of it as a passing notice
+        XCTAssertEqual(notices.value, [])
+        first.cancel()
+        second.cancel()
+        try await waitFor(served)
+    }
+
+    /// The user does not let macOS load the languages: the lasting notice goes, and a passing one
+    /// says what to do
+    func testADeclinedQuestionEndsTheLastingNotice() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let notices = Box<[String]>([])
+        let statuses = Box<[String?]>([])
+        client.notify = { message in MainActor.assumeIsolated { notices.value.append(message) } }
+        client.notifyStatus = { status in MainActor.assumeIsolated { statuses.value.append(status) } }
+        let request = Task { try await client.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
+        _ = try await request.value
+        try await waitUntil { macOS.preparing.count == 1 }
+        macOS.decline(host.id)
+        try await waitFor(served)
+        XCTAssertEqual(statuses.value, [AppleTranslationEngine.askingNotice(host.source, host.target), nil])
+        XCTAssertEqual(notices.value.count, 1)
+        client.cancel()
+    }
+
     // MARK: Languages of the texts (the language recognizer of macOS; needs no download)
 
     func testTheLanguageOfWholeSentencesIsDecided() {
@@ -689,5 +760,11 @@ private final class FakeMacOS {
 
     func finish(_ host: AppleTranslationHost, installing: Bool) {
         finish(host.id, installing: installing)
+    }
+
+    /// The user closes the question without loading: prepareTranslation throws
+    func decline(_ id: UUID) {
+        guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
+        pending.remove(at: index).continuation.resume(throwing: CancellationError())
     }
 }

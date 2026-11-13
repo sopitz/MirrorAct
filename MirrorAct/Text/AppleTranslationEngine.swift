@@ -73,6 +73,8 @@ final class AppleTranslationEngine: ObservableObject {
     /// hosts whose prepareTranslation has not returned yet: macOS shows its question. Giving
     /// nil stops waiting for the call (see `ask`).
     private var questions: [UUID: AppleTranslationFirstAnswer<Result<Void, Error>>] = [:]
+    /// hosts of `loading` whose question was answered: their languages are on their way
+    private var downloading: Set<UUID> = []
     /// the host that asks macOS to load its languages right now, and those that wait for their
     /// turn, oldest first
     private var loadingTurn: UUID?
@@ -176,7 +178,7 @@ final class AppleTranslationEngine: ObservableObject {
             if Task.isCancelled || client.isCancelled { continue }
             if isPostponed(pair) {
                 // a client that asks only after the loading began is told as well
-                if isLoading(pair) { noteLoading(group.source, of: pair, to: [client]) }
+                if isLoading(pair) { updateStatuses() }
                 continue
             }
             let job = AppleTranslationJob(client: client, pair: pair, source: group.source, target: target,
@@ -433,8 +435,8 @@ final class AppleTranslationEngine: ObservableObject {
         ending.remove(host.id)
         leaveLineToLoad(host)
         passOnTurnToLoad(from: host)
-        setLoading(false, for: host)
         hosts.removeAll { $0.id == host.id }
+        setLoading(false, for: host)
     }
 
     /// (a host that was taken out of the list ends as well)
@@ -448,7 +450,9 @@ final class AppleTranslationEngine: ObservableObject {
             loading.insert(host.id)
         } else {
             loading.remove(host.id)
+            downloading.remove(host.id)
         }
+        updateStatuses()
         // macOS may attach its question about loading languages to the window that asks: it has
         // to be on a screen for that long, and above mirror windows that are kept on top
         if wasLoading != !loading.isEmpty, let window {
@@ -520,7 +524,6 @@ final class AppleTranslationEngine: ObservableObject {
             // loading takes minutes: those who wait for this pair ask again later
             finishWaitingJobs(of: host.pair) { $0.postponed }
             let language = LanguageMatching.name(of: host.source, in: Self.noticeLocale)
-            noteLoading(host.source, of: host.pair, to: clients(using: host.pair))
             guard await waitForTurnToLoad(host) else {
                 setLoading(false, for: host)
                 return false
@@ -560,6 +563,8 @@ final class AppleTranslationEngine: ObservableObject {
                     return false
                 }
                 // prepareTranslation also returns while the languages are still on their way
+                downloading.insert(host.id)
+                updateStatuses()
                 let start = Self.clock
                 status = await availability.status(host.source, host.target, host.strategy)
                 while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
@@ -724,9 +729,36 @@ final class AppleTranslationEngine: ObservableObject {
         note("no answer", String(localized: "Translation on this Mac is not responding"), to: [client])
     }
 
-    private func noteLoading(_ source: Locale.Language, of pair: String, to receivers: [AppleTranslationClient]) {
-        let language = LanguageMatching.name(of: source, in: Self.noticeLocale)
-        note("loading " + pair, String(localized: "Loading \(language) for translating …"), to: receivers)
+    /// Tells each client whose translating is on why texts of its pairs stay untranslated for
+    /// now, for as long as that lasts: macOS asks whether it may download the languages of a
+    /// pair (or will ask once the question before is answered), or they are on their way.
+    private func updateStatuses() {
+        for client in activeClients {
+            let waiting = hosts.filter { loading.contains($0.id) && client.pairs.contains($0.pair) }
+            var status: String?
+            if let host = waiting.first(where: { !downloading.contains($0.id) }) {
+                status = Self.askingNotice(host.source, host.target)
+            } else if let host = waiting.first {
+                status = Self.downloadingNotice(host.source, host.target)
+            }
+            guard status != client.status else { continue }
+            client.status = status
+            client.notifyStatus?(status)
+        }
+    }
+
+    /// The lasting notice while macOS asks: until the user answers, nothing loads
+    static func askingNotice(_ source: Locale.Language, _ target: Locale.Language) -> String {
+        let sourceName = LanguageMatching.name(of: source, in: noticeLocale)
+        let targetName = LanguageMatching.name(of: target, in: noticeLocale)
+        return String(localized: "macOS asks whether it may download \(sourceName) and \(targetName) – answer its question")
+    }
+
+    /// The lasting notice once the user has agreed
+    static func downloadingNotice(_ source: Locale.Language, _ target: Locale.Language) -> String {
+        let sourceName = LanguageMatching.name(of: source, in: noticeLocale)
+        let targetName = LanguageMatching.name(of: target, in: noticeLocale)
+        return String(localized: "Downloading \(sourceName) and \(targetName) for translating …")
     }
 
     private func noteNeedsAppleIntelligence(_ source: Locale.Language, _ target: Locale.Language,
@@ -823,9 +855,10 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
         weak var client: AppleTranslationClient?
     }
 
-    /// protects `handler` and `cancelled`
+    /// protects `handler`, `statusHandler` and `cancelled`
     private let lock = NSLock()
     private var handler: ((String) -> Void)?
+    private var statusHandler: ((String?) -> Void)?
     private var cancelled = false
 
     // Used by the engine, on the main actor only
@@ -835,6 +868,8 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     fileprivate var commonLanguage: Locale.Language?
     /// the language pairs this client asked for: it is told what becomes of them
     fileprivate var pairs: Set<String> = []
+    /// the lasting notice given last
+    fileprivate var status: String?
 
     init(engine: AppleTranslationEngine, targetIsChosen: Bool = false) {
         self.engine = engine
@@ -850,6 +885,19 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
         set {
             lock.lock()
             handler = newValue
+            lock.unlock()
+        }
+    }
+
+    var notifyStatus: ((String?) -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return statusHandler
+        }
+        set {
+            lock.lock()
+            statusHandler = newValue
             lock.unlock()
         }
     }

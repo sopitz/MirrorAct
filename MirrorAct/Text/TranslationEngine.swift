@@ -16,6 +16,9 @@ protocol TranslationEngine: AnyObject {
 
     /// Notices for the user that are no failures ("Loading German …"); may be called on any thread
     var notify: ((String) -> Void)? { get set }
+    /// A notice that stays until the engine replaces it or withdraws it with nil ("macOS asks
+    /// whether it may download …"); may be called on any thread
+    var notifyStatus: ((String?) -> Void)? { get set }
 
     /// Translations in the order of `texts`.
     /// - A translation equal to its text means "leave it as it is" (already in the target
@@ -26,6 +29,14 @@ protocol TranslationEngine: AnyObject {
 
     /// Translating was turned off: drop pending work.
     func cancel()
+}
+
+extension TranslationEngine {
+    /// engines without lasting notices
+    var notifyStatus: ((String?) -> Void)? {
+        get { nil }
+        set {}
+    }
 }
 
 /// Why a translation request failed, in words for the user

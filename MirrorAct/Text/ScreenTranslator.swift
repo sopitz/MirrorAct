@@ -19,6 +19,8 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
 
     /// short notices for the user, called on the main thread
     var onMessage: ((String) -> Void)?
+    /// a notice that stays until it is replaced or withdrawn (nil), called on the main thread
+    var onStatus: ((String?) -> Void)?
 
     /// What translates a turn, the way the settings say; the tests hand in a stand-in
     var makeEngine: @MainActor (AppSettings) throws -> TranslationEngine = { try TranslationEngines.make(for: $0) }
@@ -101,6 +103,13 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         engine.notify = { [weak self] message in
             DispatchQueue.main.async { self?.onMessage?(message) }
         }
+        engine.notifyStatus = { [weak self, weak engine] status in
+            DispatchQueue.main.async {
+                // not after the turn has ended, which withdrew the notice
+                guard let self, let engine, self.engine === engine else { return }
+                self.onStatus?(status)
+            }
+        }
         Log.info("Translating the screen with \(engine.name) into \(target.minimalIdentifier)")
 
         let (recognitions, wakeRecognition) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -155,7 +164,9 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         tasks = []
         engine?.cancel()
         engine?.notify = nil
+        engine?.notifyStatus = nil
         engine = nil
+        onStatus?(nil)
         compositor.reset()
         // a still picture would keep the translations until the next frame
         sink.redisplay()
