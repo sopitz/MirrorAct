@@ -85,7 +85,7 @@ struct MirrorCommands: Commands {
                 .keyboardShortcut("t", modifiers: [.command, .option])
             Toggle("Translate Text on Screen", isOn: Binding(
                 get: { model.keyMirrorIsTranslating },
-                set: { _ in MainActor.assumeIsolated { mirror?.session.translator.toggle() } }))
+                set: { _ in MainActor.assumeIsolated { mirror?.session.toggleTranslation() } }))
                 .keyboardShortcut("t", modifiers: [.command, .shift])
             Divider()
             Button("Control Device") { mirror?.toggleControl() }

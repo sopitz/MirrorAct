@@ -356,13 +356,16 @@ final class AppModel: ObservableObject {
             self.androidAudio[key]?.stop()
             session.stopRecording()
             session.control = nil
-            // the window mirrors on over the other connection, or when the device is back
-            session.keepTranslatingAcrossReconnect()
-            session.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
             // Cable unplugged, Wi-Fi still there (or vice versa): continue over the other connection
-            if let other = self.android.devices.first(where: {
+            let other = self.android.devices.first(where: {
                 $0.state == .ready && $0.serial != device.serial && $0.info != nil && Self.androidKey($0) == key
-            }) {
+            })
+            // Translate goes on again by itself only when the app moves the window right now;
+            // a device that is back later mirrors on without it
+            session.streamWillEnd(handingOver: Self.movesToAnotherConnection(
+                otherConnection: other != nil, wifiSwitchStarted: self.wifiSwitches[key], now: Date()))
+            session.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
+            if let other {
                 self.connectAndroid(other, session: session)
             }
         }
@@ -377,15 +380,34 @@ final class AppModel: ObservableObject {
         client.start()
     }
 
+    /// when "Switch to Wi-Fi" started, per window key
+    private var wifiSwitches: [String: Date] = [:]
+    /// How long after "Switch to Wi-Fi" started a stream that stops was stopped by it: the
+    /// switch restarts adb on the phone, which ends the stream over the cable before the one
+    /// over Wi-Fi can start. It covers the timeouts of the commands that come first.
+    static let wifiSwitchWindow: TimeInterval = 30
+
+    /// Whether the app moves the window of a stopped Android stream to another connection by
+    /// itself: the other connection is there, or Switch to Wi-Fi just ended the stream
+    static func movesToAnotherConnection(otherConnection: Bool, wifiSwitchStarted: Date?, now: Date) -> Bool {
+        if otherConnection { return true }
+        guard let started = wifiSwitchStarted else { return false }
+        let elapsed = now.timeIntervalSince(started)
+        return elapsed >= 0 && elapsed < wifiSwitchWindow
+    }
+
     /// switch a cable-connected Android device to Wi-Fi; an open window reconnects
     func switchAndroidToWiFi(_ device: AndroidDeviceMonitor.Device) {
         let name = device.name
+        let key = Self.androidKey(device)
+        wifiSwitches[key] = Date()
         Task {
             do {
                 try await Task.detached { try AndroidWireless.switchToWiFi(serial: device.serial) }.value
-                controllers[Self.androidKey(device)]?.session
+                controllers[key]?.session
                     .showToast(String(localized: "Connected via Wi-Fi – you can unplug the cable"))
             } catch {
+                wifiSwitches[key] = nil
                 let alert = NSAlert()
                 alert.messageText = String(localized: "\(name) can’t be switched to Wi-Fi")
                 alert.informativeText = error.localizedDescription

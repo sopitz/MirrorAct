@@ -63,7 +63,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             toggleControl: { [weak self] in self?.toggleControl() },
             press: { [weak self] button in self?.session.control?.press(button) },
             copyText: { [weak self] in self?.session.copyText() },
-            toggleTranslation: { [weak self] in self?.session.translator.toggle() })
+            toggleTranslation: { [weak self] in self?.session.toggleTranslation() })
 
         railView = NSHostingView(rootView: MirrorToolRail(session: session, chrome: chrome, actions: actions))
         hudView = PassthroughHostingView(rootView: MirrorHUD(session: session))

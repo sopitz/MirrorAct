@@ -26,21 +26,29 @@ final class MirrorSession: ObservableObject, Identifiable {
             // The device went away or connects anew: Translate ends here, before AirPlay and
             // Android clear the sink, while the device's last frame is still there to be shown
             // again without the translations. A new stream starts without the old ones, and
-            // translates again only if the app connected it by itself.
+            // translates again only if the app moved the window to it a moment ago.
             if state != .live {
-                endingTranslation = true
                 translator.stop()
-                endingTranslation = false
-            } else if translatesWhenLive {
-                translatesWhenLive = false
-                translator.start()
+            } else if let deadline = translateResumeDeadline {
+                cancelTranslateResume()
+                if now() <= deadline { translator.start() }
             }
         }
     }
-    /// Translate was on when the stream ended and the app connects this window again by itself:
-    /// it goes on once the new stream is live
-    private var translatesWhenLive = false
-    private var endingTranslation = false
+    /// Translate was on when the app moved this window to another connection: it goes on again
+    /// if the new stream is live before this time, and otherwise stays off
+    private var translateResumeDeadline: Date?
+    private var translateResumeExpiry: Task<Void, Never>?
+    /// How long the stream of a hand-over may take for Translate to go on again by itself. It
+    /// is short on purpose: with a language model service the text on the screen leaves the
+    /// Mac, which must not start again long after the user last turned Translate on. Switch to
+    /// Wi-Fi, which restarts adb on the phone, normally fits.
+    static let translateResumeWindow: TimeInterval = 10
+    static var translateResumeNotice: String {
+        String(localized: "Translate goes on again with the new connection – press Translate to keep it off")
+    }
+    /// the time, for the deadline above; the tests move it
+    var now: () -> Date = Date.init
     @Published private(set) var frameSize: CGSize = .zero
     @Published private(set) var profile: DeviceProfile
     @Published var muted: Bool { didSet { onMuteChange?(muted) } }
@@ -78,7 +86,6 @@ final class MirrorSession: ObservableObject, Identifiable {
     var onClose: (() -> Void)?
 
     private var toastTask: Task<Void, Never>?
-    private var translatorChanges: AnyCancellable?
 
     init(id: String, kind: Kind, deviceName: String, modelIdentifier: String?, muted: Bool) {
         self.id = id
@@ -100,19 +107,54 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
         translator.onMessage = { [weak self] message in self?.showToast(message) }
         translator.$isActive.assign(to: &$isTranslating)
-        // Turned on or off by hand while the stream is away (the last picture is still there):
-        // that is what the next stream does
-        translatorChanges = translator.$isActive.sink { [weak self] active in
-            guard let self, self.state != .live, !self.endingTranslation else { return }
-            self.translatesWhenLive = active
+    }
+
+    /// The stream is about to end. `handingOver`: the app moves this window to another
+    /// connection to the same device right away (Android: the cable unplugged with Wi-Fi still
+    /// there or the other way round, Switch to Wi-Fi). Then Translate, if it is on, goes on
+    /// again once the new stream is live within `translateResumeWindow`; the window says so
+    /// until then. A stream that stops otherwise, also one of a hand-over that never showed a
+    /// frame, leaves Translate off. Call before the state changes.
+    func streamWillEnd(handingOver: Bool) {
+        guard handingOver else {
+            cancelTranslateResume()
+            return
+        }
+        // The stream of a hand-over failed and the app moves the window once more: a resume
+        // still waiting keeps its deadline
+        guard translator.isActive else { return }
+        let window = Self.translateResumeWindow
+        translateResumeDeadline = now().addingTimeInterval(window)
+        showToast(Self.translateResumeNotice, seconds: window)
+        translateResumeExpiry?.cancel()
+        translateResumeExpiry = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(window * 1_000_000_000))
+            guard !Task.isCancelled, let self, let deadline = self.translateResumeDeadline,
+                  self.now() >= deadline else { return }
+            self.cancelTranslateResume()
         }
     }
 
-    /// The stream is about to end and the app connects this window again by itself, to the
-    /// same device (Android: over the other connection, or when the device is back): if
-    /// Translate is on, it goes on once the new stream is live. Call before the state changes.
-    func keepTranslatingAcrossReconnect() {
-        if translator.isActive { translatesWhenLive = true }
+    /// The Translate button, ⇧⌘T and the Device menu. While the window waits for the stream of
+    /// a hand-over, it keeps Translate off instead: the button is not lit then, and before the
+    /// first frame there is nothing it could turn on.
+    func toggleTranslation() {
+        if translateResumeDeadline != nil {
+            cancelTranslateResume()
+            showToast(String(localized: "Translate stays off"))
+        } else {
+            translator.toggle()
+        }
+    }
+
+    private func cancelTranslateResume() {
+        translateResumeDeadline = nil
+        translateResumeExpiry?.cancel()
+        translateResumeExpiry = nil
+        if toast == Self.translateResumeNotice {
+            toastTask?.cancel()
+            toast = nil
+        }
     }
 
     private func updateProfile() {
@@ -136,11 +178,11 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
     }
 
-    func showToast(_ text: String) {
+    func showToast(_ text: String, seconds: TimeInterval = 2) {
         toast = text
         toastTask?.cancel()
         toastTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
             self?.toast = nil
         }
