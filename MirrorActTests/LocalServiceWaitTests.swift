@@ -70,7 +70,7 @@ final class LocalServiceWaitTests: XCTestCase {
             let engine = LLMTranslationEngine(connection: LLMConnection(provider: .lmStudio, model: "gemma4"),
                                               transport: self.transport)
             let slow = Gate()
-            engine.untilSlowAnswer = { try await slow.wait() }
+            engine.untilSlowAnswer = { _ in try await slow.wait() }
             self.slowWaits.append(slow)
             return engine
         }

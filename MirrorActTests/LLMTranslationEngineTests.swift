@@ -806,7 +806,7 @@ final class LLMTranslationEngineTests: XCTestCase {
             return openAIReply(translated(request))
         }
         let engine = makeEngine(provider, model: "gemma4", transport: transport)
-        engine.untilSlowAnswer = { try await slow.wait() }
+        engine.untilSlowAnswer = { _ in try await slow.wait() }
         let statuses = Collected<String?>()
         engine.notifyStatus = { statuses.add($0) }
         return (engine, transport, statuses)
@@ -888,6 +888,91 @@ final class LLMTranslationEngineTests: XCTestCase {
         _ = try await translating.value
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(statuses.all, [waitNotice])
+    }
+
+    func testTheWaitForTheNoticeGrowsWithTheLongestAnswerOfTheTurn() {
+        // nothing answered yet, or only quick answers: 20 s
+        XCTAssertEqual(LLMTranslationEngine.noticeWait(longestAnswer: nil), 20)
+        XCTAssertEqual(LLMTranslationEngine.noticeWait(longestAnswer: 3), 20)
+        XCTAssertEqual(LLMTranslationEngine.noticeWait(longestAnswer: 10), 20)
+        // a slow model: twice its longest answer
+        XCTAssertEqual(LLMTranslationEngine.noticeWait(longestAnswer: 25), 50)
+        XCTAssertEqual(LLMTranslationEngine.noticeWait(longestAnswer: 90), 180)
+    }
+
+    /// LM Studio with a model that needs 25 s for every request, on a clock of the test's own:
+    /// a wait for the notice that is shorter than that is up before the answer comes, a longer
+    /// one is not. The notice comes for the first request, while the server has not answered
+    /// yet, and not again for the requests after it.
+    func testASlowModelThatAnswersIsNamedOnlyUntilItHasAnswered() async throws {
+        let answerTakes: TimeInterval = 25
+        let clock = Collected<TimeInterval>()
+        clock.add(1000)
+        let waits = Collected<TimeInterval>()
+        let statuses = Collected<String?>()
+        let never = Gate()
+        let notices = { statuses.all.compactMap { $0 }.count }
+        let transport = ScriptedTransport { request, number in
+            // the watch for this request has decided: named, or waiting on
+            let decided = await eventually {
+                guard waits.all.count > number else { return false }
+                let expected = waits.all.prefix(number + 1).filter { $0 < answerTakes }.count
+                return waits.all[number] < answerTakes ? notices() == expected : never.counts.waiting == 1
+            }
+            XCTAssertTrue(decided, "request \(number): waits \(waits.all), statuses \(statuses.all)")
+            clock.add(clock.all.last! + answerTakes)
+            return openAIReply(translated(request))
+        }
+        let engine = makeEngine(.lmStudio, model: "gemma4", transport: transport)
+        engine.now = { clock.all.last! }
+        engine.untilSlowAnswer = { seconds in
+            waits.add(seconds)
+            if seconds >= answerTakes { try await never.wait() }
+        }
+        engine.notifyStatus = { statuses.add($0) }
+
+        for text in ["Settings", "General", "Display", "Battery", "Privacy"] {
+            let translations = try await engine.translate([text], into: german)
+            XCTAssertEqual(translations, ["de:" + text])
+        }
+        XCTAssertEqual(waits.all, [20, 50, 50, 50, 50])
+        XCTAssertEqual(statuses.all, [waitNotice, nil])
+        let ended = await eventually { never.counts.waiting == 0 }
+        XCTAssertTrue(ended, "a wait for the notice outlives its request: \(never.counts)")
+    }
+
+    func testTheNoticeAfterAnAnswerNamesTheTimeWaited() async throws {
+        let clock = Collected<TimeInterval>()
+        clock.add(1000)
+        let slow = Gate()
+        let waiting = Gate()
+        let transport = ScriptedTransport { request, number in
+            if number == 0 {
+                clock.add(clock.all.last! + 30)
+            } else {
+                try await waiting.wait()
+            }
+            return openAIReply(translated(request))
+        }
+        let engine = makeEngine(.lmStudio, model: "gemma4", transport: transport)
+        engine.now = { clock.all.last! }
+        engine.untilSlowAnswer = { _ in try await slow.wait() }
+        let statuses = Collected<String?>()
+        engine.notifyStatus = { statuses.add($0) }
+        _ = try await engine.translate(["Settings"], into: german)
+        // the server hangs after an answer that took 30 s: named after 60 s, and the notice says so
+        let target = german
+        let translating = Task { try await engine.translate(["General"], into: target) }
+        let asked = await eventually { slow.counts.waiting == 1 && waiting.counts.waiting == 1 }
+        XCTAssertTrue(asked)
+        slow.open()
+        let named = await eventually { statuses.all.count == 1 }
+        XCTAssertTrue(named)
+        XCTAssertEqual(statuses.all,
+                       ["LM Studio: " + String(localized: "no answer for \(60) s – is the model still loading?")])
+        waiting.open()
+        _ = try await translating.value
+        XCTAssertEqual(statuses.all.last, .some(nil))
     }
 
     func testAServiceOnTheInternetAndTheTestInTheSettingsHaveNoSuchNotice() async throws {
