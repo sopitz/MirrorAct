@@ -734,6 +734,63 @@ final class TranslationCompositorTests: XCTestCase {
         }
     }
 
+    /// In scripts that are written without spaces and whose letters are reordered or stacked
+    /// (Thai, Lao, Khmer, Myanmar), the ellipsis goes where Core Text would end a line: after a
+    /// word, never inside a cluster of letter and marks and never after a vowel that is written
+    /// before its consonant. Only a word that does not fit next to the ellipsis is cut, between
+    /// two clusters.
+    func testTheEllipsisInThaiAndLaoFollowsAWholeWord() throws {
+        let texts: [(text: String, language: String)] = [
+            ("ข้อความที่ยาวมากเกินไปสำหรับกล่องนี้และจะต้องถูกตัดทอน", "th"),
+            ("การตั้งค่าเครือข่ายไร้สายของคุณและการแจ้งเตือนทั้งหมด", "th"),
+            ("ການຕັ້ງຄ່າເຄືອຂ່າຍໄຮ້ສາຍຂອງທ່ານແລະການແຈ້ງເຕືອນ", "lo"),
+            ("ការកំណត់បណ្តាញឥតខ្សែរបស់អ្នកនិងការជូនដំណឹងទាំងអស់", "km"),
+            ("ကွန်ရက်ဆက်တင်များနှင့်အသိပေးချက်အားလုံးကိုပြင်ဆင်ပါ", "my"),
+        ]
+        var checked = 0
+        for item in texts {
+            // the places where a line may end in this text, after Unicode's rules and dictionaries
+            let string = item.text as NSString
+            var words: Set<Int> = [0, string.length]
+            let tokenizer = try XCTUnwrap(CFStringTokenizerCreate(nil, item.text as CFString,
+                                                                  CFRange(location: 0, length: string.length),
+                                                                  kCFStringTokenizerUnitLineBreak,
+                                                                  CFLocaleCreate(nil, CFLocaleIdentifier(rawValue: "root" as CFString))))
+            while CFStringTokenizerAdvanceToNextToken(tokenizer) != [] {
+                let range = CFStringTokenizerGetCurrentTokenRange(tokenizer)
+                words.insert(range.location + range.length)
+            }
+            // and where its clusters of letters and marks end
+            var clusters: Set<Int> = []
+            var offset = 0
+            for character in item.text {
+                offset += character.utf16.count
+                clusters.insert(offset)
+            }
+            for width in stride(from: 40, through: 200, by: 3) {
+                for height in [10, 20] {
+                    let label = "\(item.language) \(width) × \(height)"
+                    let mask = try XCTUnwrap(BlockTextMask(text: item.text, width: width, height: height, lineCount: 1,
+                                                           language: item.language), label)
+                    guard let last = mask.lines.last, last.hasSuffix("\u{2026}") else { continue }
+                    let shown = (mask.lines.dropLast().joined() + last.dropLast()) as NSString
+                    let cut = shown.length
+                    XCTAssertEqual(string.substring(to: min(cut, string.length)).utf16.elementsEqual((shown as String).utf16),
+                                   true, "\(label): \(mask.lines)")
+                    XCTAssertTrue(clusters.contains(cut), "\(label): \(mask.lines)")
+                    let before = try XCTUnwrap(Unicode.Scalar(string.character(at: cut - 1)))
+                    XCTAssertFalse(before.properties.isLogicalOrderException, "\(label): \(mask.lines)")
+                    // after a word, unless the last line is one word that is cut
+                    let lineStart = shown.length - (last as NSString).length + 1
+                    XCTAssertTrue(words.contains(cut) || !words.contains { $0 > lineStart && $0 < cut },
+                                  "\(label): \(mask.lines)")
+                    checked += 1
+                }
+            }
+        }
+        XCTAssertGreaterThan(checked, 50)
+    }
+
     /// The line that ends with an ellipsis is set in the direction of its paragraph, also when
     /// it starts with a word of the other direction: in Arabic it stays at the right with the
     /// ellipsis at its left end, in English at the left with the ellipsis at its right end.

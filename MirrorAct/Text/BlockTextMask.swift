@@ -75,7 +75,10 @@ struct BlockTextMask {
             }
         }
 
-        guard let picture = BlockTextMask.draw(layout, width: width, height: height, lineHeight: lineHeight) else { return nil }
+        // (only a text that is too long needs them)
+        let ellipsisStops = layout.fitsBox ? [] : BlockTextMask.ellipsisStops(in: text, language: language)
+        guard let picture = BlockTextMask.draw(layout, width: width, height: height, lineHeight: lineHeight,
+                                               ellipsisStops: ellipsisStops) else { return nil }
         self.width = width
         self.height = height
         pixels = picture.pixels
@@ -209,6 +212,24 @@ struct BlockTextMask {
     /// locales make the tokenizer tell words apart instead (also in Latin text, where it would
     /// allow "don'|t"), they are Unicode's own.
     static func wordKeepingLineEnds(in text: String, language: String? = nil) -> Set<Int> {
+        lineEnds(in: text, language: language, nextToEveryCharacterOf: scriptsWithoutSpaces)
+    }
+
+    /// The offsets (in UTF-16 units) after which the last line of a text that goes on may end
+    /// with an ellipsis: where a line may end without breaking a word, as for
+    /// `wordKeepingLineEnds`. But in the scripts whose letters are reordered or stacked (Thai,
+    /// Lao, Khmer, Myanmar …) only where Core Text itself would end a line, after a word as its
+    /// dictionaries find them: not after every character, which would part a letter from its
+    /// marks or a vowel from the consonant it is written before. In the other scripts without
+    /// spaces next to every character. (`endingWithEllipsis` also keeps every cluster of a
+    /// character and its marks whole.)
+    static func ellipsisStops(in text: String, language: String? = nil) -> Set<Int> {
+        lineEnds(in: text, language: language, nextToEveryCharacterOf: scriptsBrokenAnywhere)
+    }
+
+    /// The line ends of `wordKeepingLineEnds`, with the places next to every character of these scripts
+    private static func lineEnds(in text: String, language: String?,
+                                 nextToEveryCharacterOf scripts: [ClosedRange<UInt32>]) -> Set<Int> {
         let string = text as CFString
         let length = CFStringGetLength(string)
         var ends: Set<Int> = [0, length]
@@ -225,7 +246,7 @@ struct BlockTextMask {
         var offset = 0
         for scalar in text.unicodeScalars {
             let next = offset + UTF16.width(scalar)
-            if scriptsWithoutSpaces.contains(where: { $0.contains(scalar.value) }) {
+            if scripts.contains(where: { $0.contains(scalar.value) }) {
                 ends.insert(offset)
                 ends.insert(next)
             }
@@ -268,14 +289,24 @@ struct BlockTextMask {
 
     /// The blocks of the scripts that are written without spaces between words, or (Korean)
     /// that may be broken between any two syllables
-    private static let scriptsWithoutSpaces: [ClosedRange<UInt32>] = [
+    private static let scriptsWithoutSpaces = scriptsBrokenByWords + scriptsBrokenAnywhere
+
+    /// Of these, the scripts whose letters are reordered or stacked: a line ends after a word,
+    /// as the dictionaries of the line breaking find it
+    private static let scriptsBrokenByWords: [ClosedRange<UInt32>] = [
         0x0E00...0x0EFF,   // Thai, Lao
         0x0F00...0x0FFF,   // Tibetan
         0x1000...0x109F,   // Myanmar
-        0x1100...0x11FF,   // Hangul Jamo
         0x1780...0x17FF,   // Khmer
         0x1950...0x19FF,   // Tai Le, New Tai Lue, Khmer symbols
         0x1A20...0x1AAF,   // Tai Tham
+        0xA9E0...0xA9FF,   // Myanmar Extended-B
+        0xAA60...0xAADF,   // Myanmar Extended-A, Tai Viet
+    ]
+
+    /// And those in which a line may end next to any character
+    private static let scriptsBrokenAnywhere: [ClosedRange<UInt32>] = [
+        0x1100...0x11FF,   // Hangul Jamo
         0x2E80...0x2FDF,   // CJK and Kangxi radicals
         0x3000...0x303F,   // CJK symbols and punctuation (々, 〆, 。, 「」)
         0x3040...0x30FF,   // Hiragana, Katakana with ー and the small kana
@@ -284,8 +315,6 @@ struct BlockTextMask {
         0x4E00...0x9FFF,   // CJK Unified Ideographs
         0xA000...0xA4CF,   // Yi
         0xA960...0xA97F,   // Hangul Jamo Extended-A
-        0xA9E0...0xA9FF,   // Myanmar Extended-B
-        0xAA60...0xAADF,   // Myanmar Extended-A, Tai Viet
         0xAC00...0xD7FF,   // Hangul syllables, Hangul Jamo Extended-B
         0xF900...0xFAFF,   // CJK Compatibility Ideographs
         0xFE30...0xFE4F,   // CJK Compatibility Forms
@@ -295,8 +324,9 @@ struct BlockTextMask {
     ]
 
     /// Draws the coverage of the text, one byte per pixel: 0 where there is none, 255 where it covers fully
-    private static func draw(_ layout: Layout, width: Int, height: Int,
-                             lineHeight: CGFloat) -> (pixels: [UInt8], image: CGImage, lines: [String])? {
+    /// `ellipsisStops`: where the last line of a text that goes on may end (see `ellipsisStops(in:)`)
+    private static func draw(_ layout: Layout, width: Int, height: Int, lineHeight: CGFloat,
+                             ellipsisStops: Set<Int>) -> (pixels: [UInt8], image: CGImage, lines: [String])? {
         // The first row in memory is the top row of the picture, as in a frame. Core Graphics
         // and Core Text count y from the bottom row upwards, and nothing is flipped here: text
         // drawn the ordinary way stands upright in the picture, with its first line in the
@@ -348,7 +378,7 @@ struct BlockTextMask {
             CTFrameGetLineOrigins(frame, CFRange(location: 0, length: lines.count), &origins)
             // Too long: the last line drawn ends with an ellipsis, so that the text is seen to
             // go on instead of just stopping in the middle of a sentence
-            if let ending = endingWithEllipsis(last, layout, width: CGFloat(width)) {
+            if let ending = endingWithEllipsis(last, layout, stops: ellipsisStops, width: CGFloat(width)) {
                 // A line of a paragraph written from the right stays aligned at the right
                 if layout.rightToLeft {
                     origins[lines.count - 1].x = CGFloat(CTLineGetPenOffsetForFlush(ending.line, 1, Double(width)))
@@ -377,8 +407,11 @@ struct BlockTextMask {
     /// The last line drawn of a text that goes on after it, ending with an ellipsis: its
     /// words, as many as fit next to the ellipsis, without the spaces, commas or full stops they
     /// end with. Only when not even its first word fits, that word is cut off between two
-    /// characters. nil when the line ends the text.
-    private static func endingWithEllipsis(_ last: CTLine, _ layout: Layout,
+    /// clusters of characters. The ellipsis never follows a part of a cluster (a letter without
+    /// its marks) or a vowel that is written before the consonant that follows it (Thai เ แ โ ใ
+    /// ไ, the Lao and Tai Viet ones alike). nil when the line ends the text. `stops`: where the
+    /// line may end (see `ellipsisStops(in:)`).
+    private static func endingWithEllipsis(_ last: CTLine, _ layout: Layout, stops: Set<Int>,
                                            width: CGFloat) -> (line: CTLine, text: String)? {
         let range = CTLineGetStringRange(last)
         let start = range.location, end = range.location + range.length
@@ -388,6 +421,16 @@ struct BlockTextMask {
         // left out before the ellipsis; closing brackets and quotes stay
         let trimmed = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
             .subtracting(CharacterSet(charactersIn: ")]}\u{BB}\u{203A}\u{201D}\u{2019}\"'\u{300D}\u{300F}\u{FF09}"))
+        // Where the clusters of this line end, as Unicode's rules find them (those of NSString
+        // differ: in Myanmar they join a consonant to the one before it)
+        var clusterEnds: [Int] = []
+        var offset = start
+        for character in text.substring(from: start) {
+            offset += character.utf16.count
+            guard offset <= end else { break }
+            clusterEnds.append(offset)
+        }
+        let wholeClusters = Set(clusterEnds)
 
         /// the line up to `stop` with the ellipsis, when it fits the width
         func ending(at stop: Int, trimming: Bool) -> (line: CTLine, text: String)? {
@@ -396,7 +439,9 @@ struct BlockTextMask {
                   trimmed.contains(scalar) {
                 stop -= 1
             }
-            guard stop > start else { return nil }
+            // (these vowels are all in the Basic Multilingual Plane; half of a surrogate pair is none of them)
+            guard stop > start, wholeClusters.contains(stop),
+                  Unicode.Scalar(text.character(at: stop - 1))?.properties.isLogicalOrderException != true else { return nil }
             let piece = NSMutableAttributedString(attributedString: string.attributedSubstring(
                 from: NSRange(location: start, length: stop - start)))
             piece.append(ellipsis)
@@ -404,13 +449,12 @@ struct BlockTextMask {
             guard CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) <= width + 0.5 else { return nil }
             return (line, piece.string)
         }
-        for stop in layout.lineEnds.filter({ $0 > start && $0 <= end }).sorted(by: >) {
+        for stop in stops.filter({ $0 > start && $0 <= end }).sorted(by: >) {
             if let found = ending(at: stop, trimming: true) { return found }
         }
-        // a single word wider than the line with the ellipsis: cut between two characters
-        var stop = end
-        while stop > start {
-            stop = text.rangeOfComposedCharacterSequence(at: stop - 1).location
+        // a single word wider than the line with the ellipsis: cut between two clusters (and
+        // not after a vowel written before its consonant, which `ending` passes over)
+        for stop in clusterEnds.reversed() where stop < end {
             if let found = ending(at: stop, trimming: false) { return found }
         }
         return nil
