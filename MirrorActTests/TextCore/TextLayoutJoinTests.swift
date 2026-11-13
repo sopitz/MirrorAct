@@ -63,4 +63,116 @@ final class TextLayoutJoinTests: XCTestCase {
         XCTAssertFalse(TextLayout.isRightToLeft("Wi-Fi البطارية Bluetooth"))
         XCTAssertFalse(TextLayout.isRightToLeft("9:41"))
     }
+
+    // MARK: Lists
+
+    private static let iPhoneIsland = CGSize(width: 1290, height: 2796)
+
+    /// Bullets in a German article on an iPhone (SF, 17 points): the lines after the first one of
+    /// an item begin where its text does, behind the bullet, half a line further right than the
+    /// bullet. An item of one line is followed by the next item.
+    func testAWrappedListItemGoesOnWhereItsTextBegins() {
+        let lines = [
+            line("• Das Wetter bleibt die ganze Woche über trocken, bei", 44, 654, 1116, 66, on: Self.iPhoneIsland),
+            line("schwachem Wind aus Westen. Für Gruppen", 77, 723, 901, 49, on: Self.iPhoneIsland),
+            line("• Änderungen am Tarif sind jederzeit über die Kontoseite", 44, 1222, 1161, 65, on: Self.iPhoneIsland),
+            line("möglich.", 77, 1300, 178, 49, on: Self.iPhoneIsland),
+            line("• Die Lieferung dauert innerhalb Deutschlands", 45, 1370, 949, 49, on: Self.iPhoneIsland),
+            line("• Über Nacht kühlt es deutlich ab, Ältere sollten warme", 40, 1420, 1129, 85, on: Self.iPhoneIsland),
+            line("Kleidung mitnehmen. Das", 77, 1504, 527, 49, on: Self.iPhoneIsland),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: Self.iPhoneIsland).map(\.text), [
+            "• Das Wetter bleibt die ganze Woche über trocken, bei schwachem Wind aus Westen. Für Gruppen",
+            "• Änderungen am Tarif sind jederzeit über die Kontoseite möglich.",
+            "• Die Lieferung dauert innerhalb Deutschlands",
+            "• Über Nacht kühlt es deutlich ab, Ältere sollten warme Kleidung mitnehmen. Das",
+        ])
+    }
+
+    /// A numbered list in English on an iPhone (SF): the text of an item goes on behind its
+    /// number, a whole line further right; every number starts an item of its own
+    func testEveryNumberStartsAnItemThatGoesOnBehindIt() {
+        let lines = [
+            line("1. Bring a warm jacket if you plan to stay", 44, 1733, 916, 56),
+            line("outside after sunset.", 96, 1807, 471, 44),
+            line("2. You can change your plan at any time from", 48, 1881, 1023, 55),
+            line("the account page.", 98, 1951, 421, 55),
+            line("3. Turn left at the second traffic light and", 48, 2028, 927, 52),
+            line("follow the", 99, 2100, 225, 47),
+            line("• The library offers quiet rooms", 48, 2223, 710, 52),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: Self.iPhone).map(\.text), [
+            "1. Bring a warm jacket if you plan to stay outside after sunset.",
+            "2. You can change your plan at any time from the account page.",
+            "3. Turn left at the second traffic light and follow the",
+            "• The library offers quiet rooms",
+        ])
+    }
+
+    /// Chinese and Japanese lists: Vision reads a bullet without the space behind it, and
+    /// numbers end in a full-width full stop (PingFang SC on an iPhone, SF on an iPad)
+    func testItemsOfChineseAndJapaneseListsAreSeparate() {
+        let chinese = [
+            line("• 更新期间请保持设备电量在百分", 37, 1373, 890, 63),
+            line("•博物馆上午九点开放，下午六点关闭，", 37, 1472, 1038, 81),
+            line("节假日除外。", 88, 1566, 336, 81),
+            line("•你可以随时在账户页面更改套餐。如果", 37, 1671, 1071, 74),
+            line("打算日落后待在户外", 85, 1763, 545, 66),
+        ]
+        XCTAssertEqual(TextLayout.blocks(chinese, imageSize: Self.iPhone).map(\.text), [
+            "• 更新期间请保持设备电量在百分", "•博物馆上午九点开放，下午六点关闭，节假日除外。", "•你可以随时在账户页面更改套餐。如果打算日落后待在户外",
+        ])
+        let japanese = [
+            line("1．チケットは入口で購入するか、事前にオ", 137, 549, 552, 41, on: Self.iPad),
+            line("2．日没後も外にいる予定なら、暖かい上着を持ってい", 137, 597, 707, 38, on: Self.iPad),
+            line("3．今週はほとんど晴れの日が続き、西からの風は弱いでしょう。チ", 137, 645, 875, 38, on: Self.iPad),
+        ]
+        XCTAssertEqual(TextLayout.blocks(japanese, imageSize: Self.iPad).map(\.text), japanese.map(\.text))
+    }
+
+    /// In Arabic the marker is on the right, and so is where the text of an item goes on (Geeza
+    /// Pro on an iPhone, SF Arabic on an iPad)
+    func testARightToLeftListItemGoesOnWhereItsTextBegins() {
+        let numbered = [
+            line("1. خذ معك سترة دافئة إذا كنت تنوي البقاء في الخارج", 89, 1813, 1148, 73, on: Self.iPhoneIsland),
+            line("بعد الغروب.", 921, 1914, 247, 61, on: Self.iPhoneIsland),
+            line("2. يمكن شراء التذاكر عند المدخل أو مسبقا عبر الإنترنت.", 49, 2012, 1193, 69, on: Self.iPhoneIsland),
+            line("يفتح المتحف أبوابه في التاسعة صباحا", 373, 2109, 795, 73, on: Self.iPhoneIsland),
+            line("3. سيبقى الطقس جافا معظم أيام الأسبوع مع رياح", 150, 2203, 1091, 81, on: Self.iPhoneIsland),
+            line("غربية خفيفة. يفتح", 795, 2302, 382, 77, on: Self.iPhoneIsland),
+        ]
+        XCTAssertEqual(TextLayout.blocks(numbered, imageSize: Self.iPhoneIsland).map(\.text), [
+            "1. خذ معك سترة دافئة إذا كنت تنوي البقاء في الخارج بعد الغروب.",
+            "2. يمكن شراء التذاكر عند المدخل أو مسبقا عبر الإنترنت. يفتح المتحف أبوابه في التاسعة صباحا",
+            "3. سيبقى الطقس جافا معظم أيام الأسبوع مع رياح غربية خفيفة. يفتح",
+        ])
+        let bullets = [
+            line("• يمكنك تغيير خطتك في أي وقت من صفحة الحساب. يستغرق التوصيل داخل البلاد عادة من يومين إلى",
+                 161, 1221, 1342, 45, on: Self.iPad),
+            line("ثلاثة أيام عمل.", 1283, 1266, 192, 45, on: Self.iPad),
+            line("• انعطف يسارا عند الإشارة الثانية واتبع اللافتات إلى المحطة. يمكن شراء التذاكر عند المدخل أو مسبقا عبر",
+                 137, 1317, 1366, 48, on: Self.iPad),
+            line("الإنترنت. انعطف يسارا عند الإشارة الثانية واتبع اللافتات إلى", 724, 1365, 755, 38, on: Self.iPad),
+            line("• يمكنك تغيير خطتك في أي وقت من صفحة الحساب. سيبقى الطقس جافا معظم", 436, 1413, 1067, 45, on: Self.iPad),
+        ]
+        XCTAssertEqual(TextLayout.blocks(bullets, imageSize: Self.iPad).map(\.text), [
+            "• يمكنك تغيير خطتك في أي وقت من صفحة الحساب. يستغرق التوصيل داخل البلاد عادة من يومين إلى ثلاثة أيام عمل.",
+            "• انعطف يسارا عند الإشارة الثانية واتبع اللافتات إلى المحطة. يمكن شراء التذاكر عند المدخل أو مسبقا عبر "
+                + "الإنترنت. انعطف يسارا عند الإشارة الثانية واتبع اللافتات إلى",
+            "• يمكنك تغيير خطتك في أي وقت من صفحة الحساب. سيبقى الطقس جافا معظم",
+        ])
+    }
+
+    func testListMarkers() throws {
+        XCTAssertEqual(try XCTUnwrap(TextLayout.listMarkerUnits("• Brot")), 0.8, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(TextLayout.listMarkerUnits("•博物馆")), 0.52, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(TextLayout.listMarkerUnits("12. Juli")), 1.68, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(TextLayout.listMarkerUnits("3) Ende")), 1.13, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(TextLayout.listMarkerUnits("1．チケット")), 1.55, accuracy: 1e-9)
+        XCTAssertNotNil(TextLayout.listMarkerUnits("- المتحف"))
+        XCTAssertNotNil(TextLayout.listMarkerUnits("4."))
+        for text in ["1.5 kg", "10:30", "2024. Das", "•", "•Brot", "-5 °C", "Seite 1. Weiter", "1,5", ""] {
+            XCTAssertNil(TextLayout.listMarkerUnits(text), text)
+        }
+    }
 }

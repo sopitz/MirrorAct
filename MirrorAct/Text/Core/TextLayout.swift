@@ -91,7 +91,9 @@ enum TextLayout {
     ///   reach into the one above by up to `overlap` of the higher box),
     /// - their left edges or their centres are within `alignment` of the height of a line (or their
     ///   right edges, when either is written from right to left: `isRightToLeft`),
-    /// - neither shows only part of its letters, and it does not start a list item ("• …").
+    /// - neither shows only part of its letters, and it does not start a list item ("• …", "1. …":
+    ///   `listMarkerUnits`); the line after the first one of an item may also line up with where
+    ///   the text of the item begins, behind the marker.
     /// Of several paragraphs it could continue, it continues the last one begun.
     ///
     /// Part of a line shows (something hides the rest: a bar, the edge of the screen or of the
@@ -150,11 +152,13 @@ enum TextLayout {
             let rect = CGRect(x: line.rect.minX * imageSize.width, y: line.rect.minY * imageSize.height,
                               width: line.rect.width * imageSize.width, height: line.rect.height * imageSize.height)
             let units = widthUnits(of: line.text)
-            return (line, Measured(rect: rect, units: units, size: units >= minUnits ? Double(rect.width) / units : nil,
+            let size = units >= minUnits ? Double(rect.width) / units : nil
+            return (line, Measured(rect: rect, units: units, size: size,
                                    isLow: isLow(line.text, width: Double(rect.width), height: Double(rect.height),
                                                 share: partHeight),
                                    isCutOff: looksCutOff(line.text, width: Double(rect.width), height: Double(rect.height)),
-                                   isPart: false, startsListItem: startsListItem(line.text),
+                                   isPart: false,
+                                   marker: listMarkerUnits(line.text).map { $0 * (size ?? Double(rect.height)) },
                                    isRightToLeft: isRightToLeft(line.text)))
         }
         for index in all.indices where all[index].1.isLow {
@@ -186,7 +190,10 @@ enum TextLayout {
         var isCutOff: Bool
         /// only part of its letters show (see `blocks`)
         var isPart: Bool
-        var startsListItem: Bool
+        /// the width of the marker in front of the text when the line starts an item of a list
+        /// (`listMarkerUnits`)
+        var marker: Double?
+        var startsListItem: Bool { marker != nil }
         /// most of its letters are of a script written from right to left
         var isRightToLeft: Bool
     }
@@ -211,14 +218,17 @@ enum TextLayout {
         }
         var size: Double?
         if let lastSize = last.size, let lineSize = line.size { size = max(lastSize, lineSize) }
-        return adjoins(last, below: line, size: size)
+        return adjoins(last, below: line, size: size, orBehindMarker: true)
     }
 
     /// Whether `lower` lies right below `upper` as the next line of a paragraph would: close below
-    /// it and aligned with it. Distances count in the height of a line: the text `size`, kept
-    /// between `sizeUnderBox` and `sizeOverBox` times the higher of the two boxes (a size
-    /// measured from letters of unusual widths may be far off); the box when the size is nil.
-    private static func adjoins(_ upper: Measured, below lower: Measured, size: Double?) -> Bool {
+    /// it and aligned with it (`orBehindMarker`: or with where the text of a list item that `upper`
+    /// starts begins, behind its marker; on the right for right-to-left text). Distances count in
+    /// the height of a line: the text `size`, kept between `sizeUnderBox` and `sizeOverBox` times
+    /// the higher of the two boxes (a size measured from letters of unusual widths may be far
+    /// off); the box when the size is nil.
+    private static func adjoins(_ upper: Measured, below lower: Measured, size: Double?,
+                                orBehindMarker: Bool = false) -> Bool {
         let box = Double(max(upper.rect.height, lower.rect.height))
         let lineHeight = min(max(size ?? box, sizeUnderBox * box), sizeOverBox * box)
         let gap = Double(lower.rect.minY - upper.rect.maxY)
@@ -226,7 +236,11 @@ enum TextLayout {
         return gap > -overlap * box && gap < paragraphGap * lineHeight
             && (abs(Double(upper.rect.minX - lower.rect.minX)) < limit
                 || abs(Double(upper.rect.midX - lower.rect.midX)) < limit
-                || ((upper.isRightToLeft || lower.isRightToLeft) && abs(Double(upper.rect.maxX - lower.rect.maxX)) < limit))
+                || ((upper.isRightToLeft || lower.isRightToLeft) && abs(Double(upper.rect.maxX - lower.rect.maxX)) < limit)
+                || (orBehindMarker ? upper.marker : nil).map { marker in
+                    upper.isRightToLeft ? abs(Double(upper.rect.maxX) - marker - Double(lower.rect.maxX)) < limit
+                        : abs(Double(upper.rect.minX) + marker - Double(lower.rect.minX)) < limit
+                } ?? false)
     }
 
     // MARK: Size of text
@@ -319,11 +333,37 @@ enum TextLayout {
         }
     }
 
-    /// A bullet and a space at the start: an item of a list, not the next line of a paragraph
-    private static func startsListItem(_ text: String) -> Bool {
-        let scalars = Array(text.unicodeScalars.prefix(2))
-        guard scalars.count == 2, scalars[1] == " " else { return false }
-        return "•◦▪‣●○■□–—*".unicodeScalars.contains(scalars[0])
+    /// How wide the marker is that starts `text` as an item of a list (not the next line of a
+    /// paragraph), in `widthUnits`, with the space behind it; nil when it starts none. A marker is
+    /// one of `listBullets`, or a number of one to three digits (0 to 9, also full-width) followed
+    /// by one of `listNumberEnds`. A space must follow it, or a Chinese, Japanese or Korean
+    /// character; behind a number the line may also end there. ("1.5 kg" starts no item.)
+    static func listMarkerUnits(_ text: String) -> Double? {
+        let scalars = Array(text.unicodeScalars.prefix(5))
+        guard let first = scalars.first else { return nil }
+        var end = 1
+        if !listBullets.unicodeScalars.contains(first) {
+            var digits = 0
+            while digits < min(scalars.count, 4), isListDigit(scalars[digits]) { digits += 1 }
+            guard (1...3).contains(digits), digits < scalars.count,
+                  listNumberEnds.unicodeScalars.contains(scalars[digits]) else { return nil }
+            end = digits + 1
+        }
+        let marker = scalars[..<end].reduce(0.0) { $0 + widthUnits(of: $1) }
+        guard end < scalars.count else { return end > 1 ? marker : nil }
+        switch scalars[end].value {
+        case 0x20: return marker + widthUnits(of: scalars[end])
+        case 0x2E80...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF: return marker
+        default: return nil
+        }
+    }
+
+    /// Signs that start an item of a list (`listMarkerUnits`)
+    static let listBullets = "•◦▪‣●○■□–—*・-"
+    static let listNumberEnds = ".．)）"
+
+    private static func isListDigit(_ scalar: Unicode.Scalar) -> Bool {
+        (0x30...0x39).contains(scalar.value) || (0xFF10...0xFF19).contains(scalar.value)
     }
 
     /// Whether more of the letters of `text` belong to scripts written from right to left
