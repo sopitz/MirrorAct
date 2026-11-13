@@ -157,6 +157,51 @@ final class OverlayTrackerReadingTests: XCTestCase {
         XCTAssertTrue(placed.contains { $0.text == "T " + title.text }, "\(placed.map(\.text))")
     }
 
+    /// The same row, and the summary below the title changes every two seconds (a minute that
+    /// ticks) and is read alone: the title, read apart from the summary before, keeps its place
+    /// and its translation, and each change costs one pass. Passes take 0.3 s while the frames go
+    /// on, one at a time, as in the app.
+    func testATitleOverASummaryThatTicksKeepsItsTranslation() throws {
+        let screen = SyntheticScreen(seed: 26)
+        let line4 = SyntheticScreen.block(4, offset: 0, text: "").rect
+        let line5 = SyntheticScreen.block(5, offset: 0, text: "").rect
+        let title = RecognizedBlock(text: "E Akku",
+                                    rect: CGRect(x: line4.minX, y: line4.minY, width: line4.width * 0.8,
+                                                 height: line5.minY + line5.height / 2 - line4.minY))
+        var summary = SyntheticScreen.block(5, offset: 0, text: "87 % - noch 5 Std. 12 Min.")
+        let tracker = OverlayTracker()
+        try readAtRest(tracker, screen, offset: 0, blocks: [title, summary], time: 0)
+        var time = 2.0, passes = 0, titleMissing = 0
+        var pending: (request: RecognitionRequest, answer: [RecognizedBlock], at: TimeInterval)?
+        for minute in 0..<5 {
+            let frame = changed(screen, offset: 0, below: 5, mark: minute + 1)
+            summary.text = "87 % - noch 5 Std. \(11 - minute) Min."
+            let end = time + 2
+            while time < end {
+                time += 1.0 / 30
+                let update = tracker.advance(frame, scale: scale, time: time)
+                if !update.placed.contains(where: { $0.text == "T " + title.text }) { titleMissing += 1 }
+                if let job = pending, time >= job.at {
+                    tracker.finishRecognition(job.request, blocks: job.answer, time: time)
+                    pending = nil
+                }
+                if pending == nil, let due = tracker.recognitionDue, due <= time,
+                   let request = tracker.beginRecognition(time: time) {
+                    passes += 1
+                    // (Vision reads a box only when all of it lies in the region)
+                    let answer = [title, summary].filter { request.region.contains($0.rect) }
+                    pending = (request, answer, time + 0.3)
+                }
+                for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                    tracker.setTranslation("T " + text, for: text)
+                }
+            }
+        }
+        XCTAssertEqual(titleMissing, 0)
+        XCTAssertLessThanOrEqual(passes, 5)
+        XCTAssertEqual(Set(tracker.blocks.map(\.text)), [title.text, summary.text])
+    }
+
     /// A small reading of a later pass inside the place of a larger block (one word of it, read
     /// while that place was not read as a whole) does not stand in for it: the paragraph keeps
     /// its translation, and its place is read again

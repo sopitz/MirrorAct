@@ -356,6 +356,10 @@ final class OverlayTracker {
         var fit: Double
         /// the mean step between neighbouring pixels of its patch inside the block
         var texture: Double
+        /// the blocks one pass found apart from it although their boxes overlap: two texts, which
+        /// `dropOverlaps` keeps both of while both readings stay (a reading with other text gives a
+        /// new block, which starts without partners)
+        var apartFrom: Set<Int> = []
     }
 
     /// A part of the screen whose content was seen to move as one (the view of a page between
@@ -1642,7 +1646,12 @@ final class OverlayTracker {
                     let firstRect = thumbnailRect(of: tracked[first]), secondRect = thumbnailRect(of: tracked[second])
                     loser = firstRect.width * firstRect.height < secondRect.width * secondRect.height ? first : second
                 } else if tracked[first].readAt == tracked[second].readAt {
-                    // (read apart in one pass: two texts)
+                    // (read apart in one pass: two texts, also when one of them is read alone later)
+                    tracked[first].apartFrom.insert(tracked[second].id)
+                    tracked[second].apartFrom.insert(tracked[first].id)
+                    continue
+                } else if tracked[first].apartFrom.contains(tracked[second].id),
+                          tracked[second].apartFrom.contains(tracked[first].id) {
                     continue
                 } else if related {
                     // (pieces of one text that overlap in part, such as a strip with the last line
@@ -1682,8 +1691,16 @@ final class OverlayTracker {
         for place in places {
             askToReadPlace(place, attempts: attempts, time: time)
         }
-        guard !dropped.isEmpty else { return }
-        tracked = tracked.indices.filter { !dropped.contains($0) }.map { tracked[$0] }
+        if !dropped.isEmpty {
+            tracked = tracked.indices.filter { !dropped.contains($0) }.map { tracked[$0] }
+        }
+        // (blocks that are gone are no partners any more)
+        if tracked.contains(where: { !$0.apartFrom.isEmpty }) {
+            let ids = Set(tracked.map(\.id))
+            for index in tracked.indices where !tracked[index].apartFrom.isSubset(of: ids) {
+                tracked[index].apartFrom.formIntersection(ids)
+            }
+        }
     }
 
     /// The place of a block that a reading took over without reading all of it is read again
@@ -1904,6 +1921,8 @@ final class OverlayTracker {
             // (the old translation is shown only where the new reading covers most of its place)
             if coversOld { block.earlier = shownTranslation(of: old) }
             block.id = old.id
+            // (the same text, changed in part: still apart from what it was read apart from)
+            block.apartFrom = old.apartFrom
         } else {
             block.id = nextBlockID
             nextBlockID += 1
