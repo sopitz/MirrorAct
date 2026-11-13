@@ -275,7 +275,7 @@ final class LLMTranslationEngineTests: XCTestCase {
                  requests: [40, 20, 20, 1], later: nil),
         ]
         for test in cases {
-            let texts = (1...40).map { $0 == test.short ? "OK" : "Text \($0)" }
+            let texts = (1...40).map { (number: Int) -> String in number == test.short ? "OK" : "Text \(number)" }
             let slow = Set(test.slow.map { texts[$0 - 1] })
             let transport = ScriptedTransport { request, _ in
                 if !slow.isDisjoint(with: sentTexts(request)) { throw URLError(.timedOut) }
