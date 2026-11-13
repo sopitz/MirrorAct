@@ -256,6 +256,76 @@ final class OverlayTrackerReadingTests: XCTestCase {
         XCTAssertTrue(TextSimilarity.isRun("Dunkles Design, Schrift-", of: "Dunkles Design, Schrift- größe, Helligkeit"))
     }
 
+    /// The synthetic screen at `offset` with the page between the bars stretched by `stretch`
+    /// from the top bar down (an overscroll that springs back: the picture stretches, it does
+    /// not shift)
+    private static func stretched(_ screen: SyntheticScreen, offset: Int, stretch: Double, noiseSeed: UInt64) -> LumaImage {
+        let width = SyntheticScreen.width, height = SyntheticScreen.height
+        var plain = screen.thumbnail(offset: offset)
+        guard stretch != 1 else { return SyntheticPage.noisy(plain, amount: 2, seed: noiseSeed) }
+        var full = [UInt8](repeating: 225, count: width * height)
+        for y in SyntheticScreen.topBar..<SyntheticScreen.bottomBar {
+            let source = offset + SyntheticScreen.topBar + Int(Double(y - SyntheticScreen.topBar) / stretch)
+            guard source >= 0, source < screen.pageHeight else { continue }
+            for x in 0..<width {
+                full[y * width + x] = screen.page[source * width + x]
+            }
+        }
+        let page = LumaImage(width: width, height: height, pixels: full).downsampled(by: SyntheticScreen.scale)
+        // (the bars as they are)
+        for y in (SyntheticScreen.topBar / 2)..<(SyntheticScreen.bottomBar / 2) {
+            for x in 0..<page.width {
+                plain[x, y] = page[x, y]
+            }
+        }
+        return SyntheticPage.noisy(plain, amount: 2, seed: noiseSeed)
+    }
+
+    /// After a fling to the end of a page, the page springs back (the picture stretches and
+    /// shrinks again, nothing shifts). Passes during the spring-back find only a word of a
+    /// translated paragraph; once the picture rests, its place is read whole and translated.
+    /// (The shrinking page moves where it is stretched most: that counts as motion, so the
+    /// spring-back does not pass for rest.)
+    func testAParagraphKeepsItsTranslationThroughASpringBack() throws {
+        let screen = SyntheticScreen(seed: 30)
+        let tracker = OverlayTracker()
+        let offset = 300
+        let whole = Self.paragraph(8, 10, offset: offset, text: "Zum Schluss noch etwas Text über die Seite hier")
+        func truth(_ region: CGRect) -> [RecognizedBlock] { region.contains(whole.rect) ? [whole] : [] }
+        var time = 0.0
+        var frame = Self.stretched(screen, offset: offset - 40, stretch: 1, noiseSeed: 1)
+        _ = tracker.advance(frame, scale: scale, time: time)
+        // the fling: 4 px a frame up to the end of the page
+        var position = offset - 40
+        while position < offset {
+            position += 4
+            time += 1.0 / 60
+            frame = Self.stretched(screen, offset: position, stretch: 1, noiseSeed: UInt64(position))
+            _ = tracker.advance(frame, scale: scale, time: time)
+        }
+        // read and translated
+        _ = idle(tracker, frame: frame, from: time, seconds: 1, answer: truth)
+        time += 1
+        XCTAssertTrue(tracker.advance(frame, scale: scale, time: time).placed.contains { $0.text == "T " + whole.text })
+        // the spring-back, half a second; passes that run meanwhile find one word of it
+        let line10 = SyntheticScreen.block(10, offset: offset, text: "").rect
+        let word = RecognizedBlock(text: "In", rect: CGRect(x: line10.minX, y: line10.minY, width: 20, height: line10.height))
+        for step in 0..<30 {
+            time += 1.0 / 60
+            let stretch = 1 + 0.06 * (1 - Double(step) / 30) * (1 - Double(step) / 30)
+            frame = Self.stretched(screen, offset: offset, stretch: stretch, noiseSeed: UInt64(100 + step))
+            _ = tracker.advance(frame, scale: scale, time: time)
+            if let due = tracker.recognitionDue, due <= time, let request = tracker.beginRecognition(time: time) {
+                tracker.finishRecognition(request, blocks: request.region.intersects(word.rect) ? [word] : [],
+                                          time: time + 0.03)
+            }
+        }
+        frame = Self.stretched(screen, offset: offset, stretch: 1, noiseSeed: 200)
+        _ = idle(tracker, frame: frame, from: time, seconds: 3, answer: truth)
+        let placed = tracker.advance(frame, scale: scale, time: time + 3.1).placed
+        XCTAssertTrue(placed.contains { $0.text == "T " + whole.text }, "\(placed.map(\.text))")
+    }
+
     /// A paragraph of which only its first line was taken (the rest was not in view then) is
     /// read whole once a reading finds more of it, also when that reading is cut off itself:
     /// the line alone must not keep the paragraph from being read
