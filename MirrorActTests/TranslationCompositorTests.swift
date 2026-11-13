@@ -557,6 +557,37 @@ final class TranslationCompositorTests: XCTestCase {
         }
     }
 
+    /// When no size keeps every word whole, the text is set as large as fits the block, but no
+    /// word is broken that the smallest size keeps whole.
+    func testAWordThatMustBeBrokenBreaksNoOtherWord() throws {
+        let cases: [(text: String, width: Int, height: Int, lineCount: Int, whole: [String])] = [
+            ("Kraftfahrzeughaftpflichtversicherung und Haftpflichtversicherung", 150, 88, 2, ["Haftpflichtversicherung"]),
+            ("Benachrichtigungseinstellungen für Mitteilungen", 120, 80, 2, ["für", "Mitteilungen"]),
+            ("Kraftfahrzeughaftpflichtversicherung Datenschutzerklärung", 140, 90, 2, ["Datenschutzerklärung"]),
+        ]
+        for item in cases {
+            let mask = try XCTUnwrap(BlockTextMask(text: item.text, width: item.width, height: item.height,
+                                                   lineCount: item.lineCount, language: "de"), item.text)
+            XCTAssertTrue(mask.fits, item.text)
+            XCTAssertEqual(mask.lines.joined(), item.text)
+            for word in item.whole {
+                XCTAssertTrue(mask.lines.contains { $0.contains(word) }, "\(word) broken in \(mask.lines)")
+            }
+            // the long word is broken once, not into three pieces
+            let allowed = BlockTextMask.wordKeepingLineEnds(in: item.text, language: "de")
+            var end = 0
+            var broken = 0
+            for line in mask.lines.dropLast() {
+                end += line.utf16.count
+                if !allowed.contains(end) { broken += 1 }
+            }
+            XCTAssertEqual(broken, 1, "\(item.text): \(mask.lines)")
+            // and as large as that allows, not the smallest size
+            let smallest = BlockTextMask.smallestFontShare * CGFloat(item.height) / CGFloat(item.lineCount)
+            XCTAssertGreaterThan(mask.fontSize, smallest + 0.5, item.text)
+        }
+    }
+
     /// The mask says where the text covers the block. An emoji is drawn in its own colors; what
     /// counts for the mask is its shape, not how bright its colors are.
     func testEmojiCoverTheirShapeInTheMask() throws {

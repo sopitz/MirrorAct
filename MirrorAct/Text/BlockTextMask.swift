@@ -53,19 +53,23 @@ struct BlockTextMask {
         // The largest font that fits: usually the first one tried. Otherwise halve the range
         // between a size that fits and one that does not (see `largest`).
         // A word broken between two letters, or parted from its punctuation, does not count as
-        // fitting. When even the smallest font has to break one, the word is broken at any size:
-        // then the largest size at which the lines fit the block is taken, so that it is no
-        // smaller than it has to be.
+        // fitting. When even the smallest font has to break a word, the largest size is taken
+        // at which the lines fit the block and no more words are broken than at the smallest
+        // size: so that it is no smaller than it has to be, and breaks no word it need not.
         func set(_ fontSize: CGFloat) -> Layout {
             Layout(text, fontSize: fontSize, in: box, lineHeight: lineHeight, lineEnds: lineEnds, language: language)
         }
-        var layout = set(largest)
-        if !layout.fits, smallest < largest {
-            layout = set(smallest)
-            if layout.fits {
-                layout = BlockTextMask.largest(from: layout, below: largest, set, fitting: \.fits)
-            } else if layout.fitsBox {
-                layout = BlockTextMask.largest(from: layout, below: largest, set, fitting: \.fitsBox)
+        let first = set(largest)
+        var layout = first
+        if !first.fits, smallest < largest {
+            let small = set(smallest)
+            layout = small
+            if small.fits {
+                layout = BlockTextMask.largest(from: small, below: largest, set, fitting: \.fits)
+            } else if small.fitsBox {
+                let mostBroken = small.brokenWords
+                let fitting = { (layout: Layout) in layout.fitsBox && layout.brokenWords <= mostBroken }
+                layout = fitting(first) ? first : BlockTextMask.largest(from: small, below: largest, set, fitting: fitting)
             }
         }
 
@@ -114,8 +118,10 @@ struct BlockTextMask {
         let size: CGSize
         /// all lines fit into the block
         let fitsBox: Bool
-        /// and no word had to be broken or parted from its punctuation for that
-        let fits: Bool
+        /// line ends that break a word or part it from its punctuation (counted only when the lines fit)
+        let brokenWords: Int
+        /// all lines fit, and no word had to be broken for that
+        var fits: Bool { fitsBox && brokenWords == 0 }
 
         /// `lineEnds`: where a line may end without breaking a word, in UTF-16 units as Core
         /// Text counts its ranges (see `wordKeepingLineEnds`)
@@ -150,7 +156,7 @@ struct BlockTextMask {
             fitsBox = size.height <= box.height + slack && size.width <= box.width + 0.5
             // A word wider than the block is broken by Core Text between two letters, without
             // a hyphen, and the size above still fits. Such a line end does not count as fitting.
-            var keepsWords = true
+            var brokenWords = 0
             if fitsBox {
                 let path = CGPath(rect: CGRect(x: 0, y: 0, width: box.width, height: size.height + box.height + 100),
                                   transform: nil)
@@ -159,12 +165,11 @@ struct BlockTextMask {
                 for line in lines.dropLast() {
                     let range = CTLineGetStringRange(line)
                     if !lineEnds.contains(range.location + range.length) {
-                        keepsWords = false
-                        break
+                        brokenWords += 1
                     }
                 }
             }
-            fits = fitsBox && keepsWords
+            self.brokenWords = brokenWords
         }
     }
 
