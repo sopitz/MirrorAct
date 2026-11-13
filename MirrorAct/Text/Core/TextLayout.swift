@@ -89,7 +89,8 @@ enum TextLayout {
     ///   larger text size, kept between `sizeUnderBox` and `sizeOverBox` times the higher box: a
     ///   box is higher than its text with accents on capitals and descenders; a box may also
     ///   reach into the one above by up to `overlap` of the higher box),
-    /// - their left edges or their centres are within `alignment` of the height of a line,
+    /// - their left edges or their centres are within `alignment` of the height of a line (or their
+    ///   right edges, when either is written from right to left: `isRightToLeft`),
     /// - neither shows only part of its letters, and it does not start a list item ("• …").
     /// Of several paragraphs it could continue, it continues the last one begun.
     ///
@@ -153,7 +154,8 @@ enum TextLayout {
                                    isLow: isLow(line.text, width: Double(rect.width), height: Double(rect.height),
                                                 share: partHeight),
                                    isCutOff: looksCutOff(line.text, width: Double(rect.width), height: Double(rect.height)),
-                                   isPart: false, startsListItem: startsListItem(line.text)))
+                                   isPart: false, startsListItem: startsListItem(line.text),
+                                   isRightToLeft: isRightToLeft(line.text)))
         }
         for index in all.indices where all[index].1.isLow {
             let line = all[index].1
@@ -185,6 +187,8 @@ enum TextLayout {
         /// only part of its letters show (see `blocks`)
         var isPart: Bool
         var startsListItem: Bool
+        /// most of its letters are of a script written from right to left
+        var isRightToLeft: Bool
     }
 
     /// Whether `line` is the next line of the paragraph whose last line is `last`
@@ -218,9 +222,11 @@ enum TextLayout {
         let box = Double(max(upper.rect.height, lower.rect.height))
         let lineHeight = min(max(size ?? box, sizeUnderBox * box), sizeOverBox * box)
         let gap = Double(lower.rect.minY - upper.rect.maxY)
+        let limit = alignment * lineHeight
         return gap > -overlap * box && gap < paragraphGap * lineHeight
-            && (abs(Double(upper.rect.minX - lower.rect.minX)) < alignment * lineHeight
-                || abs(Double(upper.rect.midX - lower.rect.midX)) < alignment * lineHeight)
+            && (abs(Double(upper.rect.minX - lower.rect.minX)) < limit
+                || abs(Double(upper.rect.midX - lower.rect.midX)) < limit
+                || ((upper.isRightToLeft || lower.isRightToLeft) && abs(Double(upper.rect.maxX - lower.rect.maxX)) < limit))
     }
 
     // MARK: Size of text
@@ -318,6 +324,23 @@ enum TextLayout {
         let scalars = Array(text.unicodeScalars.prefix(2))
         guard scalars.count == 2, scalars[1] == " " else { return false }
         return "•◦▪‣●○■□–—*".unicodeScalars.contains(scalars[0])
+    }
+
+    /// Whether more of the letters of `text` belong to scripts written from right to left
+    /// (Hebrew, Arabic and the scripts up to U+08FF, and their presentation forms) than to the
+    /// others (Latin, Greek, Cyrillic, Armenian, the scripts of U+0900 to U+1FFF, Chinese,
+    /// Japanese and Korean). Spaces, punctuation and the digits 0 to 9 count for neither.
+    static func isRightToLeft(_ text: String) -> Bool {
+        var rightToLeft = 0, leftToRight = 0
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF: rightToLeft += 1
+            case 0x41...0x5A, 0x61...0x7A, 0xC0...0x058F, 0x0900...0x1FFF, 0x2E80...0xD7AF, 0xF900...0xFAFF:
+                leftToRight += 1
+            default: break
+            }
+        }
+        return rightToLeft > leftToRight
     }
 
     /// Space between two lines of a paragraph; none in scripts written without spaces
