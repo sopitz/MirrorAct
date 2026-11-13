@@ -60,11 +60,15 @@ final class SettingsLayoutTests: XCTestCase {
     // MARK: The Text page in every language
 
     /// Each menu button shows its whole choice, in every language of the app and for every
-    /// service: in German, "Übersetzen mit" read "Ein Sprachmodell-Dienst, mit eigenem API-…"
+    /// service: in German, "Übersetzen mit" read "Ein Sprachmodell-Dienst, mit eigenem API-…".
+    /// The language chosen is the one with the longest name of those that need Apple Intelligence.
     func testTheTextPageShowsEveryChoiceInFull() throws {
         try forEachTextPage { page, situation in
             let popUps = self.popUpButtons(in: page)
             XCTAssertGreaterThanOrEqual(popUps.count, 2, situation)
+            // the button shows the language's name; the note “needs Apple Intelligence” is in the
+            // menu and in a line of its own
+            XCTAssertTrue(popUps.contains { $0.title == self.chosenLanguage.name }, situation)
             for popUp in popUps {
                 let cell = try XCTUnwrap(popUp.cell as? NSPopUpButtonCell)
                 let room = cell.titleRect(forBounds: popUp.bounds).width
@@ -90,7 +94,7 @@ final class SettingsLayoutTests: XCTestCase {
             settings.llmModels = saved.3
             settings.llmBaseURLs = saved.4
         }
-        settings.translationLanguage = "system"
+        settings.translationLanguage = chosenLanguage.id
         settings.llmModels = [:]
         settings.llmBaseURLs = [:]
         let keys = TextSettingsView.KeyStore(hasKey: { _ in false }, key: { _ in nil }, set: { _, _ in true })
@@ -101,7 +105,7 @@ final class SettingsLayoutTests: XCTestCase {
             for service in services {
                 settings.translationEngine = service == nil ? "apple" : "llm"
                 if let service { settings.llmProvider = service }
-                let view = TextSettingsView(keys: keys)
+                let view = TextSettingsView(keys: keys, languages: Self.languages)
                     .settingsPage(maxHeight: 2000)
                     .frame(width: SettingsView.width)
                     .environment(\.locale, Locale(identifier: language))
@@ -118,10 +122,24 @@ final class SettingsLayoutTests: XCTestCase {
                 window.setContentSize(host.fittingSize)
                 host.layoutSubtreeIfNeeded()
                 XCTAssertTrue(waitUntil { self.popUpButtons(in: host).count >= (service == nil ? 2 : 4) },
-                              "the menus of the page did not appear")
+                              "the menus of the page did not appear: \(self.popUpButtons(in: host).map(\.title))")
                 try check(host, "in “\(language)” with \(service ?? "this Mac")")
             }
         }
+    }
+
+    /// what Apple's Translation offers on macOS 26.5, whatever this Mac has
+    private static let languages = AppleTranslationLanguages(onDevice: TextSettingsLanguageMenuTests.onDevice,
+                                                             all: TextSettingsLanguageMenuTests.supported)
+
+    /// of the languages that need Apple Intelligence, the one with the longest name
+    private var chosenLanguage: TextSettingsView.LanguageRow {
+        let locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        return TextSettingsView.languageRows(for: Self.languages, engine: "apple", in: locale)
+            .filter(\.needsAppleIntelligence)
+            .max { ($0.name as NSString).size(withAttributes: [.font: font]).width
+                < ($1.name as NSString).size(withAttributes: [.font: font]).width }!
     }
 
     private func popUpButtons(in view: NSView) -> [NSPopUpButton] {

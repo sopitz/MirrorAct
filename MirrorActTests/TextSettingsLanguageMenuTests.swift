@@ -6,11 +6,14 @@ import XCTest
 /// The rows of “Translate into”
 final class TextSettingsLanguageMenuTests: XCTestCase {
     /// what Apple's Translation offered on macOS 26.5, in its order
-    private let supported = [
+    static let supported = [
         "en-IN", "it-CH", "ko", "nb", "da", "en-CA", "en-SG", "es-MX", "uk", "fr-CA", "it", "zh-TW", "es",
         "nl", "ar-AE", "zh-HK", "vi", "zh", "ru", "en-GB", "es-US", "fr", "hi", "en-ZA", "th", "en-AU",
         "de-CH", "de", "en", "pt", "pl", "en-IE", "en-NZ", "sv", "id", "tr", "ja", "pt-PT",
     ].map { Locale.Language(identifier: $0) }
+
+    private var supported: [Locale.Language] { Self.supported }
+    private var onDevice: [Locale.Language] { Self.onDevice }
 
     /// Nine rows reading “English” cannot be told apart
     func testEveryRowHasALabelOfItsOwn() {
@@ -37,7 +40,7 @@ final class TextSettingsLanguageMenuTests: XCTestCase {
     }
 
     /// the languages of the on-device models of macOS 26.5, in their order
-    private let onDevice = [
+    static let onDevice = [
         "vi", "pt", "uk", "it", "zh-TW", "ko", "de", "en-GB", "zh", "ja", "id", "nl", "fr", "th", "es", "tr", "pl",
         "ar-AE", "ru", "en", "hi",
     ].map { Locale.Language(identifier: $0) }
@@ -79,5 +82,26 @@ final class TextSettingsLanguageMenuTests: XCTestCase {
         let locale = Locale(identifier: "de")
         let labels = TextSettingsView.languageRows(for: supported, in: locale).map(\.label)
         XCTAssertEqual(labels, labels.sorted { $0.compare($1, locale: locale) == .orderedAscending })
+    }
+
+    /// A language model service needs no Apple Intelligence: with it, no row says so
+    func testOnlyThisMacNeedsAppleIntelligence() {
+        let languages = AppleTranslationLanguages(onDevice: onDevice, all: supported)
+        for identifier in ["en", "de"] {
+            let locale = Locale(identifier: identifier)
+            let apple = TextSettingsView.languageRows(for: languages, engine: "apple", in: locale)
+            let service = TextSettingsView.languageRows(for: languages, engine: "llm", in: locale)
+            XCTAssertEqual(apple, TextSettingsView.languageRows(for: supported, onDevice: onDevice, in: locale))
+            XCTAssertEqual(service, TextSettingsView.languageRows(for: supported, in: locale))
+            XCTAssertTrue(apple.contains(where: \.needsAppleIntelligence), identifier)
+            XCTAssertFalse(service.contains(where: \.needsAppleIntelligence), identifier)
+            // the same languages under the same names
+            XCTAssertEqual(apple.map(\.id).sorted(), service.map(\.id).sorted(), identifier)
+            XCTAssertEqual(Dictionary(uniqueKeysWithValues: apple.map { ($0.id, $0.name) }),
+                           Dictionary(uniqueKeysWithValues: service.map { ($0.id, $0.name) }), identifier)
+            for row in service {
+                XCTAssertEqual(row.label, row.name, identifier)
+            }
+        }
     }
 }

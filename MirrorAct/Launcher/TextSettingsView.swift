@@ -30,17 +30,31 @@ struct TextSettingsView: View {
     /// what is typed, loaded and tested on the page, and what its buttons do
     @StateObject private var page: Page
 
-    init(keys: KeyStore = .keychain) {
-        _page = StateObject(wrappedValue: Page(keys: keys))
+    /// `languages`: those Apple's Translation offers; nil = those of this Mac, loaded when the
+    /// page appears (the tests give the page a list of their own)
+    init(keys: KeyStore = .keychain, languages: AppleTranslationLanguages? = nil) {
+        self.init(page: Page(keys: keys), languages: languages)
     }
 
     /// The page with a model the caller keeps, so that the tests can press its buttons
-    init(page: Page) {
+    init(page: Page, languages: AppleTranslationLanguages? = nil) {
         _page = StateObject(wrappedValue: page)
+        loadsLanguages = languages == nil
+        if let languages {
+            _translationLanguages = State(initialValue: Self.languageRows(for: languages))
+        }
     }
 
-    /// the rows of the languages the Mac can translate into (loaded when the page appears)
-    @State private var translationLanguages: [LanguageRow] = []
+    private let loadsLanguages: Bool
+
+    /// the rows of the languages the Mac can translate into, for this Mac and for a service
+    /// (loaded when the page appears)
+    @State private var translationLanguages: (apple: [LanguageRow], service: [LanguageRow]) = ([], [])
+
+    /// the rows of “Translate into” for the engine chosen
+    private var languageRows: [LanguageRow] {
+        settings.translationEngine == "llm" ? translationLanguages.service : translationLanguages.apple
+    }
 
     @FocusState private var focusedField: Field?
 
@@ -54,20 +68,28 @@ struct TextSettingsView: View {
     }
 
     var body: some View {
+        let rows = languageRows
+        let chosenRow = rows.first { $0.id == settings.translationLanguage }
         Form {
             Section {
                 Picker("Translate into", selection: $settings.translationLanguage) {
                     Text("System language").tag("system")
                     // while the list loads, the language chosen before keeps its row
-                    if settings.translationLanguage != "system",
-                       !translationLanguages.contains(where: { $0.id == settings.translationLanguage }) {
+                    if settings.translationLanguage != "system", chosenRow == nil {
                         let chosen = Locale.Language(identifier: settings.translationLanguage)
                         Text(verbatim: Self.label(of: chosen, in: Self.appLocale, withRegion: chosen.region != nil))
                             .tag(settings.translationLanguage)
                     }
-                    ForEach(translationLanguages) { row in
-                        Text(verbatim: row.label).tag(row.id)
+                    // The chosen row goes without the note: the menu button shows it, and with the
+                    // note it does not fit there in every language. The line below says it instead.
+                    ForEach(rows) { row in
+                        Text(verbatim: row.id == chosenRow?.id ? row.name : row.label).tag(row.id)
                     }
+                }
+                if let chosenRow, chosenRow.needsAppleIntelligence {
+                    Text("Translating into \(chosenRow.name) needs Apple Intelligence.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Picker("Translate with", selection: engineSelection) {
                     Text("This Mac (Apple)").tag("apple")
@@ -85,9 +107,8 @@ struct TextSettingsView: View {
         }
         .formStyle(.grouped)
         .task {
-            let languages = await AppleTranslationAvailability.systemLanguages()
-            translationLanguages = Self.languageRows(for: languages.all, onDevice: languages.onDevice,
-                                                     in: Self.appLocale)
+            guard loadsLanguages else { return }
+            translationLanguages = Self.languageRows(for: await AppleTranslationAvailability.systemLanguages())
         }
         .onAppear { page.appear() }
         .onDisappear { page.disappear() }
@@ -264,9 +285,26 @@ struct TextSettingsView: View {
     struct LanguageRow: Identifiable, Equatable {
         /// the language's minimal identifier, as the settings keep it
         let id: String
+        /// the language's name, with the region where the language comes more than once
+        let name: String
+        /// the name, and the note when the language needs Apple Intelligence
         let label: String
         /// only Apple's models that need Apple Intelligence translate into it (macOS 26.4 and later)
         var needsAppleIntelligence = false
+    }
+
+    /// the rows for this Mac and for a service, in the language of the app's texts
+    private static func languageRows(for languages: AppleTranslationLanguages)
+        -> (apple: [LanguageRow], service: [LanguageRow]) {
+        (languageRows(for: languages, engine: "apple", in: appLocale),
+         languageRows(for: languages, engine: "llm", in: appLocale))
+    }
+
+    /// The rows for the engine chosen: only Apple's models need Apple Intelligence, a language
+    /// model service translates into every language without it
+    static func languageRows(for languages: AppleTranslationLanguages, engine: String,
+                             in locale: Locale) -> [LanguageRow] {
+        languageRows(for: languages.all, onDevice: engine == "llm" ? nil : languages.onDevice, in: locale)
     }
 
     /// The rows for the languages Translation offers, in the order of their labels. Most of them
@@ -289,9 +327,9 @@ struct TextSettingsView: View {
                 let label = label(of: language, in: locale, withRegion: shared)
                 guard let withoutAppleIntelligence,
                       !withoutAppleIntelligence.contains(LanguageMatching.key(language)) else {
-                    return LanguageRow(id: language.minimalIdentifier, label: label)
+                    return LanguageRow(id: language.minimalIdentifier, name: label, label: label)
                 }
-                return LanguageRow(id: language.minimalIdentifier,
+                return LanguageRow(id: language.minimalIdentifier, name: label,
                                    label: String(localized: "\(label) – needs Apple Intelligence"),
                                    needsAppleIntelligence: true)
             }
