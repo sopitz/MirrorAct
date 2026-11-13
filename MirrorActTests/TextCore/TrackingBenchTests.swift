@@ -1024,6 +1024,20 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
         XCTAssertGreaterThanOrEqual(result.score, 75)
     }
+    /// A page that springs back after a flick past its end: what a pass after the movement finds
+    /// cut off is read again at rest, not drawn half-read (seeds 2 and 5 fell to 58.7 and 67.6,
+    /// with 241 and 288 half-read frames, when such a pass counted as a reread)
+    func testRubberBandSeeds2And5() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        for (seed, score): (UInt64, Double) in [(2, 63), (5, 75)] {
+            let result = TrackingBenchTests.bench(try scenario("rubberBand", seed: seed)).run(OverlayTrackerSubject(),
+                                                                                              name: "tracker")
+            XCTAssertGreaterThanOrEqual(result.score, score, "rubberBand, seed \(seed)")
+            XCTAssertLessThanOrEqual(result.halfRead, 150, "rubberBand, seed \(seed)")
+        }
+    }
     func testKeyboard() throws { try check("keyboard") }
     func testLateContent() throws { try check("lateContent") }
     func testZoom() throws { try check("zoom") }

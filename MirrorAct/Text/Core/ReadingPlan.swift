@@ -370,12 +370,13 @@ final class ReadingPlan {
         }
     }
 
-    /// The areas in flight were all rereads (besides places read at rest and confirm reads, which
-    /// ride along with whatever is read over them): the highest number of attempts among them,
-    /// else nil
+    /// The areas in flight were all rereads (besides places read at rest, which ride along with
+    /// whatever is read over them): the highest number of attempts among them, else nil. A confirm
+    /// read in flight makes it nil: it follows movement, so what it finds cut off is taken for a
+    /// first reading and waits for the page to rest, not taken as it shows
     var rereadAttemptsInFlight: Int? {
         var most: Int?
-        for area in inFlight where area.kind != .rest && area.kind != .confirm {
+        for area in inFlight where area.kind != .rest {
             guard area.kind == .reread else { return nil }
             most = max(most ?? 0, area.attempts)
         }

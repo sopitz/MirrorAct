@@ -308,22 +308,24 @@ final class ReadingPlanTests: XCTestCase {
         XCTAssertEqual(plan.areas.count, 1, "a pass that failed leaves it to be read")
     }
 
-    /// A confirm read that rides along with a reread (it lies over the same place) does not make
-    /// the pass count as a first reading: the place is not read again and again
-    func testAConfirmThatRidesAlongKeepsTheRereadCount() throws {
+    /// A confirm read in flight (after movement) makes the pass count as a first reading, even when
+    /// it lies over a reread: what it finds cut off is read again at rest, not taken as it shows
+    /// (a page that springs back after a flick would otherwise show half-read paragraphs)
+    func testAConfirmInFlightMakesThePassAFirstReading() throws {
         let plan = ReadingPlan(configuration: configuration)
         let place = CGRect(x: 0, y: 200, width: 200, height: 40)
         plan.add(UnreadArea(rect: place, kind: .reread, since: 5, attempts: 1))
         plan.add(UnreadArea(rect: bounds, kind: .confirm, since: 5))
         _ = try XCTUnwrap(plan.takeRegion(at: 5, lastMotion: -1000, bounds: bounds, isFullyVisible: { _ in true }))
         XCTAssertEqual(plan.inFlight.map(\.kind), [.reread, .confirm])
-        XCTAssertEqual(plan.rereadAttemptsInFlight, 1)
-        // (what is new, such as a strip, is read for the first time)
+        XCTAssertNil(plan.rereadAttemptsInFlight)
+        // a place read at rest rides along
         plan.finishPass(succeeded: true)
         plan.add(UnreadArea(rect: place, kind: .reread, since: 6, attempts: 1))
-        plan.add(UnreadArea(rect: CGRect(x: 0, y: 190, width: 200, height: 14), kind: .strip, since: 6))
-        _ = try XCTUnwrap(plan.takeRegion(at: 6, lastMotion: -1000, bounds: bounds, isFullyVisible: { _ in true }))
-        XCTAssertNil(plan.rereadAttemptsInFlight)
+        plan.add(UnreadArea(rect: CGRect(x: 0, y: 236, width: 200, height: 20), kind: .rest, since: 6))
+        _ = try XCTUnwrap(plan.takeRegion(at: 6.2, lastMotion: 5.8, bounds: bounds, isFullyVisible: { _ in true }))
+        XCTAssertEqual(Set(plan.inFlight.map(\.kind)), [.reread, .rest])
+        XCTAssertEqual(plan.rereadAttemptsInFlight, 1)
     }
 
     /// A place outside of every scrolling area waits for the motion near it, which the clock
