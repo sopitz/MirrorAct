@@ -120,8 +120,10 @@ enum TextLayout {
     /// or that would continue it, on that side, when the part looks cut off. A part is garbage
     /// beyond doubt (`TextBlock.isGarbled`) only where bars lie, and only when its box is lower
     /// than `garbledHeight` of its size; or lower than `cutOffHeight` and the recognizer is not
-    /// sure of it (a confidence below `sureConfidence`) or a line next to it is clearly higher;
-    /// or lower than `unsurePartHeight`, not sure, and a line next to it is clearly higher.
+    /// sure of it (a confidence below `sureConfidence`; that does not count when a line right above
+    /// or below it, overlapping it across, has tall letters too and a box about as high: within
+    /// `partOfNeighbour` of each other) or a line next to it is clearly higher; or lower than
+    /// `unsurePartHeight`, not sure, and a line next to it is clearly higher.
     static func blocks(_ lines: [RecognizedLine], imageSize: CGSize) -> [TextBlock] {
         var open: [Paragraph] = []
         for (line, measured) in measure(lines, imageSize: imageSize) {
@@ -192,6 +194,18 @@ enum TextLayout {
                     && (adjoins(neighbour, below: line, size: neighbour.size)
                         || adjoins(line, below: neighbour, size: neighbour.size))
             }
+            // a line right above or below it with tall letters too, in a box about as high: it is
+            // set like its neighbours (in letters of unusual widths, whose size comes out too
+            // large), not cut off
+            let besidePeer = all.indices.contains { other in
+                let (text, neighbour) = all[other]
+                let higher = Double(max(line.rect.height, neighbour.rect.height))
+                let lower = Double(min(line.rect.height, neighbour.rect.height))
+                return other != index && lower > partOfNeighbour * higher && hasTallLetters(text.text)
+                    && line.rect.minX < neighbour.rect.maxX && neighbour.rect.minX < line.rect.maxX
+                    && (liesClose(neighbour, above: line, size: neighbour.size)
+                        || liesClose(line, above: neighbour, size: neighbour.size))
+            }
             let unsure = recognized.confidence.map { $0 < sureConfidence } ?? false
             // (the size of a few letters of a script set in varying widths is not trusted much)
             let trusted = line.units >= shortUnits || isFullWidth(recognized.text)
@@ -200,7 +214,7 @@ enum TextLayout {
             all[index].1.isGarbled = nearBar
                 && (isLow(recognized.text, width: width, height: height,
                           share: trusted ? garbledHeight : shortGarbledHeight)
-                    || (trusted && line.isCutOff && (unsure || belowNeighbour))
+                    || (trusted && line.isCutOff && ((unsure && !besidePeer) || belowNeighbour))
                     || (trusted && unsure && belowNeighbour
                         && isLow(recognized.text, width: width, height: height, share: unsurePartHeight)))
         }
@@ -298,10 +312,8 @@ enum TextLayout {
     private static func adjoins(_ upper: Measured, below lower: Measured, size: Double?,
                                 orBehindMarker: Bool = false) -> Bool {
         let box = Double(max(upper.rect.height, lower.rect.height))
-        let lineHeight = min(max(size ?? box, sizeUnderBox * box), sizeOverBox * box)
-        let gap = Double(lower.rect.minY - upper.rect.maxY)
-        let limit = alignment * lineHeight
-        return gap > -overlap * box && gap < paragraphGap * lineHeight
+        let limit = alignment * lineHeight(size, box: box)
+        return liesClose(upper, above: lower, size: size)
             && (abs(Double(upper.rect.minX - lower.rect.minX)) < limit
                 || abs(Double(upper.rect.midX - lower.rect.midX)) < limit
                 || ((upper.isRightToLeft || lower.isRightToLeft) && abs(Double(upper.rect.maxX - lower.rect.maxX)) < limit)
@@ -309,6 +321,22 @@ enum TextLayout {
                     upper.isRightToLeft ? abs(Double(upper.rect.maxX) - marker - Double(lower.rect.maxX)) < limit
                         : abs(Double(upper.rect.minX) + marker - Double(lower.rect.minX)) < limit
                 } ?? false)
+    }
+
+    /// Whether `lower` lies close below `upper`, as the next line of a paragraph does, wherever
+    /// it lies across: the gap between their boxes is less than `paragraphGap` of the height of a
+    /// line (see `adjoins`), and the lower box reaches into the upper one by less than `overlap`
+    /// of the higher box
+    private static func liesClose(_ upper: Measured, above lower: Measured, size: Double?) -> Bool {
+        let box = Double(max(upper.rect.height, lower.rect.height))
+        let gap = Double(lower.rect.minY - upper.rect.maxY)
+        return gap > -overlap * box && gap < paragraphGap * lineHeight(size, box: box)
+    }
+
+    /// The height of a line for the distances of `adjoins`: the text `size`, kept between
+    /// `sizeUnderBox` and `sizeOverBox` times the higher box `box`; the box when the size is nil
+    private static func lineHeight(_ size: Double?, box: Double) -> Double {
+        min(max(size ?? box, sizeUnderBox * box), sizeOverBox * box)
     }
 
     // MARK: Size of text
@@ -406,7 +434,12 @@ enum TextLayout {
     /// Whether the box is lower than `share` of the text size, for text with tall letters
     private static func isLow(_ text: String, width: Double, height: Double, share: Double) -> Bool {
         guard let size = textSize(of: text, width: width), height < share * size else { return false }
-        return text.unicodeScalars.contains { scalar in
+        return hasTallLetters(text)
+    }
+
+    /// Capitals, digits, ascenders, Chinese, Japanese, Korean, Arabic or Thai (`isLow`)
+    private static func hasTallLetters(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
             scalar.properties.isUppercase || (0x30...0x39).contains(scalar.value) || "bdfhklt".unicodeScalars.contains(scalar)
                 || (0x2E80...0xD7AF).contains(scalar.value) || hasTallForms(scalar)
         }

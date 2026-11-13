@@ -111,6 +111,47 @@ final class TextLayoutCutOffTests: XCTestCase {
                        "Bitte Licht still stellen\nFill in the title field\nHilfe")
     }
 
+    /// Code in Menlo below the top bar of an Android phone, read with a confidence of 0.5: measured
+    /// by their width, lines with many narrow letters have boxes of 0.59 to 0.61 of their size.
+    /// A line right above or below with tall letters in a box about as high shows that they are
+    /// set like their neighbours: they are no garbage, and they are copied. (The second line of
+    /// the code below is indented.)
+    func testCompleteLinesOfCodeAtTheTopAreNoGarbage() throws {
+        let swift = [
+            line("import Foundation", 24, 84, 321, 31, confidence: 1, in: android),
+            line("#if canImport(CoreGraphics)", 17, 129, 513, 35, confidence: 0.3, in: android),
+            line("import CoreGraphics", 17, 171, 366, 35, confidence: 0.5, in: android),
+            line("struct ScrollingArea: Equatable {", 21, 216, 627, 35, confidence: 0.5, in: android),
+            line("var rect: GRect", 21, 262, 306, 28, confidence: 0.5, in: android),
+            line("var knownEdges: Int", 21, 307, 362, 31, confidence: 0.5, in: android),
+        ]
+        XCTAssertTrue(TextLayout.looksCutOff("var rect: GRect", width: 306, height: 28))
+        XCTAssertEqual(TextLayout.blocks(swift, imageSize: android).filter(\.isGarbled).map(\.text), [])
+        XCTAssertTrue(TextLayout.plainText(swift, imageSize: android).contains("var rect: GRect"))
+        let java = [
+            line("if (list.filter(it -> it.isFilled()).size() > 1) {", 21, 164, 1024, 35, confidence: 0.5, in: android),
+            line("final int limit = file.list(). length;", 63, 213, 756, 42, confidence: 1, in: android),
+            line("fill_list(&list, file_limit);", 21, 262, 596, 45, confidence: 1, in: android),
+        ]
+        XCTAssertEqual(TextLayout.blocks(java, imageSize: android).filter(\.isGarbled).map(\.text), [])
+        XCTAssertTrue(TextLayout.plainText(java, imageSize: android).contains("if (list.filter"))
+    }
+
+    /// iPhone (SF, Russian): the top bar hides the lower part of a line, read as garbage with a
+    /// confidence of 0.3. The line below it is about as high, but it has no tall letters (its box is
+    /// low anyway): the line stays garbage beyond doubt.
+    func testALineCutOffAboveALineOfShortLettersIsGarbage() throws {
+        let lines = [
+            line("Настройки", 448.8, 180.0, 276.1, 59.5, confidence: 1, in: iPhone),
+            line("о. доставла по спрапе ОдІчпо", 47.8, 268.7, 838.9, 36.8, confidence: 0.3, in: iPhone),
+            line("занимает два или", 110.4, 342.0, 493.0, 48.1, confidence: 1, in: iPhone),
+            line("Доставка по стране обычно занимает", 47.8, 482.0, 1048.6, 59.0, confidence: 1, in: iPhone),
+        ]
+        let blocks = TextLayout.blocks(lines, imageSize: iPhone)
+        XCTAssertEqual(blocks.filter(\.isGarbled).map(\.text), ["о. доставла по спрапе ОдІчпо"])
+        XCTAssertFalse(TextLayout.plainText(lines, imageSize: iPhone).contains("доставла"))
+    }
+
     /// Android (the lab's page): the last line is cut in half by the navigation bar, and Vision
     /// read its upper half as garbage, sure of it (1). The paragraph above is clearly higher: the
     /// line is garbage beyond doubt. Its paragraph is complete as far as it shows.
