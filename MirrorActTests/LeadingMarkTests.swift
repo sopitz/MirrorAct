@@ -285,6 +285,38 @@ final class LeadingMarkTests: XCTestCase {
         }
     }
 
+    /// The same rows with every icon a pixel higher, as the icons come out where a display at
+    /// scale 1 lays the symbols out or where the stream puts them a pixel off. The "textformat"
+    /// icon is the letters "Aa", centred on its row; raised by a pixel its ink ends 0.07 of the
+    /// title's size below the title's baseline and a third of its columns end there, so it sits
+    /// like text, and LeadingMark keeps it as a word in front of "Über das Telefon": a limit of
+    /// the rule, which cannot tell such an icon from a short word set apart. Every other row
+    /// keeps its icon out of the line.
+    func testNoLineReachesIntoAnIconAPixelHigher() throws {
+        for (format, name) in [(kCVPixelFormatType_32BGRA, "BGRA"), (kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, "4:2:0")] {
+            for rows in [SettingsRows(seed: 420, iconOffset: -1),
+                         SettingsRows(seed: 434, iconSize: 32, gap: 16, titleSize: 20, summary: true, iconOffset: -1)] {
+                let (frame, drawn) = try rows.frame(format: format)
+                let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
+                let found = try TextRecognizer.lines(in: frame)
+                XCTAssertGreaterThan(found.count, drawn.count / 2, "\(name): \(found.map(\.text))")
+                for line in found {
+                    let rect = CGRect(x: line.rect.minX * size.width, y: line.rect.minY * size.height,
+                                      width: line.rect.width * size.width, height: line.rect.height * size.height)
+                    for row in drawn where rect.intersects(row.title) {
+                        XCTAssertLessThan(rect.height, 1.6 * row.title.height, "\(name): '\(line.text)' \(rect)")
+                        let outside = { XCTAssertGreaterThan(rect.minX, row.icon.maxX - 2, "\(name): '\(line.text)' \(rect) icon \(row.icon)") }
+                        if line.text.hasPrefix("Aa ") {
+                            XCTExpectFailure("the textformat icon sits like text", options: .nonStrict(), failingBlock: outside)
+                        } else {
+                            outside()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Running text keeps its first character: bullets, signs, one-letter words and initials
     func testRunningTextKeepsItsFirstCharacter() throws {
         let texts = ["• Dunkles Design einschalten", "$ 12.99 per month", "E Display & Touchbedienung",
@@ -432,6 +464,8 @@ final class LeadingMarkTests: XCTestCase {
         var iconSize: CGFloat = 24, gap: CGFloat = 12, titleSize: CGFloat = 16
         var summary = false
         var scale: CGFloat = 2.625
+        /// Moves every icon down by this many frame pixels (up when negative)
+        var iconOffset: CGFloat = 0
 
         /// A symbol of `pointSize` and the size to draw it in. NSImage lays a symbol out on the
         /// pixels of the displays attached: with one display at scale 1 its size and the inset of
@@ -493,7 +527,7 @@ final class LeadingMarkTests: XCTestCase {
                     if let symbol = Self.symbol(Self.symbols[index % Self.symbols.count], pointSize: iconSize * 0.8,
                                                 color: index % 2 == 0 ? foreground : tints[index % tints.count]) {
                         let size = symbol.size
-                        symbol.image.draw(in: NSRect(x: icon.midX - size.width / 2, y: icon.midY - size.height / 2,
+                        symbol.image.draw(in: NSRect(x: icon.midX - size.width / 2, y: icon.midY - size.height / 2 + iconOffset / scale,
                                                      width: size.width, height: size.height),
                                           from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
                     }
