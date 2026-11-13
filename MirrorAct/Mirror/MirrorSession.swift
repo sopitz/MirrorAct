@@ -30,8 +30,13 @@ final class MirrorSession: ObservableObject, Identifiable {
             if state != .live {
                 translator.stop()
             } else if let deadline = translateResumeDeadline {
-                cancelTranslateResume()
-                if now() <= deadline { translator.start() }
+                if now() <= deadline {
+                    cancelTranslateResume()
+                    translator.start()
+                } else {
+                    // the time is up, and the end of the wait has not run yet
+                    translateResumeTookTooLong()
+                }
             }
         }
     }
@@ -129,7 +134,7 @@ final class MirrorSession: ObservableObject, Identifiable {
     /// connection to the same device right away (Android: the cable unplugged with Wi-Fi still
     /// there or the other way round, Switch to Wi-Fi). Then Translate, if it is on, goes on
     /// again once the new stream is live within `translateResumeWindow`; the window says so
-    /// until then. A stream that stops otherwise, also one of a hand-over that never showed a
+    /// until then, and that Translate is off if the time runs out. A stream that stops otherwise, also one of a hand-over that never showed a
     /// frame, leaves Translate off. Call before the state changes.
     func streamWillEnd(handingOver: Bool) {
         guard handingOver else {
@@ -145,9 +150,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         toastExpiry = nil
         showRestingNotice()
         translateResumeExpiry = schedule(window) { [weak self] in
-            guard let self, let deadline = self.translateResumeDeadline,
-                  self.now() >= deadline else { return }
-            self.cancelTranslateResume()
+            self?.translateResumeTookTooLong()
         }
     }
 
@@ -161,6 +164,13 @@ final class MirrorSession: ObservableObject, Identifiable {
         } else {
             translator.toggle()
         }
+    }
+
+    /// The new stream was not live in time: the window had said that Translate goes on again
+    private func translateResumeTookTooLong() {
+        guard translateResumeDeadline != nil else { return }
+        cancelTranslateResume()
+        showToast(String(localized: "Translate is off – the new connection took too long"), seconds: 4)
     }
 
     private func cancelTranslateResume() {
@@ -196,8 +206,10 @@ final class MirrorSession: ObservableObject, Identifiable {
     // 3. the engine's lasting notice (`showLastingNotice`, "macOS asks whether it may download …").
     // Without any of them it shows the state. A passing toast goes when its time is up, when the
     // next one replaces it, and when a hand-over starts, whose notice replaces it at once. The
-    // notice of the hand-over goes when the new stream is live and Translate goes on, when
-    // Translate is pressed ("Translate stays off"), and when the stream ends without a hand-over.
+    // notice of the hand-over goes when the new stream is live in time and Translate goes on,
+    // when the time is up ("Translate is off – the new connection took too long"), when Translate
+    // is pressed ("Translate stays off"), and, without a word, when the stream ends without a
+    // hand-over: the device is gone.
     // The engine's notice goes when the engine withdraws it and when Translate turns off, which
     // it also does when the stream of a hand-over ends.
 

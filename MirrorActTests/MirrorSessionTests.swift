@@ -214,6 +214,7 @@ final class MirrorSessionTests: XCTestCase {
         let late = MirrorSession.translateResumeWindow + 1
         let half = MirrorSession.translateResumeWindow * 0.6
         let staysOff = String(localized: "Translate stays off")
+        let tooLate = String(localized: "Translate is off – the new connection took too long")
         let paths: [Path] = [
             Path(name: "AirPlay: the iPhone disconnects and connects again", kind: .wireless,
                  steps: [.disconnect(nil), .clear, .connect, .firstFrame], translates: false),
@@ -237,7 +238,8 @@ final class MirrorSessionTests: XCTestCase {
                  steps: [.androidStop(handingOver: true), .wait(half), .connect, .wait(1), .firstFrame],
                  translates: true),
             Path(name: "Android: moved, the new stream comes too late", kind: .android,
-                 steps: [.androidStop(handingOver: true), .connect, .wait(late), .firstFrame], translates: false),
+                 steps: [.androidStop(handingOver: true), .connect, .wait(late), .firstFrame], translates: false,
+                 toast: tooLate),
             Path(name: "Android: moved, the new stream stops before its first frame", kind: .android,
                  steps: [.androidStop(handingOver: true), .connect, .androidStop(handingOver: false),
                          .wait(3600), .connect, .firstFrame], translates: false),
@@ -340,6 +342,7 @@ final class MirrorSessionTests: XCTestCase {
         let resume = MirrorSession.translateResumeNotice
         let staysOff = String(localized: "Translate stays off")
         let connected = "Connected via Wi-Fi"
+        let tooLate = String(localized: "Translate is off – the new connection took too long")
         let rows: [(name: String, events: [Event], translates: Bool)] = [
             ("a toast, then the state", [.toast("Saved"), .shows("Saved"), .wait(2), .shows(nil)], true),
             ("the engine's notice under a toast",
@@ -369,6 +372,16 @@ final class MirrorSessionTests: XCTestCase {
             ("a second hand-over while it waits",
              [.handOver, .connect, .wait(3), .toast(connected), .handOver, .shows(connected), .wait(2),
               .shows(resume), .connect, .firstFrame, .shows(nil)], true),
+            ("the new stream just in time", [.handOver, .connect, .wait(9.9), .shows(resume), .firstFrame,
+                                              .shows(nil), .wait(10), .shows(nil)], true),
+            ("the time runs out", [.handOver, .connect, .wait(10), .shows(tooLate), .wait(4), .shows(nil),
+                                    .firstFrame, .shows(nil)], false),
+            ("the time runs out under a toast", [.handOver, .wait(9), .toast(connected), .wait(1),
+                                                  .shows(tooLate)], false),
+            ("the first frame after the time, before the end of the wait could run",
+             [.handOver, .connect, .busy(11), .firstFrame, .shows(tooLate), .wait(4), .shows(nil)], false),
+            ("two hand-overs, too late in all", [.handOver, .connect, .wait(6), .handOver, .connect, .wait(4),
+                                                  .shows(tooLate)], false),
         ]
         for row in rows {
             let session = try await translatingSession(kind: .android).session
