@@ -158,19 +158,179 @@ enum LanguageMatching {
         return tags
     }
 
+    // MARK: The words of a text
+
+    /// What of a text can speak for a language: its words, without what is written the same in
+    /// every language (numbers, model names, identifiers, addresses, acronyms)
+    struct Wording: Equatable {
+        /// the words, one space between two: what a language recognizer is given
+        var text: String
+        /// how many words
+        var words: Int
+        /// letters in the words, where a letter of Chinese, Japanese or Korean counts
+        /// `denseLetterWeight` times (see `letterWeight`): what the words weigh
+        var letters: Int
+        /// most of the letters are of a script with case (Latin, Greek, Cyrillic …), whose words
+        /// are set apart by spaces. Chinese, Japanese or Thai do not set words apart: there a
+        /// "word" may be a whole sentence, and the number of words says nothing.
+        var isCased: Bool
+
+        init(text: String = "", words: Int = 0, letters: Int = 0, isCased: Bool = true) {
+            self.text = text
+            self.words = words
+            self.letters = letters
+            self.isCased = isCased
+        }
+
+        /// The words of several texts, read as one text
+        init(joining wordings: [Wording]) {
+            let parts = wordings.filter { $0.words > 0 }
+            text = parts.map(\.text).joined(separator: " ")
+            words = parts.reduce(0) { $0 + $1.words }
+            letters = parts.reduce(0) { $0 + $1.letters }
+            let cased = parts.reduce(0) { $0 + ($1.isCased ? $1.letters : 0) }
+            isCased = cased * 2 >= letters
+        }
+
+        /// A text with a single word, or with fewer letters, says nothing about its language
+        var canDecide: Bool {
+            letters >= lettersToDecide && (!isCased || words >= wordsToDecide)
+        }
+
+        /// Enough of a text to be in another language than the rest of the screen
+        var canStandApart: Bool {
+            letters >= lettersToStandApart && (!isCased || words >= wordsToStandApart)
+        }
+    }
+
+    /// Characters a word never contains: they make identifiers, addresses, paths and formulas
+    private static let identifierMarks: Set<Character> = ["_", "@", "/", "\\", "#", "=", "|", "<", ">", "~"]
+    /// Characters that join the parts of one word ("E-Mail", "aujourd’hui", "スクリーン・タイム")
+    private static let joiners: Set<Character> = ["-", "\u{2010}", "\u{2011}", "'", "\u{2019}", "\u{30FB}"]
+
+    /// The words of `text`. It is split at white space into tokens. A token with a digit in it
+    /// ("arm64", "5G", "12:30"), or with one of `identifierMarks` ("sdk_gphone", an e-mail address,
+    /// a URL), is no word. Every other character that is neither a letter nor one of `joiners`
+    /// separates two words ("、" in Japanese), except between two letters of a script with case:
+    /// there it makes the token a name or an address ("example.com", "z.B.", "Ton&Vibration"),
+    /// and the token is no word. Joiners at the ends of a word are dropped. A word in which a
+    /// lowercase letter is directly followed by an uppercase one ("AndroidWifi", "iPhone", "YouTube") is
+    /// a name, and one of two or more letters without a lowercase one ("WLAN", "IMEI", "OK") an
+    /// acronym: neither counts.
+    static func wording(of text: String) -> Wording {
+        var words: [String] = []
+        var letters = 0, cased = 0
+        for token in text.split(whereSeparator: { $0.isWhitespace }) {
+            guard !token.contains(where: { isDigit($0) || identifierMarks.contains($0) }) else { continue }
+            var runs: [String] = []
+            var run = ""
+            var lastLetter: Character?
+            var pendingSeparator = false
+            var isName = false
+            for character in token {
+                if character.isLetter || joiners.contains(character) {
+                    if character.isLetter {
+                        if pendingSeparator, let before = lastLetter, before.isCased, character.isCased {
+                            isName = true
+                        }
+                        pendingSeparator = false
+                        lastLetter = character
+                    }
+                    run.append(character)
+                } else {
+                    if !run.isEmpty { runs.append(run) }
+                    run = ""
+                    pendingSeparator = true
+                }
+            }
+            if !run.isEmpty { runs.append(run) }
+            guard !isName else { continue }
+            for piece in runs {
+                var word = Substring(piece)
+                while let first = word.first, joiners.contains(first) { word.removeFirst() }
+                while let last = word.last, joiners.contains(last) { word.removeLast() }
+                guard !word.isEmpty, isWord(word) else { continue }
+                words.append(String(word))
+                for character in word where character.isLetter {
+                    let weight = letterWeight(character)
+                    letters += weight
+                    if character.isCased { cased += weight }
+                }
+            }
+        }
+        return Wording(text: words.joined(separator: " "), words: words.count, letters: letters,
+                       isCased: cased * 2 >= letters)
+    }
+
+    /// how many letters of an alphabet one character of Chinese, Japanese or Korean stands for:
+    /// it is a syllable or a whole word, and the same is said in about a third of the characters
+    static let denseLetterWeight = 3
+
+    /// What a letter weighs: `denseLetterWeight` for one of the Han ideographs (U+3400–U+4DBF,
+    /// U+4E00–U+9FFF, U+F900–U+FAFF, U+20000–U+3FFFF), Hiragana and Katakana (U+3040–U+30FF,
+    /// U+31F0–U+31FF, U+FF66–U+FF9D) and the Hangul syllables (U+AC00–U+D7A3), by the first
+    /// scalar of the character; 1 for every other letter
+    static func letterWeight(_ character: Character) -> Int {
+        guard let scalar = character.unicodeScalars.first?.value else { return 1 }
+        let dense: [ClosedRange<UInt32>] = [0x3040...0x30FF, 0x31F0...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
+                                            0xAC00...0xD7A3, 0xF900...0xFAFF, 0xFF66...0xFF9D, 0x20000...0x3FFFF]
+        return dense.contains { $0.contains(scalar) } ? denseLetterWeight : 1
+    }
+
+    /// A decimal digit of any script (general category Nd: "7", "٧", "７"). Not the numerals that
+    /// are letters of a word as well ("十" in "二十分", "Ⅻ").
+    private static func isDigit(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { $0.properties.generalCategory == .decimalNumber }
+    }
+
+    /// Neither a name written in one ("AndroidWifi") nor an acronym ("WLAN")
+    private static func isWord(_ word: Substring) -> Bool {
+        // the letter just before, if there was no joiner in between ("Android-Version" is a word)
+        var previous: Character?
+        var hasLowercase = false
+        var uppercase = 0
+        for character in word {
+            guard character.isLetter else {
+                previous = nil
+                continue
+            }
+            if character.isUppercase {
+                if let previous, previous.isLowercase { return false }
+                uppercase += 1
+            }
+            if character.isLowercase { hasLowercase = true }
+            previous = character
+        }
+        return hasLowercase || uppercase < 2
+    }
+
     // MARK: The language of a text
 
-    /// fewer letters than this and a recognizer's answer is a guess
+    /// fewer letters in words than this and a recognizer's answer is a guess
     static let lettersToDecide = 12
+    /// fewer words than this (in a script with case) and a recognizer's answer is a guess: a
+    /// single word looks like a word of many languages ("Telefonnummer" like Norwegian)
+    static let wordsToDecide = 2
     /// probability from which the best candidate is taken
     static let probabilityToDecide = 0.6
+    /// letters in words from which a text may be in another language than the screen it is on
+    static let lettersToStandApart = 25
+    /// words (in a script with case) from which a text may be in another language than the screen
+    static let wordsToStandApart = 3
+    /// probability from which a text may be in another language than the screen
+    static let probabilityToStandApart = 0.9
+    /// letters in words of the texts of a request in a new language from which the screen is
+    /// taken to be in that language instead of the one it was in before
+    static let lettersToChangeTheScreensLanguage = 25
+    /// letters in words that must speak for a language before a translator is asked to load it
+    /// (macOS asks the user whether it may download it)
+    static let lettersToAskForALanguage = 25
     /// share of the probability that has to lie with languages the translator does not know
     /// before a text counts as written in one of them
     static let probabilityOfAnUnknownLanguage = 0.8
-    /// letters from which the best candidate is used when nothing else is known about a text
+    /// letters in words from which the best candidate is used when nothing else is known about a text
     static let lettersToTrustAGuess = 20
-    /// letters of text in a language the translator does not know from which the user is told
-    /// (a recognizer now and then takes a single word for some other language)
+    /// letters in words of text in a language the translator does not know from which the user is told
     static let lettersToMentionAnUnknownLanguage = 40
 
     /// One candidate of a language recognizer
@@ -183,17 +343,24 @@ enum LanguageMatching {
 
     /// What is known about the language of one text
     struct Finding: Equatable {
-        /// the language, when it is certain enough to go by
+        /// its own language, when it is certain enough to count for the language of the screen
         var decided: Locale.Language?
         /// the most likely language when it is not
         var guess: Locale.Language?
-        /// letters in the text: what this finding weighs
+        /// letters in the text; 0 = nothing to translate
         var letters: Int
+        /// letters in its words: what speaks for its language
+        var weight: Int
+        /// `decided` is certain enough for the text to be in another language than the screen
+        var standsApart: Bool
 
-        init(decided: Locale.Language? = nil, guess: Locale.Language? = nil, letters: Int) {
+        init(decided: Locale.Language? = nil, guess: Locale.Language? = nil, letters: Int, weight: Int? = nil,
+             standsApart: Bool = false) {
             self.decided = decided
             self.guess = guess
             self.letters = letters
+            self.weight = weight ?? letters
+            self.standsApart = standsApart
         }
     }
 
@@ -201,43 +368,80 @@ enum LanguageMatching {
         text.reduce(0) { $1.isLetter ? $0 + 1 : $0 }
     }
 
-    /// Weighs what a recognizer says about a text with `letters` letters. `open`: its candidates
-    /// among all languages; `constrained`: its candidates when only the languages of the
-    /// translator (`supported`) were allowed.
-    static func finding(letters: Int, open: [Hypothesis], constrained: [Hypothesis],
+    /// Weighs what a recognizer says about the words of a text (`wording`, which is what it was
+    /// given) that has `letters` letters in all. `open`: its candidates among all languages;
+    /// `constrained`: its candidates when only the languages of the translator (`supported`)
+    /// were allowed.
+    static func finding(of wording: Wording, letters: Int, open: [Hypothesis], constrained: [Hypothesis],
                         supported: [Locale.Language]) -> Finding {
         let candidates = ranked(constrained)
-        var finding = Finding(guess: candidates.first?.language, letters: letters)
-        guard letters >= lettersToDecide else { return finding }
+        var finding = Finding(guess: wording.letters > 0 ? candidates.first?.language : nil, letters: letters,
+                              weight: wording.letters)
+        guard wording.canDecide else { return finding }
         // Limited to the translator's languages, a recognizer finds one of them in any text. A
         // text that clearly is in another language must not be translated as if it were.
         let unknown = ranked(open).filter { match($0.language, in: supported) == nil }
-        if let first = unknown.first,
-           unknown.reduce(0, { $0 + $1.probability }) >= probabilityOfAnUnknownLanguage {
+        let unknownShare = unknown.reduce(0) { $0 + $1.probability }
+        var probability = 0.0
+        if let first = unknown.first, unknownShare >= probabilityOfAnUnknownLanguage {
             finding.decided = first.language
+            probability = unknownShare
         } else if let best = candidates.first, best.probability >= probabilityToDecide {
             finding.decided = best.language
+            probability = best.probability
         }
+        finding.standsApart = finding.decided != nil && wording.canStandApart && probability >= probabilityToStandApart
         return finding
     }
 
-    /// The language most of the text with a decided language is in, by letters; of two with the
-    /// same amount the one that comes first
-    static func prevailingLanguage(of findings: [Finding]) -> Locale.Language? {
+    /// The language of a screen, and how many letters in words speak for it
+    struct ScreenLanguage: Equatable {
+        var language: Locale.Language
+        var letters: Int
+    }
+
+    /// The words of the texts that decide nothing on their own (short labels), read as one
+    /// text: together they may say what language the screen is in. nil for fewer than two.
+    static func jointWording(of wordings: [Wording], findings: [Finding]) -> Wording? {
+        let undecided = zip(wordings, findings).filter { $0.1.decided == nil && $0.0.words > 0 }.map(\.0)
+        guard undecided.count >= 2 else { return nil }
+        return Wording(joining: undecided)
+    }
+
+    /// The language of the screen after a request with these findings (those of its texts, and
+    /// the one of `jointWording`), when it was `before`. The letters in words of the findings
+    /// with a decided language are added up by language; texts that decide nothing take no part.
+    /// The language with the most letters wins; of several with the same amount, the one of
+    /// `before`, otherwise the one that comes first. It replaces the language of `before` only
+    /// with at least `lettersToChangeTheScreensLanguage` letters, and more than this request has
+    /// in the language of `before`. The letters kept are the most any request had for the language.
+    static func screenLanguage(of findings: [Finding], before: ScreenLanguage?) -> ScreenLanguage? {
         var languages: [(language: Locale.Language, letters: Int)] = []
         for finding in findings {
             guard let language = finding.decided, !isUndetermined(language) else { continue }
             if let known = languages.firstIndex(where: { key($0.language) == key(language) }) {
-                languages[known].letters += finding.letters
+                languages[known].letters += finding.weight
             } else {
-                languages.append((language, finding.letters))
+                languages.append((language, finding.weight))
             }
         }
-        var prevailing: (language: Locale.Language, letters: Int)?
-        for entry in languages where entry.letters > (prevailing?.letters ?? -1) {
-            prevailing = entry
+        var best: (language: Locale.Language, letters: Int)?
+        for entry in languages {
+            guard let current = best else {
+                best = entry
+                continue
+            }
+            let winsTie = entry.letters == current.letters && before.map { key($0.language) == key(entry.language) } == true
+            if entry.letters > current.letters || winsTie { best = entry }
         }
-        return prevailing?.language
+        guard let best else { return before }
+        guard let before else { return ScreenLanguage(language: best.language, letters: best.letters) }
+        if key(best.language) == key(before.language) {
+            return ScreenLanguage(language: before.language, letters: max(before.letters, best.letters))
+        }
+        let forBefore = languages.first { key($0.language) == key(before.language) }?.letters ?? 0
+        guard best.letters >= lettersToChangeTheScreensLanguage, best.letters > forBefore else { return before }
+        return ScreenLanguage(language: best.language, letters: best.letters)
     }
 
     /// Candidates with a language, the most likely first
@@ -260,6 +464,11 @@ enum LanguageMatching {
             var source: Locale.Language
             /// their positions in the request, ascending
             var indices: [Int]
+            /// Enough text speaks for the language to ask for it where the translator would
+            /// have to load it first: the screen is in it (with at least
+            /// `lettersToAskForALanguage` letters in words), or a text of the group stands apart
+            /// in it. Never for a single short text, a name or a number.
+            var mayAskForTheLanguage = false
 
             /// Puts the translations of this group (in the order of `indices`) where they belong
             func place(_ translations: [String?], in results: inout [String?]) {
@@ -280,24 +489,37 @@ enum LanguageMatching {
         /// languages the translator does not know that enough of the text is in to tell the user
         var unknown: [Locale.Language] = []
 
-        /// - `common`: the language of the texts that have none of their own (most of this or
-        ///   of an earlier request was in it); nil = not known
-        init(findings: [Finding], common: Locale.Language?, target: Locale.Language, supported: [Locale.Language]) {
-            self.init(findings: findings, common: common, target: target, lists: [supported])
+        /// - `screen`: the language of the screen (`screenLanguage`), which the texts take that
+        ///   have none of their own, or one that does not stand apart from it; nil = not known
+        init(findings: [Finding], screen: ScreenLanguage?, target: Locale.Language, supported: [Locale.Language]) {
+            self.init(findings: findings, screen: screen, target: target, lists: [supported])
         }
 
         /// The same for a translator with several lists of languages, the one it prefers first
         /// (see `match(_:inFirstOf:)`)
-        init(findings: [Finding], common: Locale.Language?, target: Locale.Language, lists: [[Locale.Language]]) {
+        ///
+        /// A text is translated from its own language (`decided`) when it stands apart, when it
+        /// is in the language of the screen anyway, or when the screen's language is not known;
+        /// otherwise from the language of the screen; without either, from its guess if it has
+        /// `lettersToTrustAGuess` letters in words; otherwise it is postponed.
+        init(findings: [Finding], screen: ScreenLanguage?, target: Locale.Language, lists: [[Locale.Language]]) {
             var positions: [String: Int] = [:]
             var strangers: [(language: Locale.Language, letters: Int)] = []
+            let screenSource = screen.flatMap { LanguageMatching.match($0.language, inFirstOf: lists) }
+            let screenIsEvident = (screen?.letters ?? 0) >= LanguageMatching.lettersToAskForALanguage
             for (index, finding) in findings.enumerated() {
                 guard finding.letters > 0 else {
                     unchanged.append(index)
                     continue
                 }
-                let trusted = finding.letters >= LanguageMatching.lettersToTrustAGuess ? finding.guess : nil
-                guard let language = finding.decided ?? common ?? trusted, !LanguageMatching.isUndetermined(language) else {
+                var own = finding.decided
+                if let language = own, LanguageMatching.isUndetermined(language) { own = nil }
+                if let language = own, let screen, !finding.standsApart,
+                   !LanguageMatching.sameLanguage(language, screen.language) {
+                    own = nil
+                }
+                let trusted = finding.weight >= LanguageMatching.lettersToTrustAGuess ? finding.guess : nil
+                guard let language = own ?? screen?.language ?? trusted, !LanguageMatching.isUndetermined(language) else {
                     postponed.append(index)
                     continue
                 }
@@ -305,19 +527,26 @@ enum LanguageMatching {
                     unchanged.append(index)
                 } else if let source = LanguageMatching.match(language, inFirstOf: lists) {
                     let key = LanguageMatching.key(source)
-                    if let position = positions[key] {
+                    let position: Int
+                    if let known = positions[key] {
+                        position = known
                         groups[position].indices.append(index)
                     } else {
-                        positions[key] = groups.count
-                        groups.append(Group(source: source, indices: [index]))
+                        position = groups.count
+                        positions[key] = position
+                        var group = Group(source: source, indices: [index])
+                        group.mayAskForTheLanguage = screenIsEvident
+                            && screenSource.map { LanguageMatching.key($0) == key } == true
+                        groups.append(group)
                     }
+                    if own != nil, finding.standsApart { groups[position].mayAskForTheLanguage = true }
                 } else {
                     unchanged.append(index)
                     let key = LanguageMatching.key(language)
                     if let position = strangers.firstIndex(where: { LanguageMatching.key($0.language) == key }) {
-                        strangers[position].letters += finding.letters
+                        strangers[position].letters += finding.weight
                     } else {
-                        strangers.append((language, finding.letters))
+                        strangers.append((language, finding.weight))
                     }
                 }
             }

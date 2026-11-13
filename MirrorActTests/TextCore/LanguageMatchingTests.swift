@@ -26,13 +26,25 @@ final class LanguageMatchingTests: XCTestCase {
         candidates.map { LanguageMatching.Hypothesis(tag: $0.0, probability: $0.1) }
     }
 
-    private func finding(letters: Int, open: [(String, Double)], constrained: [(String, Double)]) -> LanguageMatching.Finding {
-        LanguageMatching.finding(letters: letters, open: hypotheses(open), constrained: hypotheses(constrained),
-                                 supported: supported)
+    /// What a recognizer said about a text of `words` words with `letters` letters in them
+    private func finding(letters: Int, words: Int = 4, open: [(String, Double)],
+                         constrained: [(String, Double)]) -> LanguageMatching.Finding {
+        LanguageMatching.finding(of: LanguageMatching.Wording(words: words, letters: letters), letters: letters,
+                                 open: hypotheses(open), constrained: hypotheses(constrained), supported: supported)
     }
 
+    /// A text that counts for the screen's language, but goes with another one the screen is in
     private func decided(_ identifier: String, letters: Int) -> LanguageMatching.Finding {
         LanguageMatching.Finding(decided: language(identifier), letters: letters)
+    }
+
+    /// A text that keeps its language on a screen in another one
+    private func apart(_ identifier: String, letters: Int) -> LanguageMatching.Finding {
+        LanguageMatching.Finding(decided: language(identifier), letters: letters, standsApart: true)
+    }
+
+    private func screen(_ identifier: String, letters: Int = 100) -> LanguageMatching.ScreenLanguage {
+        LanguageMatching.ScreenLanguage(language: language(identifier), letters: letters)
     }
 
     // MARK: Languages
@@ -192,14 +204,14 @@ final class LanguageMatchingTests: XCTestCase {
     func testAPlanTakesTheSourcesFromTheFirstListThatHasThem() {
         let findings = [decided("da", letters: 30), decided("pt", letters: 30), decided("en", letters: 30),
                         decided("fi", letters: 40), decided("de", letters: 30), decided("zh-Hant", letters: 20)]
-        let plan = LanguageMatching.Plan(findings: findings, common: nil, target: language("de"),
+        let plan = LanguageMatching.Plan(findings: findings, screen: nil, target: language("de"),
                                          lists: [onDevice, listedByMacOS])
         XCTAssertEqual(plan.groups.map(\.source.minimalIdentifier), ["da", "pt", "en", "zh-TW"])
         XCTAssertEqual(plan.groups.map(\.indices), [[0], [1], [2], [5]])
         XCTAssertEqual(plan.unchanged, [3, 4])
         XCTAssertEqual(plan.unknown, [language("fi")])
         // one list: as before
-        let single = LanguageMatching.Plan(findings: findings, common: nil, target: language("de"),
+        let single = LanguageMatching.Plan(findings: findings, screen: nil, target: language("de"),
                                            supported: onDevice)
         XCTAssertEqual(single.groups.map(\.source.minimalIdentifier), ["pt", "en", "zh-TW"])
         XCTAssertEqual(single.unchanged, [0, 3, 4])
@@ -267,6 +279,75 @@ final class LanguageMatchingTests: XCTestCase {
         XCTAssertEqual(LanguageMatching.recognizerTags(for: [language("und"), language("pt-BR"), language("pt-PT")]), ["pt"])
     }
 
+    // MARK: The words of a text
+
+    private func words(_ text: String) -> String {
+        LanguageMatching.wording(of: text).text
+    }
+
+    /// Model names, serial numbers, identifiers, addresses, numbers and acronyms are written the
+    /// same in every language: the recognizer is not given them
+    func testOnlyWordsSpeakForALanguage() {
+        for identifier in ["sdk_gphone64_arm64", "EMULATOR37X1X11X0", "SM-G991B", "A2848", "anna.mueller@example.com",
+                           "https://www.example.com/help", "www.example.org", "192.168.1.20", "12,99 €", "03.03.2025",
+                           "12:30", "AndroidWifi", "iPhone", "YouTube", "WhatsApp", "IMEI", "WLAN", "OK", "3月3日(月)",
+                           "#hashtag", "a=b", "C:\\Users", "~/Documents", "z.B.", "Ton&Vibration", "", " – "] {
+            let wording = LanguageMatching.wording(of: identifier)
+            XCTAssertEqual(wording.words, 0, identifier)
+            XCTAssertEqual(wording.letters, 0, identifier)
+            XCTAssertEqual(wording.text, "", identifier)
+        }
+        XCTAssertEqual(words("VPN Kein VPN"), "Kein")
+        XCTAssertEqual(words("Android-Version 16"), "Android-Version")
+        XCTAssertEqual(words("Status der SIM-Karte"), "Status der SIM-Karte")
+        XCTAssertEqual(words("Ton & Vibration"), "Ton Vibration")
+        XCTAssertEqual(words("Wird aktiviert, wenn der Modus „Bedtime“ beginnt."), "Wird aktiviert wenn der Modus Bedtime beginnt")
+        // a name written like a word is a word
+        XCTAssertEqual(words("Modell: sdk_gphone64_arm64 (Android 16)"), "Modell Android")
+        XCTAssertEqual(words("aujourd’hui l'heure -Test- T-Mobile"), "aujourd’hui l'heure Test T-Mobile")
+        XCTAssertEqual(words("¿Me puedes ayudar?"), "Me puedes ayudar")
+        let wording = LanguageMatching.wording(of: "Hotspot und Tethering")
+        XCTAssertEqual(wording.words, 3)
+        XCTAssertEqual(wording.letters, 19)
+        XCTAssertTrue(wording.isCased)
+    }
+
+    /// Chinese, Japanese and Thai set no spaces between words: other punctuation separates, a
+    /// numeral that is a letter stays, and a letter of Chinese, Japanese or Korean weighs three
+    func testWordsOfScriptsWithoutSpaces() {
+        let japanese = LanguageMatching.wording(of: "ケーキはオーブンの中で、あと二十分かかります。")
+        XCTAssertEqual(japanese.text, "ケーキはオーブンの中で あと二十分かかります")
+        XCTAssertEqual(japanese.words, 2)
+        XCTAssertEqual(japanese.letters, 21 * LanguageMatching.denseLetterWeight)
+        XCTAssertFalse(japanese.isCased)
+        XCTAssertEqual(LanguageMatching.wording(of: "設定").letters, 6)
+        XCTAssertEqual(LanguageMatching.wording(of: "설정").letters, 6)
+        // Thai and Arabic letters stand for sounds, as Latin ones do
+        XCTAssertEqual(LanguageMatching.wording(of: "ภาษาไทย").letters, 7)
+        XCTAssertEqual(LanguageMatching.wording(of: "الإعدادات").letters, 9)
+        XCTAssertEqual(LanguageMatching.letterWeight("a"), 1)
+        XCTAssertEqual(LanguageMatching.letterWeight("ア"), 3)
+        XCTAssertEqual(LanguageMatching.letterWeight("漢"), 3)
+        // the digits of every script are digits
+        XCTAssertEqual(LanguageMatching.wording(of: "Version ٣").words, 1)
+        XCTAssertEqual(LanguageMatching.wording(of: "Seite ７").text, "Seite")
+    }
+
+    func testTheWordsOfSeveralTextsAreReadTogether() {
+        let joint = LanguageMatching.Wording(joining: ["Akku", "sdk_gphone64_arm64", "An", "設定"].map(LanguageMatching.wording(of:)))
+        XCTAssertEqual(joint.text, "Akku An 設定")
+        XCTAssertEqual(joint.words, 3)
+        XCTAssertEqual(joint.letters, 12)
+        // half of the weight has case
+        XCTAssertTrue(joint.isCased)
+        let findings = [LanguageMatching.Finding(letters: 4), LanguageMatching.Finding(decided: language("de"), letters: 30),
+                        LanguageMatching.Finding(letters: 2), LanguageMatching.Finding(letters: 18)]
+        let wordings = ["Akku", "Rechtliche Informationen und Hinweise", "An", "sdk_gphone64_arm64"].map(LanguageMatching.wording(of:))
+        // the texts without a language and with words
+        XCTAssertEqual(LanguageMatching.jointWording(of: wordings, findings: findings)?.text, "Akku An")
+        XCTAssertNil(LanguageMatching.jointWording(of: Array(wordings.prefix(2)), findings: Array(findings.prefix(2))))
+    }
+
     // MARK: The language of a text
 
     func testLettersAreCountedInEveryScript() {
@@ -276,9 +357,10 @@ final class LanguageMatchingTests: XCTestCase {
     }
 
     func testALikelyLanguageOfALongEnoughTextIsDecided() {
-        let sure = finding(letters: 12, open: [("de", 0.7), ("nl", 0.2)], constrained: [("de", 0.75), ("nl", 0.2)])
+        let sure = finding(letters: 12, words: 2, open: [("de", 0.7), ("nl", 0.2)], constrained: [("de", 0.75), ("nl", 0.2)])
         XCTAssertEqual(sure.decided, language("de"))
         XCTAssertEqual(sure.letters, 12)
+        XCTAssertEqual(sure.weight, 12)
         let exactly = finding(letters: 40, open: [], constrained: [("fr", 0.6), ("it", 0.4)])
         XCTAssertEqual(exactly.decided, language("fr"))
     }
@@ -293,6 +375,54 @@ final class LanguageMatchingTests: XCTestCase {
         let nothing = finding(letters: 40, open: [], constrained: [])
         XCTAssertNil(nothing.decided)
         XCTAssertNil(nothing.guess)
+    }
+
+    /// One word looks like a word of many languages: "Telefonnummer" was taken for Norwegian
+    /// (0.65), "Seriennummer" for German (0.65). In a script without case one "word" may be a
+    /// whole sentence.
+    func testASingleWordDecidesNothing() {
+        let single = finding(letters: 13, words: 1, open: [("nb", 0.64), ("da", 0.22)], constrained: [("nb", 0.65), ("da", 0.22)])
+        XCTAssertNil(single.decided)
+        XCTAssertEqual(single.guess, language("nb"))
+        XCTAssertFalse(single.standsApart)
+        let two = finding(letters: 13, words: 2, open: [("nb", 0.64)], constrained: [("nb", 0.65)])
+        XCTAssertEqual(two.decided, language("nb"))
+        let japanese = LanguageMatching.finding(of: LanguageMatching.wording(of: "明日の会議は何時からですか"), letters: 13,
+                                                open: hypotheses([("ja", 1)]), constrained: hypotheses([("ja", 1)]),
+                                                supported: supported)
+        XCTAssertEqual(japanese.decided, language("ja"))
+        XCTAssertTrue(japanese.standsApart)
+        // a text without words is not even guessed
+        let model = LanguageMatching.finding(of: LanguageMatching.wording(of: "sdk_gphone64_arm64"), letters: 12,
+                                             open: hypotheses([("id", 0.67)]), constrained: hypotheses([("id", 0.67)]),
+                                             supported: supported)
+        XCTAssertNil(model.decided)
+        XCTAssertNil(model.guess)
+        XCTAssertEqual(model.letters, 12)
+        XCTAssertEqual(model.weight, 0)
+    }
+
+    /// Only enough words, letters and a clear probability let a text keep a language of its own
+    /// on a screen in another one
+    func testATextStandsApartWithEnoughWordsLettersAndCertainty() {
+        let paragraph = finding(letters: 70, words: 14, open: [("fr", 1)], constrained: [("fr", 1)])
+        XCTAssertTrue(paragraph.standsApart)
+        let atTheLimit = finding(letters: LanguageMatching.lettersToStandApart, words: LanguageMatching.wordsToStandApart,
+                                 open: [("fr", 0.9)], constrained: [("fr", LanguageMatching.probabilityToStandApart)])
+        XCTAssertTrue(atTheLimit.standsApart)
+        // "Do Not Disturb, Bedtime" on a German screen: 19 letters
+        let fewLetters = finding(letters: 19, words: 4, open: [("en", 0.91)], constrained: [("en", 0.92)])
+        XCTAssertEqual(fewLetters.decided, language("en"))
+        XCTAssertFalse(fewLetters.standsApart)
+        let fewWords = finding(letters: 30, words: 2, open: [("de", 0.99)], constrained: [("de", 0.99)])
+        XCTAssertFalse(fewWords.standsApart)
+        let unclear = finding(letters: 40, words: 6, open: [("en", 0.85)], constrained: [("en", 0.89)])
+        XCTAssertEqual(unclear.decided, language("en"))
+        XCTAssertFalse(unclear.standsApart)
+        // a language the translator does not know: by the share of all such languages
+        let finnish = finding(letters: 40, words: 6, open: [("fi", 0.85), ("et", 0.1)], constrained: [("it", 0.7)])
+        XCTAssertEqual(finnish.decided, language("fi"))
+        XCTAssertTrue(finnish.standsApart)
     }
 
     func testUndeterminedIsNeverTheLanguage() {
@@ -333,14 +463,47 @@ final class LanguageMatchingTests: XCTestCase {
         XCTAssertEqual(vague.guess, language("es"))
     }
 
-    func testThePrevailingLanguageHasTheMostLetters() {
+    // MARK: The language of the screen
+
+    func testTheScreensLanguageIsTheOneMostTextSpeaksFor() {
         let findings = [decided("de", letters: 30), decided("en", letters: 20), decided("en", letters: 15),
                         LanguageMatching.Finding(guess: language("fr"), letters: 500)]
-        XCTAssertEqual(LanguageMatching.prevailingLanguage(of: findings), language("en"))
-        XCTAssertEqual(LanguageMatching.prevailingLanguage(of: [decided("de", letters: 20), decided("en", letters: 20)]),
-                       language("de"))
-        XCTAssertNil(LanguageMatching.prevailingLanguage(of: [LanguageMatching.Finding(guess: language("fr"), letters: 500)]))
-        XCTAssertNil(LanguageMatching.prevailingLanguage(of: []))
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: findings, before: nil), screen("en", letters: 35))
+        // a tie: the one that comes first
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 20), decided("en", letters: 20)], before: nil),
+                       screen("de", letters: 20))
+        // texts that decide nothing take no part, whatever their letters
+        XCTAssertNil(LanguageMatching.screenLanguage(of: [LanguageMatching.Finding(guess: language("fr"), letters: 500)], before: nil))
+        XCTAssertNil(LanguageMatching.screenLanguage(of: [], before: nil))
+        // what speaks for a language is its words: a model name next to it weighs nothing
+        let weighed = [LanguageMatching.Finding(decided: language("id"), letters: 40, weight: 12),
+                       decided("de", letters: 13)]
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: weighed, before: nil), screen("de", letters: 13))
+    }
+
+    /// A request brings new texts only: what it holds replaces the language the screen was in
+    /// only with enough text, and more than it has in the language before
+    func testTheScreensLanguageChangesOnlyWithEnoughText() {
+        let german = screen("de", letters: 300)
+        let limit = LanguageMatching.lettersToChangeTheScreensLanguage
+        // nothing decided: as before
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [LanguageMatching.Finding(letters: 13)], before: german), german)
+        // one short text in another language
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("nb", letters: limit - 1)], before: german), german)
+        // enough of it
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("fr", letters: limit)], before: german),
+                       screen("fr", letters: limit))
+        // but not more than what this request has in the language before
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("fr", letters: 40), decided("de", letters: 40)],
+                                                       before: german), german)
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 40), decided("fr", letters: 40)],
+                                                       before: german), german)
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 30), decided("fr", letters: 40)],
+                                                       before: german), screen("fr", letters: 40))
+        // the same language keeps the most letters it ever had
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de-CH", letters: 20)], before: german), german)
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 20)], before: screen("de", letters: 5)),
+                       screen("de", letters: 20))
     }
 
     // MARK: A request
@@ -348,15 +511,15 @@ final class LanguageMatchingTests: XCTestCase {
     func testTextsAreGroupedByLanguageInTheOrderOfTheRequest() {
         let findings = [
             decided("en", letters: 30),                                     // 0
-            decided("de", letters: 25),                                     // 1: the target language
-            LanguageMatching.Finding(guess: language("nl"), letters: 5),    // 2: takes the common language
-            decided("fr", letters: 20),                                     // 3
+            apart("de", letters: 25),                                       // 1: the target language
+            LanguageMatching.Finding(guess: language("nl"), letters: 5),    // 2: takes the screen's language
+            apart("fr", letters: 30),                                       // 3
             LanguageMatching.Finding(letters: 0),                           // 4: nothing to translate
-            decided("fi", letters: 40),                                     // 5: not known to the translator
+            apart("fi", letters: 40),                                       // 5: not known to the translator
             decided("en", letters: 14),                                     // 6
-            decided("zh-Hant", letters: 12),                                // 7
+            apart("zh-Hant", letters: 36),                                  // 7
         ]
-        let plan = LanguageMatching.Plan(findings: findings, common: language("en"), target: language("de-DE"),
+        let plan = LanguageMatching.Plan(findings: findings, screen: screen("en"), target: language("de-DE"),
                                          supported: supported)
         XCTAssertEqual(plan.groups.map(\.indices), [[0, 2, 6], [3], [7]])
         XCTAssertEqual(plan.groups.map { $0.source.languageCode?.identifier }, ["en", "fr", "zh"])
@@ -367,15 +530,78 @@ final class LanguageMatchingTests: XCTestCase {
         XCTAssertEqual(plan.unknown, [language("fi")])
     }
 
-    func testWithoutACommonLanguageOnlyLongTextsAreTranslatedOnAGuess() {
+    /// The Modell page of Android's About phone, as the recognizer read it: "sdk_gphone64_arm64"
+    /// was Indonesian (0.67), "Telefonnummer" Norwegian (0.65). None of it is a language of its
+    /// own on a German screen, and none of it gets a pair.
+    func testATextThatDoesNotStandApartGoesWithTheScreen() {
+        let texts = ["Modell", "sdk_gphone64_arm64", "Telefonnummer", "Hotspot und Tethering", "Seriennummer"]
+        let recorded: [[(String, Double)]] = [[("nb", 0.35), ("sv", 0.26)], [("id", 0.67), ("ms", 0.2)],
+                                              [("nb", 0.65), ("da", 0.22)], [("nb", 0.7), ("de", 0.25)],
+                                              [("de", 0.65), ("sv", 0.22)]]
+        let findings = zip(texts, recorded).map { text, hypotheses in
+            LanguageMatching.finding(of: LanguageMatching.wording(of: text), letters: LanguageMatching.letterCount(text),
+                                     open: self.hypotheses(hypotheses), constrained: self.hypotheses(hypotheses),
+                                     supported: supported)
+        }
+        XCTAssertEqual(findings.map(\.decided), [nil, nil, nil, language("nb"), nil])
+        XCTAssertTrue(findings.allSatisfy { !$0.standsApart })
+        let plan = LanguageMatching.Plan(findings: findings, screen: screen("de"), target: language("en"), supported: supported)
+        XCTAssertEqual(plan.groups.map { $0.source.languageCode?.identifier }, ["de"])
+        XCTAssertEqual(plan.groups.map(\.indices), [[0, 1, 2, 3, 4]])
+        // with nothing else known, a text keeps its own language, and a word or a name waits
+        let alone = LanguageMatching.Plan(findings: findings, screen: nil, target: language("en"),
+                                          supported: supported + [language("nb")])
+        XCTAssertEqual(alone.groups.map { $0.source.languageCode?.identifier }, ["nb"])
+        XCTAssertEqual(alone.groups.map(\.indices), [[3]])
+        XCTAssertEqual(alone.postponed, [0, 1, 2, 4])
+    }
+
+    /// A paragraph in another language keeps its own, on a screen in any language
+    func testATextThatStandsApartKeepsItsLanguage() {
+        let findings = [decided("de", letters: 20), apart("fr", letters: 70), decided("fr", letters: 16),
+                        LanguageMatching.Finding(letters: 6)]
+        let plan = LanguageMatching.Plan(findings: findings, screen: screen("de"), target: language("en"), supported: supported)
+        XCTAssertEqual(plan.groups.map { $0.source.languageCode?.identifier }, ["de", "fr"])
+        XCTAssertEqual(plan.groups.map(\.indices), [[0, 2, 3], [1]])
+    }
+
+    /// Asking for a language that has to be loaded first takes a screen written in it, or a
+    /// text that stands apart in it: never one short text, a name or a number
+    func testOnlyALanguageEnoughTextIsInMayBeAskedFor() {
+        let limit = LanguageMatching.lettersToAskForALanguage
+        let findings = [decided("de", letters: 20), apart("fr", letters: 70), decided("es", letters: 16),
+                        LanguageMatching.Finding(letters: 6)]
+        let plan = LanguageMatching.Plan(findings: findings, screen: screen("de", letters: limit), target: language("en"),
+                                         supported: supported)
+        XCTAssertEqual(plan.groups.map { $0.source.languageCode?.identifier }, ["de", "fr"])
+        XCTAssertEqual(plan.groups.map(\.mayAskForTheLanguage), [true, true])
+        // too little of the screen is in its language
+        let little = LanguageMatching.Plan(findings: findings, screen: screen("de", letters: limit - 1), target: language("en"),
+                                           supported: supported)
+        XCTAssertEqual(little.groups.map(\.mayAskForTheLanguage), [false, true])
+        // the language of the screen is Norwegian only because of one text
+        let norwegian = LanguageMatching.Plan(findings: [decided("nb", letters: 19), LanguageMatching.Finding(letters: 6)],
+                                              screen: screen("nb", letters: 19), target: language("en"),
+                                              lists: [supported, supported + [language("nb")]])
+        XCTAssertEqual(norwegian.groups.map(\.indices), [[0, 1]])
+        XCTAssertEqual(norwegian.groups.map(\.mayAskForTheLanguage), [false])
+        // nothing known: a guess is no reason to ask either
+        let guessed = LanguageMatching.Plan(findings: [LanguageMatching.Finding(guess: language("fr"), letters: 30)],
+                                            screen: nil, target: language("en"), supported: supported)
+        XCTAssertEqual(guessed.groups.map(\.mayAskForTheLanguage), [false])
+    }
+
+    func testWithoutAScreenLanguageOnlyLongTextsAreTranslatedOnAGuess() {
         let findings = [
             LanguageMatching.Finding(guess: language("en"), letters: 8),
             LanguageMatching.Finding(guess: language("en"), letters: 20),
             LanguageMatching.Finding(letters: 30),
             LanguageMatching.Finding(guess: language("de"), letters: 25),
+            // its letters are in a model name
+            LanguageMatching.Finding(guess: language("en"), letters: 30, weight: 6),
         ]
-        let plan = LanguageMatching.Plan(findings: findings, common: nil, target: language("de"), supported: supported)
-        XCTAssertEqual(plan.postponed, [0, 2])
+        let plan = LanguageMatching.Plan(findings: findings, screen: nil, target: language("de"), supported: supported)
+        XCTAssertEqual(plan.postponed, [0, 2, 4])
         XCTAssertEqual(plan.groups.map(\.indices), [[1]])
         XCTAssertEqual(plan.unchanged, [3])
         XCTAssertEqual(plan.unknown, [])
@@ -383,13 +609,13 @@ final class LanguageMatchingTests: XCTestCase {
 
     func testTextsInTheTargetLanguageOrAnUnknownOneStayAsTheyAre() {
         let short = LanguageMatching.Finding(guess: language("en"), letters: 6)
-        let german = LanguageMatching.Plan(findings: [short, decided("de-CH", letters: 30)], common: language("de"),
+        let german = LanguageMatching.Plan(findings: [short, decided("de-CH", letters: 30)], screen: screen("de"),
                                            target: language("de-DE"), supported: supported)
         XCTAssertEqual(german.unchanged, [0, 1])
         XCTAssertTrue(german.groups.isEmpty)
         XCTAssertTrue(german.unknown.isEmpty)
 
-        let finnish = LanguageMatching.Plan(findings: [short, decided("fi", letters: 30), short], common: language("fi"),
+        let finnish = LanguageMatching.Plan(findings: [short, decided("fi", letters: 30), short], screen: screen("fi"),
                                             target: language("de-DE"), supported: supported)
         XCTAssertEqual(finnish.unchanged, [0, 1, 2])
         XCTAssertTrue(finnish.groups.isEmpty)
@@ -397,25 +623,25 @@ final class LanguageMatchingTests: XCTestCase {
     }
 
     func testAnUnknownLanguageIsOnlyMentionedWhenEnoughTextIsInIt() {
-        // one word the recognizer took for Romanian, on an Italian screen
+        // one word the recognizer took for Romanian, on an Italian screen: it goes with the screen
         let stray = LanguageMatching.Plan(findings: [decided("ro", letters: 14), decided("it", letters: 60)],
-                                          common: language("it"), target: language("de"), supported: supported)
-        XCTAssertEqual(stray.unchanged, [0])
-        XCTAssertEqual(stray.groups.map(\.indices), [[1]])
+                                          screen: screen("it"), target: language("de"), supported: supported)
+        XCTAssertEqual(stray.unchanged, [])
+        XCTAssertEqual(stray.groups.map(\.indices), [[0, 1]])
         XCTAssertEqual(stray.unknown, [])
         // several texts add up
         let more = LanguageMatching.Plan(findings: [decided("ro", letters: 14), decided("ro", letters: 13),
                                                     decided("ro", letters: 13), decided("el", letters: 39)],
-                                         common: nil, target: language("de"), supported: supported)
+                                         screen: nil, target: language("de"), supported: supported)
         XCTAssertEqual(more.unchanged, [0, 1, 2, 3])
         XCTAssertEqual(more.unknown, [language("ro")])
     }
 
     func testResultsComeBackInTheOrderOfTheRequest() {
         let texts = ["Hello there, how are you?", "Guten Tag zusammen", "Bonjour tout le monde", "OK", "12:30"]
-        let findings = [decided("en", letters: 20), decided("de", letters: 16), decided("fr", letters: 18),
+        let findings = [decided("en", letters: 20), apart("de", letters: 16), apart("fr", letters: 18),
                         LanguageMatching.Finding(letters: 2), LanguageMatching.Finding(letters: 0)]
-        let plan = LanguageMatching.Plan(findings: findings, common: language("en"), target: language("de"),
+        let plan = LanguageMatching.Plan(findings: findings, screen: screen("en"), target: language("de"),
                                          supported: supported)
         var results = plan.results(for: texts)
         XCTAssertEqual(results, [nil, "Guten Tag zusammen", nil, nil, "12:30"])

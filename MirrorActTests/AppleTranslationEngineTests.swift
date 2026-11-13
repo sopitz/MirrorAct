@@ -17,7 +17,7 @@ final class AppleTranslationEngineTests: XCTestCase {
         Locale.Language(identifier: identifier)
     }
 
-    private func languages(of texts: [String]) -> (findings: [LanguageMatching.Finding], common: Locale.Language?) {
+    private func languages(of texts: [String]) -> (findings: [LanguageMatching.Finding], screen: LanguageMatching.ScreenLanguage?) {
         AppleTranslationEngine.readLanguages(of: texts, tags: LanguageMatching.recognizerTags(for: supported),
                                              supported: supported)
     }
@@ -767,7 +767,7 @@ final class AppleTranslationEngineTests: XCTestCase {
         XCTAssertNil(found.findings[2].decided)
         XCTAssertEqual(found.findings[2].letters, 2)
         // most of the text is German
-        XCTAssertEqual(found.common?.languageCode?.identifier, "de")
+        XCTAssertEqual(found.screen?.language.languageCode?.identifier, "de")
     }
 
     func testTextsAreSortedByTheirLanguage() {
@@ -779,8 +779,9 @@ final class AppleTranslationEngineTests: XCTestCase {
             "12:30",
         ]
         let found = languages(of: texts)
-        let plan = LanguageMatching.Plan(findings: found.findings, common: language("en"), target: language("de-DE"),
-                                         supported: supported)
+        let plan = LanguageMatching.Plan(findings: found.findings,
+                                         screen: LanguageMatching.ScreenLanguage(language: language("en"), letters: 100),
+                                         target: language("de-DE"), supported: supported)
         XCTAssertEqual(plan.groups.map(\.indices), [[0, 2], [3]])
         XCTAssertEqual(plan.groups.map { $0.source.languageCode?.identifier }, ["en", "fr"])
         XCTAssertEqual(plan.unchanged, [1, 4])
@@ -792,7 +793,7 @@ final class AppleTranslationEngineTests: XCTestCase {
         let finnish = "Tämä on aivan tavallinen suomenkielinen lause tämän päivän säästä ja huomisesta."
         let found = languages(of: [finnish])
         XCTAssertEqual(found.findings.first?.decided?.languageCode?.identifier, "fi")
-        let plan = LanguageMatching.Plan(findings: found.findings, common: found.common, target: language("de-DE"),
+        let plan = LanguageMatching.Plan(findings: found.findings, screen: found.screen, target: language("de-DE"),
                                          supported: supported)
         XCTAssertEqual(plan.unchanged, [0])
         XCTAssertTrue(plan.groups.isEmpty)
@@ -805,7 +806,55 @@ final class AppleTranslationEngineTests: XCTestCase {
                       "Einladung"]
         let found = languages(of: labels)
         XCTAssertTrue(found.findings.allSatisfy { $0.decided == nil })
-        XCTAssertEqual(found.common?.languageCode?.identifier, "de")
+        XCTAssertEqual(found.screen?.language.languageCode?.identifier, "de")
+    }
+
+    /// Android's About phone and its Modell page, as Vision read them. The recognizer takes the
+    /// model name for Indonesian and "Telefonnummer" for Norwegian; neither is a language of the
+    /// screen, and macOS is asked about neither (no download question, no word about Apple
+    /// Intelligence). Everything goes with German. The Modell page comes as a request of its
+    /// own, and stays German as well.
+    func testNamesAndSingleWordsAskForNoLanguage() async throws {
+        let about = ["Über emuliertes Gerät", "Allgemeine Informationen", "Geratename", "sdk_gphone64_arm64",
+                     "Telefonnummer", "Rechtliche Informationen", "Rechtliche Hinweise", "Gerätedetails",
+                     "Status der SIM-Karte", "T-Mobile", "Modell", "sdk_gphone64_arm64", "IMEI", "Android-Version 16"]
+        let modell = ["Modell", "Modell", "sdk_gphone64_arm64", "Seriennummer", "EMULATOR37X1X11X0"]
+        let macOS = FakeMacOS(onDevice: Self.onDevice + ["id"], all: Self.onDevice + ["id", "nb"])
+        macOS.appleIntelligence = .off
+        let engine = engine(answeredBy: macOS)
+        // no session is served: the jobs are given up soon
+        engine.pickUpLimit = 0.2
+        let client = AppleTranslationClient(engine: engine)
+        let notices = Box<[String]>([])
+        client.notify = { message in MainActor.assumeIsolated { notices.value.append(message) } }
+        for texts in [about, modell] {
+            let translations = try await client.translate(texts, into: language("en"))
+            XCTAssertEqual(translations.count, texts.count)
+        }
+        XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["de"])
+        XCTAssertEqual(macOS.appleIntelligenceAsked, 0)
+        XCTAssertTrue(macOS.asked.isEmpty)
+        XCTAssertFalse(notices.value.contains { $0.contains("Apple Intelligence") || $0.contains("Indonesian") }, "\(notices.value)")
+        client.cancel()
+    }
+
+    /// A paragraph in another language keeps its own pair, and a screen in that language may
+    /// have it loaded; a single word of it may not
+    func testOnlyEnoughTextAsksForALanguageThatIsNotOnThisMac() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        engine.pickUpLimit = 0.2
+        let client = AppleTranslationClient(engine: engine)
+        // German labels, and a French word the recognizer is sure of
+        let labels = ["Netzwerk und Internet", "Verbundene Geräte", "Akku", "Speicher", "Bonjour tout le monde"]
+        _ = try await client.translate(labels, into: language("en"))
+        XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["de"])
+        // a French paragraph on the same screen
+        let request = Task { try await client.translate([Self.french], into: self.language("en")) }
+        try await waitUntil { engine.hosts.contains { $0.source.languageCode?.identifier == "fr" } }
+        client.cancel()
+        _ = try await request.value
     }
 }
 

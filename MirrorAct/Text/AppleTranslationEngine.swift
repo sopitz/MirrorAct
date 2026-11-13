@@ -95,6 +95,8 @@ final class AppleTranslationEngine: ObservableObject {
     private var declined: Set<String> = []
     /// whether macOS can translate a pair at all
     private var pairSupport: [String: Bool] = [:]
+    /// pairs whose languages are on this Mac
+    private var installedPairs: Set<String> = []
     /// what this Mac says about Apple Intelligence; nil = not asked yet
     private var appleIntelligence: AppleIntelligence?
 
@@ -143,12 +145,13 @@ final class AppleTranslationEngine: ObservableObject {
         // telling the languages apart takes a moment: not on the main thread
         let all = languages.all
         let tags = LanguageMatching.recognizerTags(for: all)
+        let before = client.screenLanguage
         let read = await Task.detached(priority: .userInitiated) {
-            AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: all)
+            AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: all, before: before)
         }.value
-        if let common = read.common { client.commonLanguage = common }
+        client.screenLanguage = read.screen
         // the languages on the screen, too, as the on-device models know them where they can
-        let plan = LanguageMatching.Plan(findings: read.findings, common: client.commonLanguage, target: target,
+        let plan = LanguageMatching.Plan(findings: read.findings, screen: read.screen, target: target,
                                          lists: languages.lists)
         var results = plan.results(for: texts)
         for language in plan.unknown { noteUntranslatable(language, to: [client]) }
@@ -163,6 +166,9 @@ final class AppleTranslationEngine: ObservableObject {
             if strategy == .highFidelity {
                 let state = appleIntelligenceState()
                 guard state == .on else {
+                    // Too little text speaks for the language to say anything about it: "not now"
+                    // (a name or a single word on the screen is no reason to mention Apple Intelligence)
+                    guard group.mayAskForTheLanguage else { continue }
                     // the language of these texts only the models that need Apple Intelligence
                     // know: they stay as they are
                     group.place(groupTexts.map { Optional($0) }, in: &results)
@@ -177,7 +183,13 @@ final class AppleTranslationEngine: ObservableObject {
             guard translatable else {
                 // nothing to be done for this language: its texts stay, and are not asked for again
                 group.place(groupTexts.map { Optional($0) }, in: &results)
-                noteUntranslatable(group.source, to: [client])
+                if group.mayAskForTheLanguage { noteUntranslatable(group.source, to: [client]) }
+                continue
+            }
+            // A pair whose languages macOS would have to download first is asked for only when
+            // enough of the text is in the language; until then its texts are "not now"
+            if !group.mayAskForTheLanguage,
+               await !isInstalled(pair, from: group.source, to: target, with: strategy) {
                 continue
             }
             // turned off meanwhile, or the languages are not on this Mac (yet): nil, the caller asks again
@@ -219,6 +231,7 @@ final class AppleTranslationEngine: ObservableObject {
             // translating was turned on again: ask macOS again what was declined or unknown
             declined.removeAll()
             pairSupport.removeAll()
+            installedPairs.removeAll()
             appleIntelligence = nil
             clients[key] = AppleTranslationClient.Reference(client: client)
         }
@@ -261,6 +274,7 @@ final class AppleTranslationEngine: ObservableObject {
         guard clients.isEmpty else { return }
         declined.removeAll()
         pairSupport.removeAll()
+        installedPairs.removeAll()
         appleIntelligence = nil
     }
 
@@ -293,6 +307,17 @@ final class AppleTranslationEngine: ObservableObject {
         }
         pairSupport[pair] = status != .unsupported
         return status != .unsupported
+    }
+
+    /// Whether the languages of a pair are on this Mac. Once they are, macOS is not asked again
+    /// in this turn. false also when macOS does not answer in time.
+    private func isInstalled(_ pair: String, from source: Locale.Language, to target: Locale.Language,
+                             with strategy: AppleTranslationStrategy) async -> Bool {
+        if installedPairs.contains(pair) { return true }
+        let availability = self.availability
+        guard let status = await inTime({ await availability.status(source, target, strategy) }) else { return false }
+        if status == .installed { installedPairs.insert(pair) }
+        return status == .installed
     }
 
     /// Asked once per turn of translating: the user may turn Apple Intelligence on meanwhile
@@ -834,35 +859,49 @@ final class AppleTranslationEngine: ObservableObject {
 
     // MARK: Languages of the texts
 
-    /// What the language recognizer makes of each text, and the language the texts have in
-    /// common (nil = cannot be told). Takes a moment: call it off the main thread.
-    nonisolated static func readLanguages(of texts: [String], tags: [String], supported: [Locale.Language])
-        -> (findings: [LanguageMatching.Finding], common: Locale.Language?) {
+    /// What the language recognizer makes of the words of each text, and the language of the
+    /// screen after these texts when it was `before` (nil = cannot be told). Only the words of a
+    /// text are read (`LanguageMatching.wording`): names, numbers and identifiers say nothing
+    /// about a language. The texts that decide nothing on their own (short labels) are read
+    /// together as well, for the language of the screen. Takes a moment: call it off the main thread.
+    nonisolated static func readLanguages(of texts: [String], tags: [String], supported: [Locale.Language],
+                                          before: LanguageMatching.ScreenLanguage? = nil)
+        -> (findings: [LanguageMatching.Finding], screen: LanguageMatching.ScreenLanguage?) {
         // one recognizer, used by this call only; it must not be shared between threads
         let recognizer = NLLanguageRecognizer()
         let constraints = tags.map { NLLanguage(rawValue: $0) }
-        let findings = texts.map { finding(for: [$0], with: recognizer, constraints: constraints, supported: supported) }
-        var common = LanguageMatching.prevailingLanguage(of: findings)
-        if common == nil, texts.count > 1 {
-            // nothing but short texts, a list of settings for example: together they are long enough
-            common = finding(for: texts, with: recognizer, constraints: constraints, supported: supported).decided
+        let wordings = texts.map(LanguageMatching.wording(of:))
+        let findings = zip(texts, wordings).map { text, wording in
+            finding(for: wording, letters: LanguageMatching.letterCount(text), with: recognizer,
+                    constraints: constraints, supported: supported)
         }
-        return (findings, common)
+        var evidence = findings
+        if let joint = LanguageMatching.jointWording(of: wordings, findings: findings) {
+            // a list of settings for example: together the labels are long enough
+            evidence.append(finding(for: joint, letters: joint.letters, with: recognizer, constraints: constraints,
+                                    supported: supported))
+        }
+        return (findings, LanguageMatching.screenLanguage(of: evidence, before: before))
     }
 
-    /// `texts` are read as one text.
-    private nonisolated static func finding(for texts: [String], with recognizer: NLLanguageRecognizer,
-                                            constraints: [NLLanguage], supported: [Locale.Language]) -> LanguageMatching.Finding {
-        recognizer.reset()
-        for text in texts { recognizer.processString(text) }
-        let open = hypotheses(of: recognizer)
-        // reset also removes the constraints
-        recognizer.reset()
-        recognizer.languageConstraints = constraints
-        for text in texts { recognizer.processString(text) }
-        let constrained = hypotheses(of: recognizer)
-        let letters = texts.reduce(0) { $0 + LanguageMatching.letterCount($1) }
-        return LanguageMatching.finding(letters: letters, open: open, constrained: constrained, supported: supported)
+    /// What the recognizer says about the words of a text with `letters` letters in all
+    private nonisolated static func finding(for wording: LanguageMatching.Wording, letters: Int,
+                                            with recognizer: NLLanguageRecognizer, constraints: [NLLanguage],
+                                            supported: [Locale.Language]) -> LanguageMatching.Finding {
+        var open: [LanguageMatching.Hypothesis] = []
+        var constrained: [LanguageMatching.Hypothesis] = []
+        if wording.letters > 0 {
+            recognizer.reset()
+            recognizer.processString(wording.text)
+            open = hypotheses(of: recognizer)
+            // reset also removes the constraints
+            recognizer.reset()
+            recognizer.languageConstraints = constraints
+            recognizer.processString(wording.text)
+            constrained = hypotheses(of: recognizer)
+        }
+        return LanguageMatching.finding(of: wording, letters: letters, open: open, constrained: constrained,
+                                        supported: supported)
     }
 
     private nonisolated static func hypotheses(of recognizer: NLLanguageRecognizer) -> [LanguageMatching.Hypothesis] {
@@ -899,8 +938,8 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     // Used by the engine, on the main actor only
     /// notices shown already
     fileprivate var noticed: Set<String> = []
-    /// the language most of the last requests was in, for texts too short to tell
-    fileprivate var commonLanguage: Locale.Language?
+    /// the language of the screen, for texts that do not have one of their own
+    fileprivate var screenLanguage: LanguageMatching.ScreenLanguage?
     /// the language pairs this client asked for: it is told what becomes of them
     fileprivate var pairs: Set<String> = []
     /// the lasting notice given last
