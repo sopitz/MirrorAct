@@ -103,6 +103,15 @@ private func capabilitiesReply(effortLow: Bool, fallbackModels: [String] = []) -
 
 private let rateLimited = #"{"error":{"message":"Rate limit reached for requests","type":"requests","param":null,"code":"rate_limit_exceeded"}}"#
 
+/// Polls `condition` until it holds or ten seconds have passed
+private func eventually(_ condition: () -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(10)
+    while !condition(), Date() < deadline {
+        try? await Task.sleep(nanoseconds: 5_000_000)
+    }
+    return condition()
+}
+
 /// Translating through a language model service, with a script in place of the network: what is
 /// sent in which order, and what becomes of the answers and failures of a service.
 final class LLMTranslationEngineTests: XCTestCase {
@@ -784,6 +793,116 @@ final class LLMTranslationEngineTests: XCTestCase {
         engine.cancel()
         engine.cancel()
         XCTAssertEqual(engine.name, "Ollama")
+    }
+
+    // MARK: A server on this Mac that does not answer
+
+    /// LM Studio with a request that waits for its answer, a notice handler, and a wait for the
+    /// notice that ends when the test opens `slow`
+    private func waitingLocalEngine(answer: Gate, slow: Gate, provider: LLMProvider = .lmStudio)
+        -> (LLMTranslationEngine, ScriptedTransport, Collected<String?>) {
+        let transport = ScriptedTransport { request, _ in
+            try await answer.wait()
+            return openAIReply(translated(request))
+        }
+        let engine = makeEngine(provider, model: "gemma4", transport: transport)
+        engine.untilSlowAnswer = { try await slow.wait() }
+        let statuses = Collected<String?>()
+        engine.notifyStatus = { statuses.add($0) }
+        return (engine, transport, statuses)
+    }
+
+    private let waitNotice = "LM Studio: " + String(localized: "no answer for \(20) s – is the model still loading?")
+
+    func testALocalServerThatDoesNotAnswerIsNamedUntilItAnswers() async throws {
+        let answer = Gate(), slow = Gate()
+        let (engine, transport, statuses) = waitingLocalEngine(answer: answer, slow: slow)
+        let target = german
+        let translating = Task { try await engine.translate(["Settings", "General"], into: target) }
+        let waiting = await eventually { slow.counts.waiting == 1 && transport.requests.count == 1 }
+        XCTAssertTrue(waiting, "the engine does not wait for the notice")
+        // not before the time is up
+        XCTAssertEqual(statuses.all, [])
+
+        slow.open()
+        let named = await eventually { statuses.all.count == 1 }
+        XCTAssertTrue(named)
+        XCTAssertEqual(statuses.all, [waitNotice])
+        XCTAssertEqual(LLMTranslationEngine.slowAnswer, 20)
+        // the request goes on waiting: nothing else is sent meanwhile
+        XCTAssertEqual(transport.requests.count, 1)
+
+        // the answer comes: translated, and the notice goes
+        answer.open()
+        let translations = try await translating.value
+        XCTAssertEqual(translations, ["de:Settings", "de:General"])
+        XCTAssertEqual(statuses.all, [waitNotice, nil])
+    }
+
+    func testAQuickAnswerShowsNoNoticeAndLeavesNoWaitBehind() async throws {
+        let answer = Gate(), slow = Gate()
+        answer.open()
+        let (engine, _, statuses) = waitingLocalEngine(answer: answer, slow: slow)
+        _ = try await engine.translate(["Settings"], into: german)
+        _ = try await engine.translate(["General"], into: german)
+        let ended = await eventually { slow.counts.cancelled == slow.counts.entered && slow.counts.waiting == 0 }
+        XCTAssertTrue(ended, "a wait for the notice outlives its request: \(slow.counts)")
+        XCTAssertEqual(slow.counts.entered, 2)
+        // a wait that is up only now says nothing anymore
+        slow.open()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(statuses.all, [])
+    }
+
+    func testTurningTranslatingOffLeavesNoNoticeAndNoWaitBehind() async throws {
+        let answer = Gate(), slow = Gate()
+        let (engine, transport, statuses) = waitingLocalEngine(answer: answer, slow: slow)
+        let target = german
+        let translating = Task { try await engine.translate(["Settings"], into: target) }
+        let waiting = await eventually { slow.counts.waiting == 1 && answer.counts.waiting == 1 }
+        XCTAssertTrue(waiting)
+
+        engine.cancel()
+        let translations = try await translating.value
+        XCTAssertEqual(translations, [nil])
+        // the request and the wait for the notice have ended
+        XCTAssertEqual(answer.counts.cancelled, 1)
+        let ended = await eventually { slow.counts.cancelled == 1 && slow.counts.waiting == 0 }
+        XCTAssertTrue(ended, "\(slow.counts)")
+        slow.open()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        // the translator withdraws its notices itself when it turns off: the engine says nothing
+        XCTAssertEqual(statuses.all, [])
+        XCTAssertEqual(transport.requests.count, 1)
+    }
+
+    func testTurningTranslatingOffAfterTheNoticeSaysNothingMore() async throws {
+        let answer = Gate(), slow = Gate()
+        slow.open()
+        let (engine, _, statuses) = waitingLocalEngine(answer: answer, slow: slow)
+        let target = german
+        let translating = Task { try await engine.translate(["Settings"], into: target) }
+        let named = await eventually { statuses.all.count == 1 }
+        XCTAssertTrue(named)
+        engine.cancel()
+        _ = try await translating.value
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(statuses.all, [waitNotice])
+    }
+
+    func testAServiceOnTheInternetAndTheTestInTheSettingsHaveNoSuchNotice() async throws {
+        let answer = Gate(), slow = Gate()
+        slow.open()
+        answer.open()
+        // a service on the internet: its requests give up after a minute with a notice of their own
+        let (remote, _, remoteStatuses) = waitingLocalEngine(answer: answer, slow: slow, provider: .mistral)
+        _ = try await remote.translate(["Settings"], into: german)
+        // "Test" in the settings listens to no lasting notice
+        let (local, _, _) = waitingLocalEngine(answer: answer, slow: slow)
+        local.notifyStatus = nil
+        _ = try await local.test("Settings", into: german)
+        XCTAssertEqual(remoteStatuses.all, [])
+        XCTAssertEqual(slow.counts.entered, 0)
     }
 
     // MARK: Anthropic

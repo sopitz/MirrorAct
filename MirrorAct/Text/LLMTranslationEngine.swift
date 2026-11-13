@@ -77,6 +77,11 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         get { locked { notice } }
         set { locked { notice = newValue } }
     }
+    /// the notice about a server on this Mac or in the network that has not answered yet
+    var notifyStatus: ((String?) -> Void)? {
+        get { locked { status } }
+        set { locked { status = newValue } }
+    }
 
     /// Waits before a request is sent again. The tests replace it, so that they need not wait.
     var pause: (TimeInterval) async throws -> Void = { seconds in
@@ -84,6 +89,11 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     }
     /// Seconds of a steady clock. The tests replace it, so that they need not wait.
     var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// Waits `slowAnswer` seconds, after which a server on this Mac or in the network that has
+    /// not answered is named (`notifyStatus`). The tests replace it, so that they need not wait.
+    var untilSlowAnswer: () async throws -> Void = {
+        try await Task.sleep(nanoseconds: UInt64(LLMTranslationEngine.slowAnswer * 1_000_000_000))
+    }
 
     /// Seconds a request to a service waits for its answer. A request gets no byte before the
     /// whole answer is there, so this is the time the model may take.
@@ -91,6 +101,13 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     /// The same for a server on this Mac or in the network: a large model on an ordinary
     /// computer takes minutes for a full screen, the first time also to load the model.
     static let localRequestTimeout: TimeInterval = 300
+    /// Seconds without an answer from such a server after which the user is told, while the
+    /// request goes on waiting. A loaded model answers a screen of texts within a few seconds on
+    /// most Macs, so a wait this long is seldom an ordinary one; loading a model takes from a few
+    /// seconds to a minute, and a server can hang. Requests go out one after the other, so until
+    /// this one ends no translation comes, and without a word the screen would look as if
+    /// Translate did nothing. Shorter, the notice would come up for slow but working models.
+    static let slowAnswer: TimeInterval = 20
     /// Longest wait in seconds before a request is sent again. When the service asks for more,
     /// the user is told instead.
     static let longestRetryWait: TimeInterval = 5
@@ -112,7 +129,15 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
 
     /// protects everything below
     private let lock = NSLock()
+    /// keeps the notice about a wait and its withdrawal in their order; taken before `lock`
+    private let statusOrder = NSLock()
     private var notice: ((String) -> Void)?
+    private var status: ((String?) -> Void)?
+    /// the request whose answer is being waited for (`watchForAnswer`), and the task that names
+    /// the server once it has waited `slowAnswer` seconds
+    private var watched: (id: UUID, task: Task<Void, Never>)?
+    /// the notice about the wait is up
+    private var isWaitNoticeUp = false
     /// the session behind `transport` when the engine made it itself
     private var session: URLSession?
     private var cancelled = false
@@ -276,10 +301,16 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     }
 
     func cancel() {
-        let (waiting, idle): ([Task<LLMHTTPReply, Error>], URLSession?) = locked {
+        let (waiting, idle, watch): ([Task<LLMHTTPReply, Error>], URLSession?, Task<Void, Never>?) = locked {
             cancelled = true
-            return (Array(running.values), sessionToGiveUp())
+            // whoever turned translating off withdraws the notice about the wait
+            defer {
+                watched = nil
+                isWaitNoticeUp = false
+            }
+            return (Array(running.values), sessionToGiveUp(), watched?.task)
         }
+        watch?.cancel()
         waiting.forEach { $0.cancel() }
         idle?.invalidateAndCancel()
     }
@@ -455,6 +486,8 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     /// transport threw.
     private func ask(_ texts: [String], system: String) async throws -> String {
         let start = Self.clock
+        let watch = watchForAnswer()
+        defer { answered(watch) }
         do {
             let answer = try await exchange(system: system, user: TranslationPrompt.user(texts))
             Log.info("Translation: \(name) \(connection.model): \(texts.count) texts in \(Self.milliseconds(since: start)) ms")
@@ -648,6 +681,60 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
 
     private func isCancellation(_ error: Error) -> Bool {
         Task.isCancelled || error is CancellationError || locked { cancelled }
+    }
+
+    // MARK: Waiting for an answer
+
+    /// Starts to wait for the answer of a request to a server on this Mac or in the network: when
+    /// none has come after `slowAnswer` seconds, the user is told, until it comes. Only while
+    /// translating (someone listens to `notifyStatus`), not for "Test" in the settings.
+    private func watchForAnswer() -> UUID? {
+        guard connection.isLocal else { return nil }
+        let id = UUID()
+        let wait = untilSlowAnswer
+        let (isWatching, previous): (Bool, Task<Void, Never>?) = locked {
+            guard !cancelled, status != nil else { return (false, nil) }
+            let task = Task { [weak self] in
+                guard (try? await wait()) != nil, !Task.isCancelled else { return }
+                self?.showWaitNotice(for: id)
+            }
+            // requests go out one after the other; one that overlaps takes over the wait
+            defer { watched = (id, task) }
+            return (true, watched?.task)
+        }
+        previous?.cancel()
+        return isWatching ? id : nil
+    }
+
+    /// The notice about the wait, unless the answer came meanwhile. The handler is called with
+    /// `statusOrder` held, so that the notice and its withdrawal reach it in their order.
+    private func showWaitNotice(for id: UUID) {
+        statusOrder.lock()
+        defer { statusOrder.unlock() }
+        let handler: ((String?) -> Void)? = locked {
+            guard watched?.id == id, !cancelled else { return nil }
+            isWaitNoticeUp = true
+            return status
+        }
+        handler?(name + ": " + String(localized: "no answer for \(Int(Self.slowAnswer)) s – is the model still loading?"))
+    }
+
+    /// The request that `watchForAnswer` gave `id` to has ended, one way or another: the notice
+    /// about the wait goes
+    private func answered(_ id: UUID?) {
+        guard let id else { return }
+        statusOrder.lock()
+        defer { statusOrder.unlock() }
+        let (watch, handler): (Task<Void, Never>?, ((String?) -> Void)?) = locked {
+            guard watched?.id == id else { return (nil, nil) }
+            defer {
+                watched = nil
+                isWaitNoticeUp = false
+            }
+            return (watched?.task, isWaitNoticeUp ? status : nil)
+        }
+        watch?.cancel()
+        handler?(nil)
     }
 
     // MARK: Notices and failures
