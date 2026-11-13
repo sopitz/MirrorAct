@@ -239,35 +239,50 @@ final class MotionEstimator {
     /// tiles that differ.
     private func measureDifferences(_ previous: LumaImage, _ current: LumaImage) -> Int {
         let size = tileSize, columns = columns, width = width, height = height
-        samples.withUnsafeMutableBufferPointer { counts in
-            absoluteSum.withUnsafeMutableBufferPointer { absolutes in
-                signedSum.withUnsafeMutableBufferPointer { signeds in
-                  valueSum.withUnsafeMutableBufferPointer { values in
-                    for index in 0..<counts.count {
-                        counts[index] = 0
-                        absolutes[index] = 0
-                        signeds[index] = 0
-                        values[index] = 0
+        samples.withUnsafeMutableBufferPointer { countBuffer in
+            absoluteSum.withUnsafeMutableBufferPointer { absoluteBuffer in
+                signedSum.withUnsafeMutableBufferPointer { signedBuffer in
+                  valueSum.withUnsafeMutableBufferPointer { valueBuffer in
+                    // (plain loops over pointers: this runs for every frame, also in builds without
+                    // optimization, where ranges and buffer subscripts are calls)
+                    guard let counts = countBuffer.baseAddress, let absolutes = absoluteBuffer.baseAddress,
+                          let signeds = signedBuffer.baseAddress, let values = valueBuffer.baseAddress else { return }
+                    let tiles = countBuffer.count
+                    var tile = 0
+                    while tile < tiles {
+                        counts[tile] = 0
+                        absolutes[tile] = 0
+                        signeds[tile] = 0
+                        values[tile] = 0
+                        tile += 1
                     }
-                    previous.pixels.withUnsafeBufferPointer { before in
-                        current.pixels.withUnsafeBufferPointer { now in
-                            for y in stride(from: 0, to: height, by: 2) {
+                    previous.pixels.withUnsafeBufferPointer { beforeBuffer in
+                        current.pixels.withUnsafeBufferPointer { nowBuffer in
+                            guard let before = beforeBuffer.baseAddress, let now = nowBuffer.baseAddress else { return }
+                            var y = 0
+                            while y < height {
                                 let row = y * width, tileRow = (y / size) * columns
-                                for column in 0..<columns {
-                                    let start = row + column * size, end = row + min(width, column * size + size)
+                                var column = 0
+                                while column < columns {
+                                    let start = row + column * size
+                                    let end = row + (width < column * size + size ? width : column * size + size)
                                     var absolute: Int32 = 0, signed: Int32 = 0, value: Int32 = 0
-                                    for index in start..<end {
+                                    var index = start
+                                    while index < end {
                                         let pixel = Int32(now[index])
                                         let difference = pixel - Int32(before[index])
-                                        absolute += abs(difference)
+                                        absolute += difference < 0 ? -difference : difference
                                         signed += difference
                                         value += pixel
+                                        index += 1
                                     }
                                     absolutes[tileRow + column] += absolute
                                     signeds[tileRow + column] += signed
                                     values[tileRow + column] += value
                                     counts[tileRow + column] += Int32(end - start)
+                                    column += 1
                                 }
+                                y += 2
                             }
                         }
                     }
@@ -296,29 +311,40 @@ final class MotionEstimator {
         range.withUnsafeMutableBufferPointer { ranges in
             rangeNow.withUnsafeMutableBufferPointer { rangesNow in
                 textureSum.withUnsafeMutableBufferPointer { textures in
-                    previous.pixels.withUnsafeBufferPointer { before in
-                        current.pixels.withUnsafeBufferPointer { now in
-                            for tileRow in 0..<rows {
+                    previous.pixels.withUnsafeBufferPointer { beforeBuffer in
+                        current.pixels.withUnsafeBufferPointer { nowBuffer in
+                            // (plain loops over pointers, as in `measureDifferences`)
+                            guard let before = beforeBuffer.baseAddress, let now = nowBuffer.baseAddress else { return }
+                            var tileRow = 0
+                            while tileRow < rows {
+                                defer { tileRow += 1 }
                                 let top = tileRow * size, bottom = min(height, top + size)
-                                for column in 0..<columns {
+                                var column = 0
+                                while column < columns {
+                                    defer { column += 1 }
                                     // (a tile that did not change keeps what was measured of it)
                                     let index = tileRow * columns + column
                                     if !measureAll, !differs(index) { continue }
                                     let start = column * size, end = min(width, start + size)
                                     var lowNow: Int32 = 255, highNow: Int32 = 0, lowBefore: Int32 = 255
                                     var highBefore: Int32 = 0, texture: Int32 = 0
-                                    for y in stride(from: top, to: bottom, by: 2) {
+                                    var y = top
+                                    while y < bottom {
                                         let row = y * width
                                         let below = y + 1 < height ? row + width : row
-                                        for x in stride(from: start, to: end, by: 2) {
+                                        var x = start
+                                        while x < end {
                                             let value = Int32(now[row + x]), old = Int32(before[row + x])
-                                            lowNow = min(lowNow, value)
-                                            highNow = max(highNow, value)
-                                            lowBefore = min(lowBefore, old)
-                                            highBefore = max(highBefore, old)
+                                            if value < lowNow { lowNow = value }
+                                            if value >= highNow { highNow = value }
+                                            if old < lowBefore { lowBefore = old }
+                                            if old >= highBefore { highBefore = old }
                                             let right = x + 1 < width ? Int32(now[row + x + 1]) : value
-                                            texture += abs(right - value) + abs(Int32(now[below + x]) - value)
+                                            let across = right - value, down = Int32(now[below + x]) - value
+                                            texture += (across < 0 ? -across : across) + (down < 0 ? -down : down)
+                                            x += 2
                                         }
+                                        y += 2
                                     }
                                     ranges[index] = max(highNow - lowNow, highBefore - lowBefore)
                                     rangesNow[index] = highNow - lowNow
@@ -375,15 +401,26 @@ final class MotionEstimator {
                         firstMoved[line] = Int.max
                         lastMoved[line] = -1
                     }
-                    for row in firstRow...lastRow {
-                        for column in firstColumn...lastColumn where motionIndex[row * columns + column] == Int8(index) {
-                            let line = alongY ? column : row, position = alongY ? row : column
-                            firstMoved[line] = min(firstMoved[line], position)
-                            lastMoved[line] = max(lastMoved[line], position)
+                    // (while loops: ranges are calls in builds without optimization)
+                    var row = firstRow
+                    while row <= lastRow {
+                        var column = firstColumn
+                        while column <= lastColumn {
+                            if motionIndex[row * columns + column] == Int8(index) {
+                                let line = alongY ? column : row, position = alongY ? row : column
+                                firstMoved[line] = min(firstMoved[line], position)
+                                lastMoved[line] = max(lastMoved[line], position)
+                            }
+                            column += 1
                         }
+                        row += 1
                     }
-                    for row in firstRow...lastRow {
-                        for column in firstColumn...lastColumn {
+                    row = firstRow
+                    while row <= lastRow {
+                        defer { row += 1 }
+                        var column = firstColumn
+                        while column <= lastColumn {
+                            defer { column += 1 }
                             let tile = row * columns + column
                             guard kinds[tile] == .still, stillVerdicts[tile] == 0 else { continue }
                             // only an island in what moves: content moved on both sides of it along the
@@ -419,21 +456,29 @@ final class MotionEstimator {
         let bottom = min(height + min(0, shift.whole.y), center.maxY + tileSize)
         guard right > left, bottom > top else { return .empty }
         var minX = Int.max, minY = Int.max, maxX = -1, maxY = -1
-        let width = width
-        for y in top..<bottom {
+        guard let beforePixels = before.baseAddress, let nowPixels = now.baseAddress else { return .empty }
+        let width = width, one = BilinearShift.one
+        let stayDifference = configuration.stayDifference, contrast = configuration.stayContrast * one
+        // (plain loops over pointers: every pixel of nine tiles, also in builds without optimization)
+        var y = top
+        while y < bottom {
             let row = y * width
             let source = (y - shift.whole.y) * width - shift.whole.x
-            for x in left..<right {
-                let value = Int(now[row + x])
-                guard abs(value - Int(before[row + x])) <= configuration.stayDifference else { continue }
-                let moved = shift.sample(before, at: source + x, rowLength: width)
-                if abs(value * BilinearShift.one - moved) >= configuration.stayContrast * BilinearShift.one {
-                    minX = min(minX, x)
-                    maxX = max(maxX, x)
-                    minY = min(minY, y)
-                    maxY = max(maxY, y)
+            var x = left
+            while x < right {
+                defer { x += 1 }
+                let value = Int(nowPixels[row + x])
+                let still = value - Int(beforePixels[row + x])
+                guard (still < 0 ? -still : still) <= stayDifference else { continue }
+                let moved = value * one - shift.sample(beforePixels, at: source + x, rowLength: width)
+                if (moved < 0 ? -moved : moved) >= contrast {
+                    if x < minX { minX = x }
+                    if x >= maxX { maxX = x }
+                    if y < minY { minY = y }
+                    if y >= maxY { maxY = y }
                 }
             }
+            y += 1
         }
         guard maxX >= 0 else { return .empty }
         return ThumbnailRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
@@ -683,16 +728,24 @@ final class MotionEstimator {
     /// Mean difference of a tile to where `shift` says it came from (every other row)
     private func tileDifference(_ rect: ThumbnailRect, shift: BilinearShift, _ before: UnsafeBufferPointer<UInt8>,
                                 _ now: UnsafeBufferPointer<UInt8>, width: Int) -> Double {
+        guard let before = before.baseAddress, let now = now.baseAddress else { return 0 }
+        let one = BilinearShift.one, wholeX = shift.whole.x, wholeY = shift.whole.y
+        let left = rect.x, right = rect.maxX, bottom = rect.maxY
         var sum = 0, samples = 0
-        for y in stride(from: rect.y, to: rect.maxY, by: 2) {
+        var y = rect.y
+        while y < bottom {
             let row = y * width
-            let source = (y - shift.whole.y) * width - shift.whole.x
-            for x in stride(from: rect.x, to: rect.maxX, by: 2) {
-                sum += abs(Int(now[row + x]) * BilinearShift.one - shift.sample(before, at: source + x, rowLength: width))
+            let source = (y - wholeY) * width - wholeX
+            var x = left
+            while x < right {
+                let difference = Int(now[row + x]) * one - shift.sample(before, at: source + x, rowLength: width)
+                sum += difference < 0 ? -difference : difference
                 samples += 1
+                x += 2
             }
+            y += 2
         }
-        return Double(sum) / Double(max(1, samples * BilinearShift.one))
+        return Double(sum) / Double(max(1, samples * one))
     }
 
     /// The box of the tiles of a motion, without edge rows and columns in which it explains only
@@ -776,17 +829,23 @@ final class MotionEstimator {
                 let tile = group[next]
                 next += 1
                 let column = tile % columns
-                for neighbour in [column > 0 ? tile - 1 : -1, column + 1 < columns ? tile + 1 : -1, tile - columns,
-                                  tile + columns] where neighbour >= 0 && neighbour < count && !visited[neighbour]
-                    && kinds[neighbour] == .changed {
-                    visited[neighbour] = true
-                    group.append(neighbour)
-                }
+                // left, right, above, below (without making an array of them for every tile)
+                visitChanged(column > 0 ? tile - 1 : -1)
+                visitChanged(column + 1 < columns ? tile + 1 : -1)
+                visitChanged(tile - columns)
+                visitChanged(tile + columns)
             }
             if group.count > best.count { best = group }
         }
         residual.removeAll(keepingCapacity: true)
         residual.append(contentsOf: best)
+    }
+
+    /// Adds a changed tile that was not visited yet to `group` (nothing for -1 or one outside)
+    private func visitChanged(_ neighbour: Int) {
+        guard neighbour >= 0, neighbour < kinds.count, !visited[neighbour], kinds[neighbour] == .changed else { return }
+        visited[neighbour] = true
+        group.append(neighbour)
     }
 
     /// The tiles of `residual` that show something in the current frame (a plain tile fits any
@@ -813,20 +872,27 @@ final class MotionEstimator {
         let dx = candidate.dx, dy = candidate.dy, width = width
         var cost = 0.0
         var matched = 0, valid = 0
-        previous.pixels.withUnsafeBufferPointer { before in
-            current.pixels.withUnsafeBufferPointer { now in
+        previous.pixels.withUnsafeBufferPointer { beforeBuffer in
+            current.pixels.withUnsafeBufferPointer { nowBuffer in
+                guard let before = beforeBuffer.baseAddress, let now = nowBuffer.baseAddress else { return }
                 for index in chosen {
                     let rect = tileRect(index)
-                    guard rect.x - dx >= 0, rect.y - dy >= 0, rect.maxX - dx <= width, rect.maxY - dy <= height else {
+                    let right = rect.maxX, bottom = rect.maxY
+                    guard rect.x - dx >= 0, rect.y - dy >= 0, right - dx <= width, bottom - dy <= height else {
                         continue
                     }
                     var sum: Int32 = 0, count: Int32 = 0
-                    for y in stride(from: rect.y, to: rect.maxY, by: 2) {
+                    var y = rect.y
+                    while y < bottom {
                         let row = y * width, source = (y - dy) * width - dx
-                        for x in rect.x..<rect.maxX {
-                            sum += abs(Int32(now[row + x]) - Int32(before[source + x]))
+                        var x = rect.x
+                        while x < right {
+                            let difference = Int32(now[row + x]) - Int32(before[source + x])
+                            sum += difference < 0 ? -difference : difference
+                            x += 1
                         }
                         count += Int32(rect.width)
+                        y += 2
                     }
                     let mean = Double(sum) / Double(max(1, count))
                     valid += 1
@@ -945,38 +1011,56 @@ final class MotionEstimator {
         if profile.count < count {
             profile = [Int32](repeating: 0, count: count)
         }
-        for index in 0..<count {
-            profile[index] = 0
-        }
         let width = width
-        image.pixels.withUnsafeBufferPointer { pixels in
+        image.pixels.withUnsafeBufferPointer { pixelBuffer in
             // (every other pixel across: enough for sums of a band)
-            profile.withUnsafeMutableBufferPointer { sums in
+            profile.withUnsafeMutableBufferPointer { sumBuffer in
+                guard let sums = sumBuffer.baseAddress else { return }
+                var index = 0
+                while index < count {
+                    sums[index] = 0
+                    index += 1
+                }
+                guard let pixels = pixelBuffer.baseAddress else { return }
+                let left = box.x, top = box.y, right = box.maxX, bottom = box.maxY
                 if alongY {
                     let bandWidth = box.width / bands
-                    for y in box.y..<box.maxY {
+                    var y = top
+                    while y < bottom {
                         let row = y * width
-                        for band in 0..<bands {
-                            let start = box.x + band * bandWidth
-                            let end = band == bands - 1 ? box.maxX : start + bandWidth
+                        var band = 0
+                        while band < bands {
+                            let start = left + band * bandWidth
+                            let end = band == bands - 1 ? right : start + bandWidth
                             var sum: Int32 = 0
-                            for x in stride(from: start, to: end, by: 2) {
+                            var x = start
+                            while x < end {
                                 sum += Int32(pixels[row + x])
+                                x += 2
                             }
-                            sums[band * length + y - box.y] = sum
+                            sums[band * length + y - top] = sum
+                            band += 1
                         }
+                        y += 1
                     }
                 } else {
                     let bandHeight = box.height / bands
-                    for band in 0..<bands {
-                        let start = box.y + band * bandHeight
-                        let end = band == bands - 1 ? box.maxY : start + bandHeight
-                        for y in stride(from: start, to: end, by: 2) {
+                    var band = 0
+                    while band < bands {
+                        let start = top + band * bandHeight
+                        let end = band == bands - 1 ? bottom : start + bandHeight
+                        let line = band * length - left
+                        var y = start
+                        while y < end {
                             let row = y * width
-                            for x in box.x..<box.maxX {
-                                sums[band * length + x - box.x] += Int32(pixels[row + x])
+                            var x = left
+                            while x < right {
+                                sums[line + x] += Int32(pixels[row + x])
+                                x += 1
                             }
+                            y += 2
                         }
+                        band += 1
                     }
                 }
             }
@@ -988,13 +1072,24 @@ final class MotionEstimator {
         if coarse.count < coarseLength * bands {
             coarse = [Int32](repeating: 0, count: coarseLength * bands)
         }
-        for band in 0..<bands {
-            for index in 0..<coarseLength {
-                var sum: Int32 = 0
-                for inner in 0..<group {
-                    sum += profile[band * length + index * group + inner]
+        profile.withUnsafeBufferPointer { profileBuffer in
+            coarse.withUnsafeMutableBufferPointer { coarseBuffer in
+                guard let profile = profileBuffer.baseAddress, let coarse = coarseBuffer.baseAddress else { return }
+                var band = 0
+                while band < bands {
+                    var index = 0
+                    while index < coarseLength {
+                        var sum: Int32 = 0
+                        var inner = 0
+                        while inner < group {
+                            sum += profile[band * length + index * group + inner]
+                            inner += 1
+                        }
+                        coarse[band * coarseLength + index] = sum
+                        index += 1
+                    }
+                    band += 1
                 }
-                coarse[band * coarseLength + index] = sum
             }
         }
     }
@@ -1004,13 +1099,25 @@ final class MotionEstimator {
         let start = max(0, -shift), end = min(length, length - shift)
         guard end > start else { return .infinity }
         var sum = 0.0
-        for band in 0..<bands {
-            let base = band * length
-            var bandSum: Int64 = 0
-            for index in start..<end {
-                bandSum += Int64(abs(first[base + index] - second[base + index + shift]))
+        first.withUnsafeBufferPointer { firstBuffer in
+            second.withUnsafeBufferPointer { secondBuffer in
+                // (plain loops over pointers: this runs for many shifts per frame, also in builds
+                // without optimization)
+                guard let first = firstBuffer.baseAddress, let second = secondBuffer.baseAddress else { return }
+                var band = 0
+                while band < bands {
+                    let base = band * length
+                    var bandSum: Int64 = 0
+                    var index = start
+                    while index < end {
+                        let difference = first[base + index] - second[base + index + shift]
+                        bandSum += Int64(difference < 0 ? -difference : difference)
+                        index += 1
+                    }
+                    sum += Double(bandSum)
+                    band += 1
+                }
             }
-            sum += Double(bandSum)
         }
         return sum / Double((end - start) * bands)
     }
@@ -1069,17 +1176,24 @@ final class MotionEstimator {
     private func squaredDifference(_ tiles: [Int], dx: Int, dy: Int, _ previous: LumaImage, _ current: LumaImage) -> Double {
         let width = width, cap = Int32(configuration.matchCostCap * configuration.matchCostCap)
         var sum: Int64 = 0, count = 0
-        previous.pixels.withUnsafeBufferPointer { before in
-            current.pixels.withUnsafeBufferPointer { now in
+        previous.pixels.withUnsafeBufferPointer { beforeBuffer in
+            current.pixels.withUnsafeBufferPointer { nowBuffer in
+                guard let before = beforeBuffer.baseAddress, let now = nowBuffer.baseAddress else { return }
                 for index in tiles {
                     let rect = tileRect(index)
-                    for y in stride(from: rect.y, to: rect.maxY, by: 2) {
+                    let right = rect.maxX, bottom = rect.maxY
+                    var y = rect.y
+                    while y < bottom {
                         let row = y * width, source = (y - dy) * width - dx
-                        for x in rect.x..<rect.maxX {
+                        var x = rect.x
+                        while x < right {
                             let difference = Int32(now[row + x]) - Int32(before[source + x])
-                            sum += Int64(min(cap, difference * difference))
+                            let squared = difference * difference
+                            sum += Int64(squared < cap ? squared : cap)
+                            x += 1
                         }
                         count += rect.width
+                        y += 2
                     }
                 }
             }
@@ -1288,6 +1402,11 @@ struct BilinearShift {
 
     /// Value × `one` at the point that lies the fractions left of and above `index`
     func sample(_ pixels: UnsafeBufferPointer<UInt8>, at index: Int, rowLength: Int) -> Int {
+        sample(pixels.baseAddress!, at: index, rowLength: rowLength)
+    }
+
+    /// The same for the pixels at `pixels`
+    func sample(_ pixels: UnsafePointer<UInt8>, at index: Int, rowLength: Int) -> Int {
         let wx = weightLeft, wy = weightUp
         if wx == 0, wy == 0 { return Int(pixels[index]) * BilinearShift.one }
         let here = Int(pixels[index]), left = wx > 0 ? Int(pixels[index - 1]) : here
