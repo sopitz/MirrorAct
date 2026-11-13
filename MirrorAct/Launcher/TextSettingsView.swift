@@ -108,7 +108,7 @@ struct TextSettingsView: View {
                 serviceSection
             }
             Section {
-                Text("“Text” in the mirror window copies the text on the screen, “Translate” shows its translation in place, also while you scroll. With “This Mac”, both run on this Mac; macOS asks once before it downloads a language.")
+                Text("“Text” in the mirror window copies the text on the screen, “Translate” shows its translation in place, also while you scroll. With “This Mac”, both run on this Mac; macOS asks before it downloads a pair of languages.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

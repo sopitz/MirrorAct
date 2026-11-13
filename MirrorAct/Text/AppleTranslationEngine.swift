@@ -148,7 +148,7 @@ final class AppleTranslationEngine: ObservableObject {
                                           : LanguageMatching.match(wanted, inFirstOf: languages.lists)
         guard let target = found else {
             let language = LanguageMatching.name(of: wanted, in: Self.noticeLocale)
-            throw TranslationFailure(message: String(localized: "Translation into \(language) isn’t available on this Mac"),
+            throw TranslationFailure(message: String(localized: "Translating into \(language) isn’t available on this Mac"),
                                      isPermanent: true)
         }
         if !languages.isOnDevice(target) {
@@ -769,7 +769,7 @@ final class AppleTranslationEngine: ObservableObject {
         Log.info("Translation: the languages for \(host.pair) were not loaded")
         let language = LanguageMatching.name(of: host.source, in: Self.noticeLocale)
         note("declined " + host.pair,
-             String(localized: "\(language) is not loaded yet – turn translating on again to load it"),
+             String(localized: "\(language) is not loaded – turn translating off and on again to load it"),
              to: clients(using: host.pair))
         finishWaitingJobs(of: host.pair) { $0.postponed }
     }

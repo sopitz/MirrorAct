@@ -629,7 +629,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         // macOS reports the same when the Mac has no network at all: the notice names both
         XCTAssertEqual(failure?.message, "Ollama: "
-                       + String(localized: "cannot be reached at \("http://192.168.1.20:11434/v1") – check that this Mac is on the network, and allow MirrorAct under System Settings > Privacy & Security > Local Network"))
+                       + String(localized: "cannot be reached at \("http://192.168.1.20:11434/v1") – check that this Mac is on the network, and allow MirrorAct under System Settings → Privacy & Security → Local Network"))
         XCTAssertEqual(failure?.isPermanent, false)
 
         // this Mac itself needs no permission, and a service on the internet none either

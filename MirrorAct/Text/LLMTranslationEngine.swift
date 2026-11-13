@@ -825,7 +825,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             let isThisMac = host == "localhost" || host == "::1" || host.hasPrefix("127.") || host.hasSuffix(".localhost")
             guard connection.isLocal, !isThisMac else { return nil }
             return TranslationFailure(message: name + ": "
-                                      + String(localized: "cannot be reached at \(connection.shownAddress) – check that this Mac is on the network, and allow MirrorAct under System Settings > Privacy & Security > Local Network"))
+                                      + String(localized: "cannot be reached at \(connection.shownAddress) – check that this Mac is on the network, and allow MirrorAct under System Settings → Privacy & Security → Local Network"))
         case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost:
             // a server on this Mac or in the network that does not answer is most often not running
             guard connection.isLocal else { return nil }

@@ -3077,7 +3077,7 @@
         }
       }
     },
-    "Translation into %@ isn’t available on this Mac" : {
+    "Translating into %@ isn’t available on this Mac" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -3195,12 +3195,12 @@
         }
       }
     },
-    "%@ is not loaded yet – turn translating on again to load it" : {
+    "%@ is not loaded – turn translating off and on again to load it" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ ist noch nicht geladen – zum Laden das Übersetzen erneut einschalten"
+            "value" : "%@ ist nicht geladen – zum Laden das Übersetzen aus- und wieder einschalten"
           }
         }
       }
@@ -3317,7 +3317,7 @@
         }
       }
     },
-    "cannot be reached at %@ – check that this Mac is on the network, and allow MirrorAct under System Settings > Privacy & Security > Local Network" : {
+    "cannot be reached at %@ – check that this Mac is on the network, and allow MirrorAct under System Settings → Privacy & Security → Local Network" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -3837,12 +3837,12 @@
         }
       }
     },
-    "“Text” in the mirror window copies the text on the screen, “Translate” shows its translation in place, also while you scroll. With “This Mac”, both run on this Mac; macOS asks once before it downloads a language." : {
+    "“Text” in the mirror window copies the text on the screen, “Translate” shows its translation in place, also while you scroll. With “This Mac”, both run on this Mac; macOS asks before it downloads a pair of languages." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "«Text» im Spiegelfenster kopiert den Text auf dem Bildschirm, «Übersetzen» zeigt seine Übersetzung an Ort und Stelle, auch beim Scrollen. Mit «Dieser Mac» läuft beides auf diesem Mac; macOS fragt einmal, bevor es eine Sprache lädt."
+            "value" : "«Text» im Spiegelfenster kopiert den Text auf dem Bildschirm, «Übersetzen» zeigt seine Übersetzung an Ort und Stelle, auch beim Scrollen. Mit «Dieser Mac» läuft beides auf diesem Mac; macOS fragt, bevor es ein Sprachpaar lädt."
           }
         }
       }
