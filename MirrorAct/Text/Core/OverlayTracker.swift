@@ -1608,9 +1608,11 @@ final class OverlayTracker {
                              time: TimeInterval) {
         guard let previous else { return }
         let now = rect.offsetBy(dx: shift.dx, dy: shift.dy)
-        // (at rest: the scrolling area it lies in did not move all the while)
+        // (at rest: the scrolling area it lies in did not move all the while, and the reading did
+        // not move while it was read: one that moved with the page into a place that lies in no
+        // scrolling area, such as under a bar, would be judged by the motion near that place)
         let area = areaID(around: now)
-        let atRest = restedThrough(pass, area: area, around: now)
+        let atRest = shift.dx == 0 && shift.dy == 0 && restedThrough(pass, area: area, around: now)
         if isGarbled, atRest { return }
         let attempts = (pass.rereadAttempts ?? -1) + 1
         guard attempts < configuration.maxRereads else {

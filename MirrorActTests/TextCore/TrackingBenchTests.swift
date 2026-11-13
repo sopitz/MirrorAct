@@ -1038,6 +1038,18 @@ final class TrackingBenchTests: XCTestCase {
             XCTAssertLessThanOrEqual(result.halfRead, 150, "rubberBand, seed \(seed)")
         }
     }
+    /// Seed 8 of halfRate: a paragraph read cut off while the page moved, and carried by it under
+    /// the bar before the pass ended, is not at rest there, though nothing moves near the bar: it
+    /// is read again once the page rests (it was drawn half-read for 235 frames when the place
+    /// it had moved to decided)
+    func testHalfRateSeed8() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("halfRate", seed: 8)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertGreaterThanOrEqual(result.score, 75)
+        XCTAssertLessThanOrEqual(result.halfRead, 50)
+    }
     func testKeyboard() throws { try check("keyboard") }
     func testLateContent() throws { try check("lateContent") }
     func testZoom() throws { try check("zoom") }
