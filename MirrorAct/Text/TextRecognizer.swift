@@ -135,6 +135,22 @@ struct LumaRaster {
 /// text begins is looked at: Vision read chevrons and switches at the end of a row as lines of
 /// their own, and a short word at the end of a line is mostly a value ("Pixel 8", "Version
 /// 14 A").
+///
+/// The gap alone does not tell a word from an icon: lists, agendas and receipts set a quantity,
+/// a weekday or a day number apart from their text ("5   Kaffee", "Mo   Zahnarzt", "24
+/// Geburtstag"), and justified text widens the gap after a short first word ("Im   Gegensatz").
+/// A character with a letter or a digit therefore stays when it sits on the rest's line like
+/// text (`sitsLikeText`): its ink is no higher than `textHeight` and ends on the rest's
+/// baseline, or a share `onBaseline` of its inked columns does (a descender or the tail of a Q
+/// ends lower: "by", "go", "Qi"). An icon is centred on its row and ends below the baseline.
+/// Measured with Vision on the rows above and on such columns (SF and Helvetica, 15 to 20 pt,
+/// gaps of 0.6 to 1.4 of the text's size, 2x and 3x, light and dark; 1742 words that the gap
+/// alone would have cut): the words' ink was at most 1.0 of the text's size high, and either
+/// ended within 0.058 of the baseline or had at least 0.30 of its columns end there; of the
+/// icons read as a letter or digit (85 of 234), those no higher than 1.1 ended at least 0.087
+/// below the baseline, with at most 0.24 of their columns on it. Signs and symbols ("•", "→",
+/// "©", "€") keep the rule of the gap: a sign set apart from a word is mostly an icon, and
+/// leaving it out loses no word.
 enum LeadingMark {
     /// The least gap between the character's ink and the rest's, in units of the size of the
     /// rest's text (`TextLayout.textSize` of its ink width)
@@ -146,6 +162,12 @@ enum LeadingMark {
     static let markSize = 0.45
     /// How far the new box reaches above and below the rest's ink, in the same units
     static let margin = 0.2
+    /// The greatest height of the ink of a character that sits like text, in the same units
+    static let textHeight = 1.1
+    /// How near to the rest's baseline the character's ink must end, in the same units
+    static let baselineTolerance = 0.06
+    /// or the least share of its inked columns that must end that near to it
+    static let onBaseline = 0.25
 
     /// The ink of a line's parts, in frame pixels: the lone character, the rest (the band of
     /// its text: rows of another line that the box reaches into are left out) and the widest
@@ -154,6 +176,11 @@ enum LeadingMark {
         var mark: CGRect
         var rest: CGRect
         var widestGapInRest: CGFloat?
+        /// The rest's baseline: the bottom of the row in which most of its inked columns end
+        /// (a descender ends lower, but in fewer columns); nil when not measured
+        var restBaseline: CGFloat? = nil
+        /// Where each inked column of the character ends (the bottom of its lowest ink)
+        var markColumnEnds: [CGFloat] = []
     }
 
     /// `line` without a character in front of its text that stands apart. `boxOf` gives
@@ -176,6 +203,7 @@ enum LeadingMark {
         let restText = String(line.text[split.rest])
         guard let parts = parts(of: raster, markOnLeft: markOnLeft, hint: hint),
               standsApart(parts, restText: restText, markOnLeft: markOnLeft),
+              !sitsLikeText(parts, markText: String(line.text[split.mark]), restText: restText),
               let rect = rect(of: parts, line: box, restText: restText, markOnLeft: markOnLeft) else { return line }
         let unit = CGRect(x: rect.minX / frameSize.width, y: rect.minY / frameSize.height,
                           width: rect.width / frameSize.width, height: rect.height / frameSize.height)
@@ -315,6 +343,22 @@ enum LeadingMark {
                 return CGRect(x: raster.x + minX, y: raster.y + minY, width: maxX - minX + 1, height: maxY - minY + 1)
             }
             guard let mark = box(markColumns, 0..<height), let rest = box(restColumns, band) else { return nil }
+            // where the inked columns end: the bottom of their lowest ink in `rows`
+            func ends(_ columns: Range<Int>, _ rows: Range<Int>) -> [Int] {
+                var result: [Int] = []
+                var x = columns.lowerBound
+                while x < columns.upperBound {
+                    var y = rows.upperBound - 1
+                    while y >= rows.lowerBound, !ink[y * width + x] { y -= 1 }
+                    if y >= rows.lowerBound { result.append(y + 1) }
+                    x += 1
+                }
+                return result
+            }
+            var counts = [Int](repeating: 0, count: height + 1)
+            for end in ends(restColumns, band) { counts[end] += 1 }
+            var baseline = band.upperBound
+            for end in (band.lowerBound + 1)...band.upperBound where counts[end] > counts[baseline] { baseline = end }
             // the widest gap between the rest's words, within its band
             var widest: Int?, run = 0, seen = false
             var x = restColumns.lowerBound
@@ -334,7 +378,9 @@ enum LeadingMark {
                 }
                 x += 1
             }
-            return Parts(mark: mark, rest: rest, widestGapInRest: widest.map { CGFloat($0) })
+            return Parts(mark: mark, rest: rest, widestGapInRest: widest.map { CGFloat($0) },
+                         restBaseline: CGFloat(raster.y + baseline),
+                         markColumnEnds: ends(markColumns, 0..<height).map { CGFloat(raster.y + $0) })
         }
     }
 
@@ -346,6 +392,20 @@ enum LeadingMark {
         let markSize = Double(max(parts.mark.width, parts.mark.height))
         return markSize >= Self.markSize * size && gap >= Self.gap * size
             && gap >= gapOverWordGap * Double(parts.widestGapInRest ?? 0)
+    }
+
+    /// Whether the character is a word set on the rest's line: it has a letter or a digit, its
+    /// ink is no higher than text, and it ends on the rest's baseline (or enough of its columns
+    /// do). False when the baseline was not measured.
+    static func sitsLikeText(_ parts: Parts, markText: String, restText: String) -> Bool {
+        guard markText.contains(where: { $0.isLetter || $0.isNumber }), let baseline = parts.restBaseline,
+              let size = TextLayout.textSize(of: restText, width: Double(parts.rest.width)), size > 0,
+              Double(parts.mark.height) <= textHeight * size else { return false }
+        let tolerance = baselineTolerance * size
+        func onLine(_ y: CGFloat) -> Bool { abs(Double(y - baseline)) <= tolerance }
+        if onLine(parts.mark.maxY) { return true }
+        let ends = parts.markColumnEnds
+        return !ends.isEmpty && Double(ends.filter(onLine).count) >= onBaseline * Double(ends.count)
     }
 
     /// The box of the rest (frame pixels): from its ink on the character's side, with the

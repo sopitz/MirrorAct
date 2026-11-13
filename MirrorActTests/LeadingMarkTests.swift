@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
 import CoreVideo
+import Vision
 import XCTest
 @testable import MirrorAct
 
@@ -97,6 +98,40 @@ final class LeadingMarkTests: XCTestCase {
         let parts = LeadingMark.Parts(mark: CGRect(x: 0, y: 0, width: 30, height: 30),
                                       rest: CGRect(x: 60, y: 0, width: 600, height: 30), widestGapInRest: 25)
         XCTAssertFalse(LeadingMark.standsApart(parts, restText: "Dies ist ein Satz mit vielen Worten", markOnLeft: true))
+    }
+
+    /// A word set apart from its text sits on the text's baseline and stays; an icon read as a
+    /// letter is centred on the row, ends below the baseline and goes; a sign keeps the rule of
+    /// the gap
+    func testAWordOnTheBaselineStaysAndAnIconReadAsALetterGoes() throws {
+        // "Mo", a gap of about the text's size before "Zahnarzt" (3.86 units wide: size 40)
+        let rest = "Zahnarzt"
+        var word = LeadingMark.Parts(mark: CGRect(x: 0, y: 10, width: 50, height: 29),
+                                     rest: CGRect(x: 92, y: 10, width: 154.4, height: 30), widestGapInRest: nil,
+                                     restBaseline: 39, markColumnEnds: Array(repeating: 39, count: 50))
+        let size = try XCTUnwrap(TextLayout.textSize(of: rest, width: 154.4))
+        XCTAssertEqual(size, 40, accuracy: 0.01)
+        XCTAssertTrue(LeadingMark.standsApart(word, restText: rest, markOnLeft: true), "the gap alone would cut it")
+        XCTAssertTrue(LeadingMark.sitsLikeText(word, markText: "Mo", restText: rest))
+        // a descender ("go"): the ink ends lower, but a third of the columns end on the baseline
+        word.mark.size.height = 29 + 0.2 * size
+        word.markColumnEnds = Array(repeating: 39, count: 17) + Array(repeating: 39 + 0.2 * size, count: 33)
+        XCTAssertTrue(LeadingMark.sitsLikeText(word, markText: "go", restText: rest))
+        // the same shape as a sign: the gap decides
+        XCTAssertFalse(LeadingMark.sitsLikeText(word, markText: "€", restText: rest))
+        // an icon read as "Aa": centred on the row, it ends 0.09 of the text's size below the
+        // baseline, and only a few of its columns end on it
+        var icon = word
+        icon.mark = CGRect(x: 0, y: 6, width: 50, height: 33 + 0.09 * size)
+        icon.markColumnEnds = Array(repeating: 39, count: 7) + Array(repeating: icon.mark.maxY, count: 43)
+        XCTAssertFalse(LeadingMark.sitsLikeText(icon, markText: "Aa", restText: rest))
+        // higher than text: an icon, wherever it ends
+        icon.mark = CGRect(x: 0, y: 39 - 1.2 * size, width: 50, height: 1.2 * size)
+        icon.markColumnEnds = Array(repeating: 39, count: 50)
+        XCTAssertFalse(LeadingMark.sitsLikeText(icon, markText: "E", restText: rest))
+        // not measured: nothing to go by
+        icon.restBaseline = nil
+        XCTAssertFalse(LeadingMark.sitsLikeText(icon, markText: "E", restText: rest))
     }
 
     func testWhatCountsAsALoneCharacter() {
@@ -215,6 +250,53 @@ final class LeadingMarkTests: XCTestCase {
                 XCTAssertNotEqual(line.text, String(text.drop { $0 != " " }.dropFirst()), "\(fontSize): '\(line.text)'")
             }
         }
+        // a quantity, a weekday or a day number set apart from its text, as in a list, an agenda
+        // or a receipt, and a short word before a gap widened by justified text: where Vision
+        // reads the word and its text as one line, the word stays (at wide gaps Vision itself
+        // often reads the word as a line of its own, or not at all)
+        var together = 0
+        for scale: CGFloat in [2, 3] {
+            for font in [nil, "Helvetica"] as [String?] {
+                for gap: CGFloat in [0.6, 1.0] {
+                    let (frame, rows) = try Columns(scale: scale, fontName: font, gap: gap).frame()
+                    let height = CGFloat(CVPixelBufferGetHeight(frame)), width = CGFloat(CVPixelBufferGetWidth(frame))
+                    let read = try Self.visionLines(frame)
+                    let found = try TextRecognizer.lines(in: frame)
+                    let name = "\(scale)x \(font ?? "system") gap \(gap)"
+                    for row in rows {
+                        func onRow(_ rect: CGRect) -> Bool { abs(rect.midY * height - row.rest.midY) < row.rest.height / 2 }
+                        func hasWord(_ text: String) -> Bool {
+                            text.split(separator: " ").count >= 2
+                                && text.split(separator: " ")[0].caseInsensitiveCompare(row.first) == .orderedSame
+                        }
+                        guard read.contains(where: { onRow($0.rect) && hasWord($0.text) }) else { continue }
+                        together += 1
+                        let line = found.first { onRow($0.rect) && hasWord($0.text) }
+                        XCTAssertNotNil(line, "\(name): '\(row.first)' left out: \(found.filter { onRow($0.rect) }.map(\.text))")
+                        if let line {
+                            XCTAssertLessThanOrEqual(line.rect.minX * width, row.word.midX, "\(name): '\(line.text)'")
+                        }
+                    }
+                }
+            }
+        }
+        XCTAssertGreaterThan(together, Columns.rows.count * 8 / 4, "Vision read too few words with their text")
+    }
+
+    /// The lines as Vision reads them with the settings of `TextRecognizer`, without its steps
+    static func visionLines(_ frame: CVPixelBuffer) throws -> [RecognizedLine] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.automaticallyDetectsLanguage = true
+        request.minimumTextHeight = 0.004
+        try VNImageRequestHandler(cvPixelBuffer: frame, options: [:]).perform([request])
+        let whole = CGRect(x: 0, y: 0, width: 1, height: 1)
+        return (request.results ?? []).compactMap { observation in
+            observation.topCandidates(1).first.map {
+                RecognizedLine(text: $0.string, rect: TextRecognizer.frameRect(of: observation.boundingBox, in: whole))
+            }
+        }
     }
 
     // MARK: Helpers
@@ -230,6 +312,60 @@ final class LeadingMarkTests: XCTestCase {
             parts = LeadingMark.Parts(mark: CGRect(x: mark[0], y: mark[1], width: mark[2], height: mark[3]),
                                       rest: CGRect(x: rest[0], y: rest[1], width: rest[2], height: rest[3]),
                                       widestGapInRest: gap)
+        }
+    }
+
+    /// Rows of a short word, a gap of `gap` times the font's size and a text, drawn with AppKit
+    /// in 17 pt (the system font or `fontName`), dark on light, on a screen 390 pt wide
+    struct Columns {
+        static let rows = [("5", "Kaffee"), ("2x", "Milch"), ("Mo", "Zahnarzt"), ("Fr", "Abendessen mit Anna"),
+                           ("24", "Geburtstag Oma"), ("Im", "Gegensatz"), ("go", "Weiter"), ("Qi", "Gong")]
+        var scale: CGFloat
+        var fontName: String?
+        var gap: CGFloat
+        var size: CGFloat = 17
+
+        /// The frame and, in frame pixels, every row's word and text
+        func frame() throws -> (CVPixelBuffer, [(first: String, word: CGRect, rest: CGRect)]) {
+            let widthPt: CGFloat = 390, rowPt = size * 2.4
+            let heightPt = CGFloat(Self.rows.count) * rowPt + 60
+            let width = Int((widthPt * scale).rounded()), height = Int((heightPt * scale).rounded())
+            let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+                                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                                     colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            rep.size = NSSize(width: widthPt, height: heightPt)
+            let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep))
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: context.cgContext, flipped: true)
+            context.cgContext.translateBy(x: 0, y: heightPt)
+            context.cgContext.scaleBy(x: 1, y: -1)
+            NSColor(white: 0.97, alpha: 1).setFill()
+            NSRect(x: 0, y: 0, width: widthPt, height: heightPt).fill()
+            let font = try XCTUnwrap(fontName.map { NSFont(name: $0, size: size) } ?? NSFont.systemFont(ofSize: size))
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(white: 0.1, alpha: 1)]
+            var drawn: [(first: String, word: CGRect, rest: CGRect)] = []
+            for (index, (first, rest)) in Self.rows.enumerated() {
+                let top = 30 + CGFloat(index) * rowPt
+                let wordSize = (first as NSString).size(withAttributes: attributes)
+                (first as NSString).draw(at: NSPoint(x: 24, y: top), withAttributes: attributes)
+                let restX = 24 + wordSize.width + gap * size
+                (rest as NSString).draw(at: NSPoint(x: restX, y: top), withAttributes: attributes)
+                let restSize = (rest as NSString).size(withAttributes: attributes)
+                let pixels = CGAffineTransform(scaleX: scale, y: scale)
+                drawn.append((first, CGRect(origin: CGPoint(x: 24, y: top), size: wordSize).applying(pixels),
+                              CGRect(origin: CGPoint(x: restX, y: top), size: restSize).applying(pixels)))
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            let data = try XCTUnwrap(rep.bitmapData)
+            var gray = [UInt8](repeating: 0, count: width * height)
+            for row in 0..<height {
+                for column in 0..<width {
+                    let pixel = data + row * rep.bytesPerRow + column * 4
+                    let red: Int = Int(pixel[0]) * 299, green: Int = Int(pixel[1]) * 587, blue: Int = Int(pixel[2]) * 114
+                    gray[row * width + column] = UInt8((red + green + blue) / 1000)
+                }
+            }
+            return (try TestFrames.frame(from: gray, width: width, height: height, format: kCVPixelFormatType_32BGRA), drawn)
         }
     }
 
