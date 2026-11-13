@@ -731,8 +731,10 @@ final class AppleTranslationEngine: ObservableObject {
             watch.cancel()
             running.removeAll { $0 === job }
         }
+        let start = Self.clock
         do {
             let responses = try await session.translations(from: requests)
+            Log.info("Translation: Apple \(job.pair): \(job.texts.count) texts in \(Self.milliseconds(since: start)) ms")
             var translations = [String?](repeating: nil, count: job.texts.count)
             for (position, response) in responses.enumerated() {
                 // the identifier says which text a response belongs to; without one, the order does
@@ -747,6 +749,8 @@ final class AppleTranslationEngine: ObservableObject {
             job.finish(translations)
             return true
         } catch {
+            Log.info("Translation: Apple \(job.pair): \(job.texts.count) texts failed after "
+                     + "\(Self.milliseconds(since: start)) ms (\(Self.describe(error)))")
             if isEnding(host) {
                 // translating was turned off meanwhile, and the job is answered already
                 job.finish(job.postponed)
@@ -865,6 +869,10 @@ final class AppleTranslationEngine: ObservableObject {
         if error is CancellationError { return true }
         let nsError = error as NSError
         return nsError.domain == NSCocoaErrorDomain && nsError.code == NSUserCancelledError
+    }
+
+    private static func milliseconds(since start: TimeInterval) -> Int {
+        Int(((clock - start) * 1000).rounded())
     }
 
     /// Domain and code tell more about an error of the framework than its text
