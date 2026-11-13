@@ -9,7 +9,9 @@ enum TranslationEngines {
     static func make(for settings: AppSettings) throws -> TranslationEngine {
         // a client of its own over the engine all windows share: its notices and its cancel
         // concern this turn of translating only
-        guard settings.translationEngine == "llm" else { return AppleTranslationClient(engine: .shared) }
+        guard settings.translationEngine == "llm" else {
+            return AppleTranslationClient(engine: .shared, targetIsChosen: settings.translationLanguage != "system")
+        }
         let connection = llmConnection(for: settings)
         if let missing = connection.missing {
             // a key that is there, but that the keychain did not hand out (the user said no to

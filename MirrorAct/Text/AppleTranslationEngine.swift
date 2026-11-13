@@ -13,6 +13,13 @@ import Translation
 /// does not return before the pair is no longer needed. The texts of a request are sorted by
 /// their language first (`LanguageMatching`), because a session translates from one language only.
 ///
+/// From macOS 26.4 on, Translation has two kinds of models: the on-device ones (`.lowLatency`)
+/// and those that need Apple Intelligence for many of their languages (`.highFidelity`, which
+/// macOS takes when nothing is said). A screen translated live wants the fast ones, and without
+/// Apple Intelligence the others translate nothing. So the engine takes the on-device models for
+/// every pair they know, and the others only for a language only they have (Danish, or a region
+/// the user chose such as Portuguese (Portugal)).
+///
 /// All mirror windows share the engine. Each turn of translating of a window talks to it
 /// through an `AppleTranslationClient` of its own, which gets the notices of its requests and
 /// whose `cancel` ends its own work only.
@@ -50,8 +57,8 @@ final class AppleTranslationEngine: ObservableObject {
     /// The window normally lies outside of all screens. Should the views not start there, it is
     /// moved onto the main screen for good (it is not to be seen there either).
     private var keepsWindowOnScreen = false
-    /// the languages macOS translates; asked once, the list does not change while the app runs
-    private var supported: [Locale.Language] = []
+    /// the languages macOS translates; asked once, the lists do not change while the app runs
+    private var languages = AppleTranslationLanguages([])
 
     private var signals: [UUID: AppleTranslationSignal] = [:]
     /// hosts whose view has started and holds a session
@@ -100,24 +107,31 @@ final class AppleTranslationEngine: ObservableObject {
                    for client: AppleTranslationClient) async throws -> [String?] {
         guard !texts.isEmpty else { return [] }
         guard register(client) else { return [String?](repeating: nil, count: texts.count) }
-        guard let supported = await supportedLanguages() else {
+        guard let languages = await supportedLanguages() else {
             // no answer from macOS: not now
             noteNoAnswer(to: client)
             return [String?](repeating: nil, count: texts.count)
         }
-        guard let target = LanguageMatching.match(wanted, in: supported) else {
+        // A form the user chose in the settings is taken as chosen. The language of the system
+        // gets the form of the on-device models wherever they have the language: es for es-AR,
+        // pt for pt-PT, en-GB for en-DE.
+        let found = client.targetIsChosen ? LanguageMatching.match(wanted, in: languages.all)
+                                          : LanguageMatching.match(wanted, inFirstOf: languages.lists)
+        guard let target = found else {
             let language = LanguageMatching.name(of: wanted, in: Self.noticeLocale)
             throw TranslationFailure(message: String(localized: "Translation into \(language) isn’t available on this Mac"),
                                      isPermanent: true)
         }
         // telling the languages apart takes a moment: not on the main thread
-        let tags = LanguageMatching.recognizerTags(for: supported)
+        let all = languages.all
+        let tags = LanguageMatching.recognizerTags(for: all)
         let read = await Task.detached(priority: .userInitiated) {
-            AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: supported)
+            AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: all)
         }.value
         if let common = read.common { client.commonLanguage = common }
+        // the languages on the screen, too, as the on-device models know them where they can
         let plan = LanguageMatching.Plan(findings: read.findings, common: client.commonLanguage, target: target,
-                                         supported: supported)
+                                         lists: languages.lists)
         var results = plan.results(for: texts)
         for language in plan.unknown { noteUntranslatable(language, to: [client]) }
 
@@ -125,9 +139,10 @@ final class AppleTranslationEngine: ObservableObject {
         var pending: [(group: LanguageMatching.Plan.Group, answer: Task<[String?], Error>)] = []
         for group in plan.groups {
             let pair = Self.pair(group.source, target)
+            let strategy = languages.strategy(from: group.source, to: target)
             client.pairs.insert(pair)
             let groupTexts = group.indices.map { texts[$0] }
-            guard let translatable = await isSupported(pair, from: group.source, to: target) else {
+            guard let translatable = await isSupported(pair, from: group.source, to: target, with: strategy) else {
                 noteNoAnswer(to: client)
                 continue
             }
@@ -145,7 +160,7 @@ final class AppleTranslationEngine: ObservableObject {
                 continue
             }
             let job = AppleTranslationJob(client: client, pair: pair, source: group.source, target: target,
-                                          texts: groupTexts)
+                                          strategy: strategy, texts: groupTexts)
             pending.append((group: group, answer: Task { try await self.answer(to: job) }))
         }
         var failure: Error?
@@ -210,25 +225,29 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// nil = macOS did not answer in time
-    private func supportedLanguages() async -> [Locale.Language]? {
-        if supported.isEmpty {
+    private func supportedLanguages() async -> AppleTranslationLanguages? {
+        if languages.isEmpty {
             // an empty answer is not kept: the next request asks again
             let availability = self.availability
-            guard let languages = await inTime({ await availability.supportedLanguages() }) else {
+            guard let answer = await inTime({ await availability.languages() }) else {
                 Log.error("Translation: macOS did not say within \(Int(questionLimit)) s which languages it translates")
                 return nil
             }
-            supported = languages
-            Log.info("Translation: macOS translates \(languages.map(\.minimalIdentifier).sorted().joined(separator: " "))")
+            languages = answer
+            func list(_ languages: [Locale.Language]) -> String {
+                languages.map(\.minimalIdentifier).sorted().joined(separator: " ")
+            }
+            Log.info("Translation: macOS translates \(list(answer.all)), on this Mac alone \(list(answer.onDevice))")
         }
-        return supported
+        return languages
     }
 
     /// macOS knows both languages, but not every pair of them. nil = it did not answer in time.
-    private func isSupported(_ pair: String, from source: Locale.Language, to target: Locale.Language) async -> Bool? {
+    private func isSupported(_ pair: String, from source: Locale.Language, to target: Locale.Language,
+                             with strategy: AppleTranslationStrategy) async -> Bool? {
         if let known = pairSupport[pair] { return known }
         let availability = self.availability
-        guard let status = await inTime({ await availability.status(source, target) }) else {
+        guard let status = await inTime({ await availability.status(source, target, strategy) }) else {
             Log.error("Translation: macOS did not say within \(Int(questionLimit)) s whether it translates \(pair)")
             return nil
         }
@@ -346,7 +365,8 @@ final class AppleTranslationEngine: ObservableObject {
     private func wakeHost(for job: AppleTranslationJob) {
         if !hosts.contains(where: { $0.pair == job.pair && !ending.contains($0.id) }) {
             if window == nil { window = makeWindow(self) }
-            let host = AppleTranslationHost(pair: job.pair, source: job.source, target: job.target)
+            let host = AppleTranslationHost(pair: job.pair, source: job.source, target: job.target,
+                                            strategy: job.strategy)
             let (stream, wake) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
             signals[host.id] = AppleTranslationSignal(stream: stream, wake: wake)
             hosts.append(host)
@@ -452,7 +472,7 @@ final class AppleTranslationEngine: ObservableObject {
     /// Makes sure the languages of the pair are on this Mac. macOS asks the user before it loads
     /// them. false = this host cannot translate.
     private func load(_ host: AppleTranslationHost, prepare: () async throws -> Void) async -> Bool {
-        var status = await availability.status(host.source, host.target)
+        var status = await availability.status(host.source, host.target, host.strategy)
         if status == .supported, !isEnding(host) {
             setLoading(true, for: host)
             // loading takes minutes: those who wait for this pair ask again later
@@ -464,7 +484,7 @@ final class AppleTranslationEngine: ObservableObject {
                 return false
             }
             // the pair before may have brought these languages along
-            status = await availability.status(host.source, host.target)
+            status = await availability.status(host.source, host.target, host.strategy)
             let asks = status == .supported && !isEnding(host)
             var failure: Error?
             if asks {
@@ -495,10 +515,10 @@ final class AppleTranslationEngine: ObservableObject {
                 }
                 // prepareTranslation also returns while the languages are still on their way
                 let start = Self.clock
-                status = await availability.status(host.source, host.target)
+                status = await availability.status(host.source, host.target, host.strategy)
                 while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    status = await availability.status(host.source, host.target)
+                    status = await availability.status(host.source, host.target, host.strategy)
                 }
                 if status == .supported, !isEnding(host) {
                     setLoading(false, for: host)
@@ -705,6 +725,9 @@ final class AppleTranslationEngine: ObservableObject {
 /// model services it serves one turn: once cancelled it answers every request with "not now".
 final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     let engine: AppleTranslationEngine
+    /// The user chose the language in the settings: it is translated into as chosen. Otherwise it
+    /// is the language of the system, which gets the closest form of the on-device models.
+    let targetIsChosen: Bool
     let name = "Apple"
     let isRemote = false
     let prefersSettledText = false
@@ -727,8 +750,9 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     /// the language pairs this client asked for: it is told what becomes of them
     fileprivate var pairs: Set<String> = []
 
-    init(engine: AppleTranslationEngine) {
+    init(engine: AppleTranslationEngine, targetIsChosen: Bool = false) {
         self.engine = engine
+        self.targetIsChosen = targetIsChosen
     }
 
     var notify: ((String) -> Void)? {
@@ -772,15 +796,81 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     }
 }
 
+/// Apple's kinds of translation models. Before macOS 26.4 there are only the on-device ones,
+/// and nothing is said about the kind.
+enum AppleTranslationStrategy: Equatable {
+    /// the on-device models: fast, and without Apple Intelligence
+    case lowLatency
+    /// the models that need Apple Intelligence for many of their languages
+    case highFidelity
+
+    @available(macOS 26.4, *)
+    var framework: TranslationSession.Strategy {
+        self == .lowLatency ? .lowLatency : .highFidelity
+    }
+}
+
+/// The languages macOS translates, by kind of models
+struct AppleTranslationLanguages {
+    /// those of the on-device models, which the engine prefers
+    let onDevice: [Locale.Language]
+    /// those of all models, the on-device ones included
+    let all: [Locale.Language]
+
+    init(onDevice: [Locale.Language], all: [Locale.Language]) {
+        self.onDevice = onDevice
+        let keys = Set(all.map(LanguageMatching.key))
+        self.all = all + onDevice.filter { !keys.contains(LanguageMatching.key($0)) }
+    }
+
+    /// one kind of models only (before macOS 26.4)
+    init(_ languages: [Locale.Language]) {
+        self.init(onDevice: languages, all: languages)
+    }
+
+    var isEmpty: Bool { all.isEmpty }
+
+    /// the lists in the order a language is looked for in them
+    var lists: [[Locale.Language]] { [onDevice, all] }
+
+    /// The on-device models where they know both languages, the others only for a language that
+    /// only they have. `source` and `target` are entries of the lists.
+    func strategy(from source: Locale.Language, to target: Locale.Language) -> AppleTranslationStrategy {
+        isOnDevice(source) && isOnDevice(target) ? .lowLatency : .highFidelity
+    }
+
+    func isOnDevice(_ language: Locale.Language) -> Bool {
+        let key = LanguageMatching.key(language)
+        return onDevice.contains { LanguageMatching.key($0) == key }
+    }
+}
+
 /// What `AppleTranslationEngine` asks macOS about its languages
 struct AppleTranslationAvailability {
-    var supportedLanguages: () async -> [Locale.Language]
-    var status: (_ source: Locale.Language, _ target: Locale.Language) async -> LanguageAvailability.Status
+    var languages: () async -> AppleTranslationLanguages
+    var status: (_ source: Locale.Language, _ target: Locale.Language,
+                 _ strategy: AppleTranslationStrategy) async -> LanguageAvailability.Status
 
     /// the answers of macOS
     static var system: AppleTranslationAvailability {
-        AppleTranslationAvailability(supportedLanguages: { await LanguageAvailability().supportedLanguages },
-                                     status: { await LanguageAvailability().status(from: $0, to: $1) })
+        AppleTranslationAvailability(languages: { await systemLanguages() },
+                                     status: { source, target, strategy in
+            if #available(macOS 26.4, *) {
+                return await LanguageAvailability(preferredStrategy: strategy.framework).status(from: source, to: target)
+            }
+            return await LanguageAvailability().status(from: source, to: target)
+        })
+    }
+
+    /// From macOS 26.4 on, a LanguageAvailability without a strategy answers for `.highFidelity`:
+    /// both kinds are asked for by name.
+    static func systemLanguages() async -> AppleTranslationLanguages {
+        if #available(macOS 26.4, *) {
+            let onDevice = await LanguageAvailability(preferredStrategy: .lowLatency).supportedLanguages
+            let all = await LanguageAvailability(preferredStrategy: .highFidelity).supportedLanguages
+            return AppleTranslationLanguages(onDevice: onDevice, all: all)
+        }
+        return AppleTranslationLanguages(await LanguageAvailability().supportedLanguages)
     }
 }
 
@@ -815,15 +905,17 @@ private final class AppleTranslationJob {
     let pair: String
     let source: Locale.Language
     let target: Locale.Language
+    let strategy: AppleTranslationStrategy
     let texts: [String]
     private var continuation: CheckedContinuation<[String?], Error>?
 
     init(client: AppleTranslationClient, pair: String, source: Locale.Language, target: Locale.Language,
-         texts: [String]) {
+         strategy: AppleTranslationStrategy, texts: [String]) {
         self.client = client
         self.pair = pair
         self.source = source
         self.target = target
+        self.strategy = strategy
         self.texts = texts
     }
 

@@ -79,8 +79,10 @@ final class AppleTranslationEngineTests: XCTestCase {
     }
 
     func testEveryHostIsANewViewWithAConfigurationOfItsOwn() {
-        let first = AppleTranslationHost(pair: "en→de", source: language("en-US"), target: language("de-DE"))
-        let second = AppleTranslationHost(pair: "en→de", source: language("en-US"), target: language("de-DE"))
+        let first = AppleTranslationHost(pair: "en→de", source: language("en-US"), target: language("de-DE"),
+                                         strategy: .lowLatency)
+        let second = AppleTranslationHost(pair: "en→de", source: language("en-US"), target: language("de-DE"),
+                                          strategy: .lowLatency)
         XCTAssertNotEqual(first.id, second.id)
         XCTAssertEqual(first.configuration.source?.maximalIdentifier, language("en-US").maximalIdentifier)
         XCTAssertEqual(first.configuration.target?.maximalIdentifier, language("de-DE").maximalIdentifier)
@@ -88,6 +90,19 @@ final class AppleTranslationEngineTests: XCTestCase {
         let copy = first
         XCTAssertEqual(copy.id, first.id)
         XCTAssertEqual(copy.configuration, first.configuration)
+    }
+
+    /// The configuration names the kind of models: without it macOS would take .highFidelity
+    func testTheConfigurationSaysWhichModelsTranslate() throws {
+        guard #available(macOS 26.4, *) else { throw XCTSkip("one kind of models before macOS 26.4") }
+        for strategy in [AppleTranslationStrategy.lowLatency, .highFidelity] {
+            let host = AppleTranslationHost(pair: "en→da", source: language("en"), target: language("da"),
+                                            strategy: strategy)
+            XCTAssertEqual(host.strategy, strategy)
+            XCTAssertEqual(host.configuration.preferredStrategy, strategy.framework)
+        }
+        XCTAssertEqual(AppleTranslationStrategy.lowLatency.framework, .lowLatency)
+        XCTAssertEqual(AppleTranslationStrategy.highFidelity.framework, .highFidelity)
     }
 
     func testTheWindowForTheViewsIsNotToBeSeen() throws {
@@ -167,6 +182,82 @@ final class AppleTranslationEngineTests: XCTestCase {
                 throw CancellationError()
             }
             try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private static let german = "Das ist ein ganz gewöhnlicher deutscher Satz über das Wetter von heute und von morgen."
+    private static let danish = "Dette er en helt almindelig dansk sætning om vejret i dag og i morgen eftermiddag."
+
+    /// Some of the languages of the on-device models of macOS 26.4 and later, and those that
+    /// only the models that need Apple Intelligence have
+    private static let onDevice = ["de", "en", "en-GB", "es", "fr", "pt", "zh", "zh-TW"]
+    private static let onlyWithAppleIntelligence = ["da", "de-CH", "en-IN", "es-MX", "pt-PT", "zh-HK"]
+
+    /// The pair a request asks for, and with which models: the on-device ones wherever they know
+    /// both languages. The language of the system gets their closest form, a language the user
+    /// chose in the settings is taken as chosen.
+    func testTheOnDeviceModelsTranslateEveryPairTheyKnow() async throws {
+        let twoKinds = (onDevice: Self.onDevice, all: Self.onDevice + Self.onlyWithAppleIntelligence)
+        let oneKind = (onDevice: twoKinds.all, all: twoKinds.all)
+        let cases: [(lists: (onDevice: [String], all: [String]), wanted: String, chosen: Bool, text: String,
+                     source: String, target: String, strategy: AppleTranslationStrategy)] = [
+            // macOS 26.4 and later
+            (twoKinds, "de-CH", false, Self.english, "en", "de", .lowLatency),
+            (twoKinds, "de-CH", true, Self.english, "en", "de-CH", .highFidelity),
+            (twoKinds, "de", true, Self.english, "en", "de", .lowLatency),
+            (twoKinds, "es-AR", false, Self.english, "en", "es", .lowLatency),
+            (twoKinds, "es-419", false, Self.english, "en", "es", .lowLatency),
+            (twoKinds, "es-MX", true, Self.english, "en", "es-MX", .highFidelity),
+            (twoKinds, "pt-PT", false, Self.english, "en", "pt", .lowLatency),
+            (twoKinds, "pt-PT", true, Self.english, "en", "pt-PT", .highFidelity),
+            (twoKinds, "zh-HK", false, Self.english, "en", "zh-TW", .lowLatency),
+            (twoKinds, "en-DE", false, Self.german, "de", "en-GB", .lowLatency),
+            (twoKinds, "en-IN", false, Self.german, "de", "en-GB", .lowLatency),
+            (twoKinds, "en-IN", true, Self.german, "de", "en-IN", .highFidelity),
+            // only the other models have the language: the target, or the language on the screen
+            (twoKinds, "da", false, Self.english, "en", "da", .highFidelity),
+            (twoKinds, "da", true, Self.english, "en", "da", .highFidelity),
+            (twoKinds, "de", false, Self.danish, "da", "de", .highFidelity),
+            // before macOS 26.4: one kind, one list, matched as before
+            (oneKind, "pt-PT", false, Self.english, "en", "pt-PT", .lowLatency),
+            (oneKind, "es-AR", false, Self.english, "en", "es-MX", .lowLatency),
+            (oneKind, "en-DE", false, Self.german, "de", "en-GB", .lowLatency),
+            (oneKind, "da", false, Self.english, "en", "da", .lowLatency),
+            (oneKind, "de", false, Self.danish, "da", "de", .lowLatency),
+        ]
+        for entry in cases {
+            let label = "\(entry.wanted) chosen: \(entry.chosen), \(entry.lists.onDevice.count) on the device"
+            let macOS = FakeMacOS(onDevice: entry.lists.onDevice, all: entry.lists.all)
+            let engine = engine(answeredBy: macOS)
+            let client = AppleTranslationClient(engine: engine, targetIsChosen: entry.chosen)
+            let request = Task { try await client.translate([entry.text], into: self.language(entry.wanted)) }
+            try await waitUntil { engine.hosts.count == 1 }
+            let host = engine.hosts[0]
+            XCTAssertEqual(host.source.minimalIdentifier, entry.source, label)
+            XCTAssertEqual(host.target.minimalIdentifier, entry.target, label)
+            XCTAssertEqual(host.strategy, entry.strategy, label)
+            // macOS is asked about the pair for the same models
+            XCTAssertEqual(macOS.statusAsked.map(\.strategy), [entry.strategy], label)
+            client.cancel()
+            _ = try await request.value
+            XCTAssertTrue(engine.hosts.isEmpty, label)
+        }
+    }
+
+    /// Whether the language was chosen in the settings reaches the client
+    func testTheClientKnowsWhetherTheLanguageWasChosen() throws {
+        let settings = AppSettings.shared
+        let before = (language: settings.translationLanguage, engine: settings.translationEngine)
+        defer {
+            settings.translationLanguage = before.language
+            settings.translationEngine = before.engine
+        }
+        settings.translationEngine = "apple"
+        for (language, chosen) in [("system", false), ("pt-PT", true), ("da", true)] {
+            settings.translationLanguage = language
+            let client = try XCTUnwrap(try TranslationEngines.make(for: settings) as? AppleTranslationClient)
+            XCTAssertEqual(client.targetIsChosen, chosen, language)
+            client.cancel()
         }
     }
 
@@ -400,15 +491,26 @@ private final class Box<Value> {
 /// and prepareTranslation, which waits until the test answers the question in place of the user.
 @MainActor
 private final class FakeMacOS {
-    let supported: [Locale.Language]
+    /// the languages of the on-device models, and of all models
+    let onDevice: [Locale.Language]
+    let all: [Locale.Language]
     /// hosts whose prepareTranslation was called, in that order
     private(set) var asked: [UUID] = []
+    /// what the status of a pair was asked for
+    private(set) var statusAsked: [(source: String, strategy: AppleTranslationStrategy)] = []
     private var installed: Set<String> = []
     private var everything = false
     private var pending: [(id: UUID, source: String, continuation: CheckedContinuation<Void, Error>)] = []
 
-    init(supported: [String]) {
-        self.supported = supported.map { Locale.Language(identifier: $0) }
+    /// macOS 26.4 and later: two kinds of models
+    init(onDevice: [String], all: [String]) {
+        self.onDevice = onDevice.map { Locale.Language(identifier: $0) }
+        self.all = all.map { Locale.Language(identifier: $0) }
+    }
+
+    /// one kind of models (before macOS 26.4)
+    convenience init(supported: [String]) {
+        self.init(onDevice: supported, all: supported)
     }
 
     /// hosts whose question is up
@@ -416,8 +518,11 @@ private final class FakeMacOS {
 
     var availability: AppleTranslationAvailability {
         // the closures are made on the main actor and run there
-        AppleTranslationAvailability(supportedLanguages: { self.supported },
-                                     status: { source, _ in self.status(of: source) })
+        AppleTranslationAvailability(languages: { AppleTranslationLanguages(onDevice: self.onDevice, all: self.all) },
+                                     status: { source, _, strategy in
+            self.statusAsked.append((source: source.minimalIdentifier, strategy: strategy))
+            return self.status(of: source)
+        })
     }
 
     private func status(of source: Locale.Language) -> LanguageAvailability.Status {

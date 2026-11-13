@@ -12,15 +12,24 @@ struct AppleTranslationHost: Identifiable {
     let pair: String
     let source: Locale.Language
     let target: Locale.Language
+    /// the kind of models the session uses (see `AppleTranslationEngine`)
+    let strategy: AppleTranslationStrategy
     /// Made once and never changed: SwiftUI starts the task of a view again when it is handed a
     /// configuration that differs from the last one, and the session in use is invalid from then on.
     let configuration: TranslationSession.Configuration
 
-    init(pair: String, source: Locale.Language, target: Locale.Language) {
+    init(pair: String, source: Locale.Language, target: Locale.Language, strategy: AppleTranslationStrategy) {
         self.pair = pair
         self.source = source
         self.target = target
-        configuration = TranslationSession.Configuration(source: source, target: target)
+        self.strategy = strategy
+        if #available(macOS 26.4, *) {
+            // without a strategy macOS takes .highFidelity, also for pairs the on-device models know
+            configuration = TranslationSession.Configuration(source: source, target: target,
+                                                             preferredStrategy: strategy.framework)
+        } else {
+            configuration = TranslationSession.Configuration(source: source, target: target)
+        }
     }
 }
 
