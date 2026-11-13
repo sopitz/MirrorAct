@@ -1604,7 +1604,8 @@ enum TrackingScenarios {
         stage.addBars(title: "", back: back)
         // (the label to go back is the same in both bars: so is what it is misread as)
         let plainBar = stage.topBar
-        let backMisreading = stage.scenario.sprites[plainBar].lines.first { $0.text == back }?.alternate
+        guard let backMisreading = stage.scenario.sprites[plainBar].lines.first(where: { $0.text == back })?.alternate
+        else { preconditionFailure("largeTitle: the bar without a title has no label to go back") }
         let titledBar = stage.makeTopBar(title: title, back: back, backMisreading: backMisreading)
         var random = stage.random
         var hero = SimRect()

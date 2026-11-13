@@ -1039,6 +1039,25 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.score, 45)
     }
 
+    /// The same without the tracker: a text that sprites of one size show at the same place (the
+    /// label to go back in the bar with and in the bar without a title, and in every blend of the
+    /// two) is misread the same way in all of them, whatever a tracker happens to read on a seed.
+    func testLargeTitleMisreadsALabelTheSameWayInEveryBar() throws {
+        for seed in UInt64(1)...10 {
+            let scenario = try scenario("largeTitle", seed: seed)
+            var misreadings: [String: Set<String>] = [:]
+            for sprite in scenario.sprites {
+                for line in sprite.lines {
+                    let place = "\(sprite.width)x\(sprite.height) \(line.text) at \(line.rect.x),\(line.rect.y)"
+                    misreadings[place, default: []].insert(line.alternate)
+                }
+            }
+            for (place, found) in misreadings.sorted(by: { $0.key < $1.key }) {
+                XCTAssertEqual(found.count, 1, "seed \(seed): \(place) is misread as \(found.sorted())")
+            }
+        }
+    }
+
     /// Seed 4 of floatingButton: the button learned while the list was dragged is still known
     /// after the last pixel of the drag, so a paragraph read at rest beside it is not drawn over
     /// its edge (8 misplaced frames and 60.3 when a frame that moved by a pixel cleared it)
@@ -1051,6 +1070,7 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
         XCTAssertGreaterThanOrEqual(result.score, 70)
     }
+
     /// A page that springs back after a flick past its end: what a pass after the movement finds
     /// cut off is read again at rest, not drawn half-read (seeds 2 and 5 fell to 58.7 and 67.6,
     /// with 241 and 288 half-read frames, when such a pass counted as a reread)
