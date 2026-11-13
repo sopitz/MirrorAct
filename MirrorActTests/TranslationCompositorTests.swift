@@ -643,6 +643,75 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertNil(BlockTextMask(text: "Text", width: 0, height: 60, lineCount: 1))
     }
 
+    /// A translation too long for its block even in the smallest font ends with an ellipsis on
+    /// the last line that fits as a whole: no line is cut through, and the words before the
+    /// ellipsis stay whole.
+    func testTextThatCannotFitEndsWithAnEllipsis() throws {
+        func ink(rows: Range<Int>, of mask: BlockTextMask) -> (minX: Int, maxX: Int)? {
+            var minX = Int.max, maxX = -1
+            for y in rows {
+                for x in 0..<mask.width where mask.pixels[y * mask.width + x] > 64 {
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                }
+            }
+            return maxX < 0 ? nil : (minX, maxX)
+        }
+        let sentence = "Light text on a dark background is harder to read when the contrast is wrong. "
+            + "The translation here should also appear light on dark and should not brighten the background."
+        let cases: [(text: String, width: Int, height: Int, lineCount: Int, language: String?)] = [
+            (String(repeating: "word ", count: 80), 120, 24, 1, nil),
+            (sentence, 360, 60, 1, "en"),
+            (String(repeating: sentence + " ", count: 8), 948, 60, 3, "en"),
+            ("Ein sehr langer Satz, der niemals in dieses kleine Kästchen passen wird, egal wie klein die Schrift ist.",
+             160, 30, 1, "de"),
+            ("パスワードは数字１２３４５６を含めてください。これはとても長い文章で、この小さな箱には収まりません。", 80, 22, 1, "ja"),
+        ]
+        for item in cases {
+            let label = "\(item.text.prefix(24)) in \(item.width) × \(item.height)"
+            let mask = try XCTUnwrap(BlockTextMask(text: item.text, width: item.width, height: item.height,
+                                                   lineCount: item.lineCount, language: item.language), label)
+            XCTAssertFalse(mask.fits, label)
+            let last = try XCTUnwrap(mask.lines.last, label)
+            XCTAssertTrue(last.hasSuffix("\u{2026}"), "\(label): \(mask.lines)")
+            // what stands before the ellipsis is the text as it goes on, up to the end of a word
+            let shown = mask.lines.dropLast().joined() + last.dropLast()
+            let text = item.text.trimmingCharacters(in: .whitespaces)
+            XCTAssertTrue(text.hasPrefix(shown), "\(label): \(mask.lines)")
+            if item.language != "ja" {
+                let next = text[text.index(text.startIndex, offsetBy: shown.count)]
+                XCTAssertTrue(next == " " || next == "," || next == ".", "\(label): a word is cut before \"\(next)\"")
+                XCTAssertFalse(last.dropLast().hasSuffix(" ") || last.dropLast().hasSuffix(","), label)
+            }
+            // all lines stand inside the block: the rows at its edges stay empty
+            XCTAssertNil(ink(rows: 0..<1, of: mask), label)
+            XCTAssertNil(ink(rows: (mask.height - 1)..<mask.height, of: mask), label)
+        }
+
+        // a word that does not fit next to the ellipsis is cut off between two characters
+        let word = try XCTUnwrap(BlockTextMask(text: "Donaudampfschifffahrtsgesellschaftskapitän und mehr",
+                                               width: 60, height: 14, lineCount: 1, language: "de"))
+        XCTAssertEqual(word.lineCount, 1)
+        XCTAssertTrue(try XCTUnwrap(word.lines.last).hasPrefix("Donau"), "\(word.lines)")
+        XCTAssertTrue(try XCTUnwrap(word.lines.last).hasSuffix("\u{2026}"), "\(word.lines)")
+
+        // written from the right: the last line, ellipsis included, stays aligned at the right
+        let arabic = String(repeating: "مرحبا بالعالم، هذه ترجمة طويلة جدا لا تتسع في هذا المكان الصغير ", count: 2)
+        let rightToLeft = try XCTUnwrap(BlockTextMask(text: arabic, width: 360, height: 60, lineCount: 1, language: "ar"))
+        XCTAssertFalse(rightToLeft.fits)
+        XCTAssertTrue(try XCTUnwrap(rightToLeft.lines.last).hasSuffix("\u{2026}"))
+        let lineHeight = rightToLeft.height / rightToLeft.lineCount
+        let lastLine = try XCTUnwrap(ink(rows: (rightToLeft.lineCount - 1) * lineHeight..<rightToLeft.height,
+                                         of: rightToLeft))
+        XCTAssertGreaterThan(lastLine.maxX, rightToLeft.width - 6, "the last line starts at the right edge")
+
+        // a text that fits gets no ellipsis
+        let fitting = try XCTUnwrap(BlockTextMask(text: sentence, width: 948, height: 190, lineCount: 3, language: "en"))
+        XCTAssertTrue(fitting.fits)
+        XCTAssertFalse(fitting.lines.joined().contains("\u{2026}"))
+        XCTAssertEqual(fitting.lines.joined(), sentence)
+    }
+
     // MARK: The copy
 
     func testCopyHasFormatSizeAndAttachmentsOfTheFrame() throws {

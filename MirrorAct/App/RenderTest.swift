@@ -287,6 +287,10 @@ enum RenderTest {
             // a comma stays with its word; fullwidth digits break like the kana around them
             block(12, "Mitteilungen, Töne und Haptik", CGRect(x: 480, y: 1290, width: 150, height: 96), lines: 2),
             block(13, "パスワードは数字１２３４５６を含めてください", CGRect(x: 790, y: 1290, width: 222, height: 96), lines: 2),
+            // too long even in the smallest font: the last line that fits ends with an ellipsis
+            block(14, String(repeating: "Diese Übersetzung ist viel länger als der Platz, den das Original auf dem Bildschirm hatte. ",
+                             count: 6),
+                  CGRect(x: 117, y: 1520, width: 936, height: 48)),
             // the upper third is hidden, as under a title bar: nothing may be drawn there
             block(8, "Dieser Absatz ist oben abgeschnitten, als läge eine Titelleiste darüber: nur der sichtbare Teil wird gezeichnet.",
                   CGRect(x: 117, y: 1620, width: 936, height: 180), lines: 3,

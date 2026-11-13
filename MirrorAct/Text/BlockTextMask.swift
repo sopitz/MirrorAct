@@ -22,9 +22,9 @@ struct BlockTextMask {
     let fontSize: CGFloat
     /// lines the text was broken into
     let lineCount: Int
-    /// the text of each drawn line, from the top (with the spaces it ends with)
+    /// the text of each drawn line, from the top (with the spaces it ends with, and the ellipsis)
     let lines: [String]
-    /// false: too long for the block even in the smallest font; the end is cut off
+    /// false: too long for the block even in the smallest font; the last line drawn ends with an ellipsis
     let fits: Bool
 
     /// The font starts at this share of the height of a line of the original. The system
@@ -113,7 +113,11 @@ struct BlockTextMask {
     private struct Layout {
         let text: String
         let fontSize: CGFloat
+        /// the text with its font, as Core Text sets it
+        let string: NSAttributedString
         let framesetter: CTFramesetter
+        /// where a line may end without breaking a word (see `wordKeepingLineEnds`)
+        let lineEnds: Set<Int>
         /// what the text needs when it is broken into lines of the width of the block
         let size: CGSize
         /// all lines fit into the block
@@ -151,7 +155,9 @@ struct BlockTextMask {
             let slack = max(1, lineHeight * 0.04)
             self.text = text
             self.fontSize = fontSize
+            self.string = string
             self.framesetter = framesetter
+            self.lineEnds = lineEnds
             self.size = size
             fitsBox = size.height <= box.height + slack && size.width <= box.width + 0.5
             // A word wider than the block is broken by Core Text between two letters, without
@@ -272,13 +278,44 @@ struct BlockTextMask {
         let used = layout.size.height.rounded(.up)
         let top = layout.fitsBox ? ((boxHeight + used) / 2).rounded() : boxHeight
         let below = -(lineHeight + 16)
-        var frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: layout.fitsBox ? below : 0)
+        var bottom = layout.fitsBox ? below : 0
+        var frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: bottom)
         if !layout.fitsBox, CFArrayGetCount(CTFrameGetLines(frame)) == 0 {
             // Too long: only the lines that fit as a whole are drawn. Here not even one does;
             // then rather a line that is cut off than an empty box over the original.
-            frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: below)
+            bottom = below
+            frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: bottom)
         }
-        CTFrameDraw(frame, context)
+        let text = layout.text as NSString
+        var lines = CTFrameGetLines(frame) as? [CTLine] ?? []
+        var texts = lines.map { line -> String in
+            let range = CTLineGetStringRange(line)
+            return text.substring(with: NSRange(location: range.location, length: range.length))
+        }
+        if !layout.fitsBox, let last = lines.last, let ending = endingWithEllipsis(last, layout, width: CGFloat(width)) {
+            // Too long: the last line that fits ends with an ellipsis, so that the text is seen
+            // to go on instead of just stopping in the middle of a sentence
+            var origins = [CGPoint](repeating: .zero, count: lines.count)
+            CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+            // A line of a text written from the right stays aligned at the right
+            let lastRun = (CTLineGetGlyphRuns(last) as? [CTRun])?.first {
+                let range = CTRunGetStringRange($0)
+                return range.location <= CTLineGetStringRange(last).location
+                    && CTLineGetStringRange(last).location < range.location + range.length
+            }
+            if origins[lines.count - 1].x > 0.5 || lastRun.map({ CTRunGetStatus($0).contains(.rightToLeft) }) == true {
+                origins[lines.count - 1].x = CGFloat(CTLineGetPenOffsetForFlush(ending.line, 1, Double(width)))
+            }
+            lines[lines.count - 1] = ending.line
+            texts[texts.count - 1] = ending.text
+            for (line, origin) in zip(lines, origins) {
+                // the origins are counted from the corner of the frame's rectangle
+                context.textPosition = CGPoint(x: origin.x, y: origin.y + bottom)
+                CTLineDraw(line, context)
+            }
+        } else {
+            CTFrameDraw(frame, context)
+        }
         let pixels = Array(UnsafeBufferPointer(start: memory, count: count))
         // `clip(to:mask:)` takes gray without alpha: the coverage becomes the gray level
         guard let provider = CGDataProvider(data: Data(pixels) as CFData),
@@ -286,12 +323,49 @@ struct BlockTextMask {
                                   space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                                   provider: provider, decode: nil, shouldInterpolate: false,
                                   intent: .defaultIntent) else { return nil }
-        let text = layout.text as NSString
-        let lines = (CTFrameGetLines(frame) as? [CTLine] ?? []).map { line -> String in
-            let range = CTLineGetStringRange(line)
-            return text.substring(with: NSRange(location: range.location, length: range.length))
+        return (pixels, image, texts)
+    }
+
+    /// The last line drawn of a text that goes on after it, ending with an ellipsis: its
+    /// words, as many as fit next to the ellipsis, without the spaces, commas or full stops they
+    /// end with. Only when not even its first word fits, that word is cut off between two
+    /// characters. nil when the line ends the text.
+    private static func endingWithEllipsis(_ last: CTLine, _ layout: Layout,
+                                           width: CGFloat) -> (line: CTLine, text: String)? {
+        let range = CTLineGetStringRange(last)
+        let start = range.location, end = range.location + range.length
+        let string = layout.string, text = string.string as NSString
+        guard start < end, end < text.length else { return nil }
+        let ellipsis = NSAttributedString(string: "\u{2026}", attributes: string.attributes(at: start, effectiveRange: nil))
+        // left out before the ellipsis; closing brackets and quotes stay
+        let trimmed = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+            .subtracting(CharacterSet(charactersIn: ")]}\u{BB}\u{203A}\u{201D}\u{2019}\"'\u{300D}\u{300F}\u{FF09}"))
+
+        /// the line up to `stop` with the ellipsis, when it fits the width
+        func ending(at stop: Int, trimming: Bool) -> (line: CTLine, text: String)? {
+            var stop = stop
+            while trimming, stop > start, let scalar = Unicode.Scalar(text.character(at: stop - 1)),
+                  trimmed.contains(scalar) {
+                stop -= 1
+            }
+            guard stop > start else { return nil }
+            let piece = NSMutableAttributedString(attributedString: string.attributedSubstring(
+                from: NSRange(location: start, length: stop - start)))
+            piece.append(ellipsis)
+            let line = CTLineCreateWithAttributedString(piece as CFAttributedString)
+            guard CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) <= width + 0.5 else { return nil }
+            return (line, piece.string)
         }
-        return (pixels, image, lines)
+        for stop in layout.lineEnds.filter({ $0 > start && $0 <= end }).sorted(by: >) {
+            if let found = ending(at: stop, trimming: true) { return found }
+        }
+        // a single word wider than the line with the ellipsis: cut between two characters
+        var stop = end
+        while stop > start {
+            stop = text.rangeOfComposedCharacterSequence(at: stop - 1).location
+            if let found = ending(at: stop, trimming: false) { return found }
+        }
+        return nil
     }
 
     /// A frame as wide as the block between two heights (y counted upwards from the bottom of the picture)
