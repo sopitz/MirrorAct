@@ -4,6 +4,8 @@ import SwiftUI
 import XCTest
 @testable import MirrorAct
 
+// Showcase exists in debug builds only (the Release build of the tests runs the tracking bench)
+#if DEBUG
 /// The README pictures are drawn at the scale asked for, whatever the displays attached are:
 /// each scale is tried, and on any Mac at least one of them differs from the displays'.
 @MainActor
@@ -185,3 +187,4 @@ private struct Gray {
 
     func column(_ x: Int) -> [UInt8] { (0..<height).map { values[$0 * width + x] } }
 }
+#endif
