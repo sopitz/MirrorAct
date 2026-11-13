@@ -103,8 +103,9 @@ enum TextLayout {
     /// - their left edges or their centres are within `alignment` of the height of a line (or their
     ///   right edges, when either is written from right to left: `isRightToLeft`),
     /// - neither shows only part of its letters, and it does not start a list item ("• …", "1. …":
-    ///   `listMarkerUnits`); the line after the first one of an item may also line up with where
-    ///   the text of the item begins, behind the marker.
+    ///   `listMarkerUnits`; a number only in a list or where the line above ends short of it:
+    ///   `startsItem`); the line after the first one of an item may also line up with where the
+    ///   text of the item begins, behind the marker.
     /// Of several paragraphs it could continue, it continues the last one begun.
     ///
     /// Part of a line may show (something hides the rest: a bar, the edge of the screen or of the
@@ -122,15 +123,10 @@ enum TextLayout {
     /// sure of it (a confidence below `sureConfidence`) or a line next to it is clearly higher;
     /// or lower than `unsurePartHeight`, not sure, and a line next to it is clearly higher.
     static func blocks(_ lines: [RecognizedLine], imageSize: CGSize) -> [TextBlock] {
-        struct Open {
-            var block: TextBlock
-            var first: Measured
-            var last: Measured
-        }
-        var open: [Open] = []
+        var open: [Paragraph] = []
         for (line, measured) in measure(lines, imageSize: imageSize) {
             let match = open.lastIndex { candidate in
-                continues(candidate.last, with: measured)
+                continues(candidate, with: measured)
             }
             if let match {
                 open[match].block.text += separator(after: open[match].block.text) + line.text
@@ -140,12 +136,15 @@ enum TextLayout {
                     open[match].block.confidence = min(open[match].block.confidence ?? confidence, confidence)
                 }
                 open[match].last = measured
+                open[match].left = min(open[match].left, Double(measured.rect.minX))
+                open[match].right = max(open[match].right, Double(measured.rect.maxX))
             } else {
                 let cutOff = measured.isPart ? FrameMotion.top | FrameMotion.bottom : 0
-                open.append(Open(block: TextBlock(text: line.text, rect: line.rect, lineCount: 1,
-                                                  confidence: line.confidence, cutOffEdges: cutOff,
-                                                  isGarbled: measured.isGarbled),
-                                 first: measured, last: measured))
+                open.append(Paragraph(block: TextBlock(text: line.text, rect: line.rect, lineCount: 1,
+                                                       confidence: line.confidence, cutOffEdges: cutOff,
+                                                       isGarbled: measured.isGarbled),
+                                      first: measured, last: measured, left: Double(measured.rect.minX),
+                                      right: Double(measured.rect.maxX)))
             }
         }
         let cutOff = open.map(\.last).filter { $0.isPart && ($0.isCutOff || $0.isGarbled) }
@@ -179,6 +178,9 @@ enum TextLayout {
                                    isCutOff: looksCutOff(line.text, width: width, height: height),
                                    isGarbled: false, isPart: false,
                                    marker: listMarkerUnits(line.text).map { $0 * (size ?? height) },
+                                   numberLead: numberLeadUnits(line.text).map { $0 * (size ?? height) },
+                                   endsWithColon: line.text.unicodeScalars.last { $0 != " " }.map {
+                                       ":\u{FF1A}".unicodeScalars.contains($0) } ?? false,
                                    isRightToLeft: isRightToLeft(line.text)))
         }
         let reach = barReach * Double(max(imageSize.width, imageSize.height))
@@ -224,13 +226,32 @@ enum TextLayout {
         /// (`listMarkerUnits`)
         var marker: Double?
         var startsListItem: Bool { marker != nil }
+        /// when the marker is a number ("3. …"): the width of the marker and the word behind it,
+        /// which the line above must have had no room for if the line is a sentence wrapped there
+        /// (`numberLeadUnits`)
+        var numberLead: Double?
+        /// its text ends with a colon (also a full-width one)
+        var endsWithColon: Bool
         /// most of its letters are of a script written from right to left
         var isRightToLeft: Bool
     }
 
-    /// Whether `line` is the next line of the paragraph whose last line is `last`
-    private static func continues(_ last: Measured, with line: Measured) -> Bool {
-        guard !last.isPart, !line.isPart, !line.startsListItem else { return false }
+    /// A paragraph being put together by `blocks`
+    private struct Paragraph {
+        var block: TextBlock
+        var first: Measured
+        var last: Measured
+        /// the leftmost left edge and the rightmost right edge of its lines, in pixels
+        var left: Double
+        var right: Double
+    }
+
+    /// Whether `line` is the next line of `paragraph`
+    private static func continues(_ paragraph: Paragraph, with line: Measured) -> Bool {
+        let last = paragraph.last
+        guard !last.isPart, !line.isPart, !(line.startsListItem && startsItem(line, after: paragraph)) else {
+            return false
+        }
         if let lastSize = last.size, let size = line.size {
             let limit = min(last.units, line.units) >= shortUnits ? sameSize : sameSizeShort
             let ratio = max(lastSize, size) / min(lastSize, size)
@@ -249,6 +270,23 @@ enum TextLayout {
         var size: Double?
         if let lastSize = last.size, let lineSize = line.size { size = max(lastSize, lineSize) }
         return adjoins(last, below: line, size: size, orBehindMarker: true)
+    }
+
+    /// Whether a line that starts with a list marker (`listMarkerUnits`) starts an item below
+    /// `paragraph` rather than goes on with it. A bullet always does. A number does when the
+    /// paragraph is an item that starts with a number itself, when the line above ends with a
+    /// colon, or when the line above had room for the number and the word behind it
+    /// (`Measured.numberLead`): its right edge (left edge, right to left) lies further than that
+    /// from the rightmost right edge (leftmost left edge) of the paragraph's lines and this one.
+    /// Otherwise it is a sentence of the paragraph wrapped in front of a number ("… ab dem /
+    /// 3. Oktober …").
+    private static func startsItem(_ line: Measured, after paragraph: Paragraph) -> Bool {
+        guard let lead = line.numberLead else { return true }
+        let last = paragraph.last
+        if paragraph.first.numberLead != nil || last.endsWithColon { return true }
+        let room = last.isRightToLeft ? Double(last.rect.minX) - min(paragraph.left, Double(line.rect.minX))
+            : max(paragraph.right, Double(line.rect.maxX)) - Double(last.rect.maxX)
+        return room > lead
     }
 
     /// Whether `lower` lies right below `upper` as the next line of a paragraph would: close below
@@ -418,6 +456,29 @@ enum TextLayout {
         default: return nil
         }
     }
+
+    /// For a line that starts with a number as an item of a list (`listMarkerUnits`): how wide the
+    /// number is, with its end and the space behind it, and the word that follows (up to the next
+    /// space, at most `numberLeadWord`; only its first character when that is a Chinese, Japanese
+    /// or Korean one), in `widthUnits`. nil when the line starts with no number, or with a bullet.
+    static func numberLeadUnits(_ text: String) -> Double? {
+        guard let first = text.unicodeScalars.first, !listBullets.unicodeScalars.contains(first),
+              let marker = listMarkerUnits(text) else { return nil }
+        var word = 0.0
+        var rest = text.unicodeScalars.drop { isListDigit($0) }.dropFirst()
+        if rest.first == " " { rest = rest.dropFirst() }
+        for scalar in rest {
+            if scalar == " " { break }
+            word += widthUnits(of: scalar)
+            if widthUnits(of: scalar) == 1 { break }
+        }
+        return marker + min(word, numberLeadWord)
+    }
+
+    /// The most of the word behind a number that `numberLeadUnits` counts: a line wrapped in front
+    /// of the number had no room for the number alone (the word only matters where a space that
+    /// does not break binds them), and scripts written without spaces (Thai) break inside a run
+    static let numberLeadWord = 2.0
 
     /// Signs that start an item of a list (`listMarkerUnits`)
     static let listBullets = "•◦▪‣●○■□–—*・-"

@@ -109,6 +109,66 @@ final class TextLayoutJoinTests: XCTestCase {
         ])
     }
 
+    /// Running text that wraps in front of a number with a full stop (a date, an ordinal, a number
+    /// that ends a sentence): the line above runs to the right edge of the paragraph and had no
+    /// room for the number, so the number starts no item (Helvetica Neue, 17 points, in columns
+    /// 240 and 260 points wide)
+    func testANumberThatAWrappedSentenceGoesOnWithStartsNoItem() {
+        let date = [
+            line("Die Ausstellung im", 48, 130, 422, 53),
+            line("Stadtmuseum wird nach langer", 48, 192, 714, 58),
+            line("Pause wieder eröffnet. Die", 48, 249, 599, 53),
+            line("Leitung lädt alle Bürger ab dem", 48, 312, 714, 58),
+            line("3. Oktober 2026 zu einem", 43, 374, 590, 58),
+            line("Rundgang durch die neuen", 48, 436, 619, 53),
+            line("Räume ein.", 48, 498, 264, 49),
+        ]
+        XCTAssertEqual(TextLayout.blocks(date, imageSize: Self.iPhone).map(\.text), [
+            "Die Ausstellung im Stadtmuseum wird nach langer Pause wieder eröffnet. Die Leitung lädt alle "
+                + "Bürger ab dem 3. Oktober 2026 zu einem Rundgang durch die neuen Räume ein.",
+        ])
+        let ordinal = [
+            line("Das Gebäude wurde nach dem", 48, 619, 710, 58),
+            line("2. Weltkrieg neu aufgebaut und", 43, 676, 719, 72),
+            line("beherbergt heute Büros, eine", 48, 734, 671, 72),
+            line("Bibliothek und im 5. Stock links", 48, 791, 724, 68),
+            line("eine kleine Arztpraxis für Kinder.", 43, 859, 739, 67),
+        ]
+        XCTAssertEqual(TextLayout.blocks(ordinal, imageSize: Self.iPhone).count, 1)
+        let english = [
+            line("The museum reopens next week.", 43, 130, 763, 58),
+            line("Tickets for adults cost 12 euros,", 48, 192, 734, 58),
+            line("and entry is free for children under", 48, 245, 786, 62),
+            line("3. Then there is the café on the", 43, 312, 715, 53),
+            line("roof, open daily from ten.", 43, 374, 580, 58),
+        ]
+        XCTAssertEqual(TextLayout.blocks(english, imageSize: Self.iPhone).map(\.text), [
+            "The museum reopens next week. Tickets for adults cost 12 euros, and entry is free for children "
+                + "under 3. Then there is the café on the roof, open daily from ten.",
+        ])
+    }
+
+    /// A numbered list below a line that ends in a colon, or below a line that ends well short of
+    /// the paragraph and had room for the number: the number starts the first item
+    func testANumberBelowALineThatEndsStartsAnItem() {
+        let items = [
+            line("1. Bring a warm jacket if you plan to stay", 44, 1733, 916, 56),
+            line("outside after sunset.", 96, 1807, 471, 44),
+            line("2. You can change your plan at any time from", 48, 1881, 1023, 55),
+            line("the account page.", 98, 1951, 421, 55),
+        ]
+        let expected = ["1. Bring a warm jacket if you plan to stay outside after sunset.",
+                        "2. You can change your plan at any time from the account page."]
+        let colon = [
+            line("Delivery usually takes two to three business", 44, 1585, 1010, 56),
+            line("days. Before you come, please note:", 44, 1659, 1010, 56),
+        ]
+        XCTAssertEqual(TextLayout.blocks(colon + items, imageSize: Self.iPhone).map(\.text),
+                       ["Delivery usually takes two to three business days. Before you come, please note:"] + expected)
+        let short = [line("Good to know", 44, 1659, 290, 56)]
+        XCTAssertEqual(TextLayout.blocks(short + items, imageSize: Self.iPhone).map(\.text), ["Good to know"] + expected)
+    }
+
     /// Chinese and Japanese lists: Vision reads a bullet without the space behind it, and
     /// numbers end in a full-width full stop (PingFang SC on an iPhone, SF on an iPad)
     func testItemsOfChineseAndJapaneseListsAreSeparate() {
@@ -197,6 +257,13 @@ final class TextLayoutJoinTests: XCTestCase {
         XCTAssertNotNil(TextLayout.listMarkerUnits("4."))
         for text in ["1.5 kg", "10:30", "2024. Das", "•", "•Brot", "-5 °C", "Seite 1. Weiter", "1,5", ""] {
             XCTAssertNil(TextLayout.listMarkerUnits(text), text)
+            XCTAssertNil(TextLayout.numberLeadUnits(text), text)
         }
+        // the number, its end, the space and at most `numberLeadWord` of the word behind it
+        XCTAssertEqual(try XCTUnwrap(TextLayout.numberLeadUnits("3. Oktober 2026")), 1.13 + 2, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(TextLayout.numberLeadUnits("2) A list")), 1.13 + 0.66, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(TextLayout.numberLeadUnits("1．チケット")), 1.55 + 1, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(TextLayout.numberLeadUnits("4.")), 0.85, accuracy: 1e-9)
+        XCTAssertNil(TextLayout.numberLeadUnits("• Brot"))
     }
 }
