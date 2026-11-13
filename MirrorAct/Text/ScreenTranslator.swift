@@ -56,14 +56,24 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
 
     /// how high the status bar of the device is, which is not translated
     private let statusBar: TextLayout.StatusBar
+    /// seconds of a steady clock, for the tracker
+    private let clock: @Sendable () -> TimeInterval
+    /// waits the given seconds before the texts that failed are offered again
+    private let pause: @Sendable (TimeInterval) async -> Void
 
-    init(sink: FrameSink, statusBar: TextLayout.StatusBar = .heightOfPicture) {
+    /// - Parameters:
+    ///   - clock, pause: the tests hand in a clock of their own, so that they need not wait
+    init(sink: FrameSink, statusBar: TextLayout.StatusBar = .heightOfPicture,
+         clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         pause: @escaping @Sendable (TimeInterval) async -> Void = { seconds in
+             try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+         }) {
         self.sink = sink
         self.statusBar = statusBar
+        self.clock = clock
+        self.pause = pause
     }
 
-    /// seconds of a steady clock, for the tracker
-    private static var clock: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     private func locked<T>(_ body: () -> T) -> T {
         state.lock()
@@ -185,7 +195,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             state.unlock()
             return pixelBuffer
         }
-        let update = tracker.advance(thumbnail.image, scale: thumbnail.scale, time: Self.clock)
+        let update = tracker.advance(thumbnail.image, scale: thumbnail.scale, time: clock())
         source = pixelBuffer
         #if DEBUG
         debugPlaced = update.placed
@@ -205,7 +215,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         for await _ in wakeups {
             while !Task.isCancelled {
                 guard let due = locked({ isCurrent(turn) ? tracker.recognitionDue : nil }) else { break }
-                let wait = due - Self.clock
+                let wait = due - clock()
                 if wait > 0 {
                     // in short steps: scrolling can make the reading due at once
                     try? await Task.sleep(nanoseconds: UInt64(min(wait, 0.015) * 1_000_000_000))
@@ -219,7 +229,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     /// One pass; false = nothing was started
     private func recognizeOnce(turn: Int) async -> Bool {
         let started: (frame: CVPixelBuffer, request: RecognitionRequest)? = locked {
-            guard isCurrent(turn), let frame = source, let request = tracker.beginRecognition(time: Self.clock) else {
+            guard isCurrent(turn), let frame = source, let request = tracker.beginRecognition(time: clock()) else {
                 return nil
             }
             return (frame, request)
@@ -239,7 +249,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         let blocks = Self.recognizedBlocks(from: lines, in: frame, areas: areas, statusBar: statusBar)
         let finished: (wake: AsyncStream<Void>.Continuation?, known: [TrackedBlock])? = locked {
             guard isCurrent(turn) else { return nil }
-            tracker.finishRecognition(request, blocks: blocks, time: Self.clock)
+            tracker.finishRecognition(request, blocks: blocks, time: clock())
             return (wakeTranslation, tracker.blocks)
         }
         guard let finished else { return false }
@@ -293,7 +303,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             while !Task.isCancelled {
                 if engine.prefersSettledText { await waitForRest(turn: turn) }
                 let texts = locked {
-                    isCurrent(turn) ? tracker.textsAwaitingTranslation(limit: Self.batchSize, time: Self.clock) : []
+                    isCurrent(turn) ? tracker.textsAwaitingTranslation(limit: Self.batchSize, time: clock()) : []
                 }
                 if texts.isEmpty { break }
                 do {
@@ -307,7 +317,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
                                 tracker.setTranslation(translation, for: text)
                             } else {
                                 // "not now" (a language is still loading …): offered again after a pause
-                                tracker.translationFailed(for: text, time: Self.clock)
+                                tracker.translationFailed(for: text, time: clock())
                                 postponed = true
                             }
                         }
@@ -321,7 +331,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
                 } catch {
                     let stillOn: Bool = locked {
                         guard isCurrent(turn) else { return false }
-                        for text in texts { tracker.translationFailed(for: text, time: Self.clock) }
+                        for text in texts { tracker.translationFailed(for: text, time: clock()) }
                         return true
                     }
                     if Task.isCancelled || !stillOn { return }
@@ -334,9 +344,9 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
 
     /// Waits until the picture has stopped moving, but not forever.
     private func waitForRest(turn: Int) async {
-        let start = Self.clock
-        while !Task.isCancelled, Self.clock - start < Self.longestWaitForRest {
-            if locked({ !isCurrent(turn) || tracker.isSettled(at: Self.clock) }) { return }
+        let start = clock()
+        while !Task.isCancelled, clock() - start < Self.longestWaitForRest {
+            if locked({ !isCurrent(turn) || tracker.isSettled(at: clock()) }) { return }
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
     }
@@ -349,7 +359,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             // a failure of an earlier turn neither shows nor turns off the one that is on now
             guard locked({ isCurrent(turn) }) else { return }
             // the same notice at most every ten seconds
-            let now = Self.clock
+            let now = clock()
             if lastNotice?.text != message || now - (lastNotice?.time ?? 0) > 10 {
                 lastNotice = (message, now)
                 onMessage?(message)
@@ -366,9 +376,10 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     /// - Parameter seconds: a longer wait the engine asked for (it sends nothing before then)
     private func wakeTranslationLater(turn: Int, texts: [String], after seconds: TimeInterval? = nil) {
         let next = locked { tracker.nextRetry(of: texts) }
-        let retry = max(next.map { $0 - Self.clock } ?? OverlayTracker.Configuration().retryDelay, seconds ?? 0, 0)
+        let retry = max(next.map { $0 - clock() } ?? OverlayTracker.Configuration().retryDelay, seconds ?? 0, 0)
+        let pause = self.pause
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64((retry + 0.2) * 1_000_000_000))
+            await pause(retry + 0.2)
             guard let self else { return }
             let wake = self.locked { self.isCurrent(turn) ? self.wakeTranslation : nil }
             wake?.yield()
