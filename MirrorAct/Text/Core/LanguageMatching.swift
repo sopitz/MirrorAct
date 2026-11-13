@@ -459,9 +459,12 @@ enum LanguageMatching {
     /// in the language of `before`. The letters kept are the most any request had for the language.
     /// When nothing at all is known, the screen is taken to be in `guess` (the most likely
     /// language of its words, see `screenGuess`) with 0 letters: its texts can be translated
-    /// where the translator has the language at hand, and it is never asked for.
+    /// where the translator has the language at hand, and it is never asked for. Such a guess is
+    /// not kept: a `before` with 0 letters counts as nothing known, so the next request guesses
+    /// again, and any language it decides replaces the guess.
     static func screenLanguage(of findings: [Finding], before: ScreenLanguage?,
                                guess: Locale.Language? = nil) -> ScreenLanguage? {
+        let before = before.flatMap { $0.letters > 0 ? $0 : nil }
         var languages: [(language: Locale.Language, letters: Int)] = []
         for finding in findings {
             guard let language = finding.decided, !isUndetermined(language) else { continue }
@@ -550,7 +553,9 @@ enum LanguageMatching {
         /// A text is translated from its own language (`decided`) when it stands apart, when it
         /// is in the language of the screen anyway, or when the screen's language is not known;
         /// otherwise from the language of the screen; without either, from its guess if it has
-        /// `lettersToTrustAGuess` letters in words; otherwise it is postponed.
+        /// `lettersToTrustAGuess` letters in words; otherwise it is postponed. A text that would
+        /// be in the target language only because the screen's language is a guess (0 letters)
+        /// is postponed as well, not left as it is.
         init(findings: [Finding], screen: ScreenLanguage?, target: Locale.Language, lists: [[Locale.Language]]) {
             var positions: [String: Int] = [:]
             var strangers: [(language: Locale.Language, letters: Int)] = []
@@ -573,7 +578,13 @@ enum LanguageMatching {
                     continue
                 }
                 if LanguageMatching.sameLanguage(language, target) {
-                    unchanged.append(index)
+                    // "Nothing to translate" holds for good, the caller does not ask again: not
+                    // on the strength of a screen language that is only guessed (0 letters)
+                    if own == nil, let screen, screen.letters == 0 {
+                        postponed.append(index)
+                    } else {
+                        unchanged.append(index)
+                    }
                 } else if let source = LanguageMatching.match(language, inFirstOf: lists) {
                     let key = LanguageMatching.key(source)
                     let position: Int

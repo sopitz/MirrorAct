@@ -568,6 +568,36 @@ final class LanguageMatchingTests: XCTestCase {
                        screen("fr", letters: LanguageMatching.lettersToChangeTheScreensLanguage))
     }
 
+    /// Translate is turned on while only "Apps" can be read: the screen is guessed to be English
+    /// with nothing behind it. The guess is not kept: the next request guesses again, and any
+    /// language it decides replaces it. And a guess alone never says that a text is in the target
+    /// language already (the caller would not ask for it again): such a text waits.
+    func testAGuessedScreenLanguageIsNotKept() {
+        let guessed = screen("en", letters: 0)
+        // "Verbundene Geräte": 16 letters, far from enough to change a screen's language
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 16)], before: guessed),
+                       screen("de", letters: 16))
+        // nothing decided: guessed again
+        let undecided = [LanguageMatching.Finding(guess: language("de"), letters: 10)]
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: undecided, before: guessed, guess: language("de")),
+                       screen("de", letters: 0))
+        XCTAssertNil(LanguageMatching.screenLanguage(of: undecided, before: guessed))
+        // "Apps" on the guessed English screen, into English: waits
+        let apps = [LanguageMatching.Finding(guess: language("en"), letters: 4)]
+        let plan = LanguageMatching.Plan(findings: apps, screen: guessed, target: language("en"), supported: supported)
+        XCTAssertEqual(plan.postponed, [0])
+        XCTAssertEqual(plan.unchanged, [])
+        XCTAssertTrue(plan.groups.isEmpty)
+        // on a screen known to be English it stays as it is
+        let known = LanguageMatching.Plan(findings: apps, screen: screen("en", letters: 30), target: language("en"),
+                                          supported: supported)
+        XCTAssertEqual(known.unchanged, [0])
+        // into another language it is translated from the guess, without asking for it
+        let german = LanguageMatching.Plan(findings: apps, screen: guessed, target: language("de"), supported: supported)
+        XCTAssertEqual(german.groups.map(\.indices), [[0]])
+        XCTAssertEqual(german.groups.map(\.mayAskForTheLanguage), [false])
+    }
+
     // MARK: A request
 
     func testTextsAreGroupedByLanguageInTheOrderOfTheRequest() {

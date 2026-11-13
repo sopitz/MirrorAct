@@ -1101,6 +1101,29 @@ final class AppleTranslationEngineTests: XCTestCase {
         }
     }
 
+    /// Translate goes on while only "Apps" can be read, and the German labels come in the next
+    /// frames: none of them comes back as it is (which the caller would keep for good), whatever
+    /// the first word was taken for
+    func testAGuessOnTheFirstFrameLeavesNoTextAsItIs() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        // no session is served: the jobs are given up soon
+        engine.pickUpLimit = 0.2
+        let client = AppleTranslationClient(engine: engine)
+        let requests = [["Apps"], ["Apps", "Verbundene Geräte", "Akku"], ["Dunkles Design", "Helligkeit"]]
+        let german: Set<String> = ["Verbundene Geräte", "Akku", "Dunkles Design", "Helligkeit"]
+        for texts in requests {
+            let translations = try await client.translate(texts, into: language("en"))
+            for (text, translation) in zip(texts, translations) where german.contains(text) {
+                XCTAssertNil(translation, text)
+            }
+        }
+        // they were meant for the German pair
+        XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["de"])
+        client.cancel()
+    }
+
     /// A paragraph in another language keeps its own pair, and a screen in that language may
     /// have it loaded; a single word of it may not
     func testOnlyEnoughTextAsksForALanguageThatIsNotOnThisMac() async throws {
