@@ -95,8 +95,8 @@ final class AppleTranslationEngine: ObservableObject {
     private var declined: Set<String> = []
     /// whether macOS can translate a pair at all
     private var pairSupport: [String: Bool] = [:]
-    /// whether Apple Intelligence is on; nil = not asked yet
-    private var appleIntelligence: Bool?
+    /// what this Mac says about Apple Intelligence; nil = not asked yet
+    private var appleIntelligence: AppleIntelligence?
 
     /// pairs whose languages failed to load, and when they may be tried again
     private var blockedUntil: [String: TimeInterval] = [:]
@@ -134,10 +134,11 @@ final class AppleTranslationEngine: ObservableObject {
             throw TranslationFailure(message: String(localized: "Translation into \(language) isn’t available on this Mac"),
                                      isPermanent: true)
         }
-        if !languages.isOnDevice(target), !isAppleIntelligenceOn() {
-            let language = Self.fullName(of: target)
-            throw TranslationFailure(message: String(localized: "Translating into \(language) needs Apple Intelligence – turn it on in System Settings, or choose another language"),
-                                     isPermanent: true)
+        if !languages.isOnDevice(target) {
+            let state = appleIntelligenceState()
+            guard state == .on else {
+                throw TranslationFailure(message: Self.targetNeedsAppleIntelligenceNotice(target, state), isPermanent: true)
+            }
         }
         // telling the languages apart takes a moment: not on the main thread
         let all = languages.all
@@ -159,12 +160,15 @@ final class AppleTranslationEngine: ObservableObject {
             let strategy = languages.strategy(from: group.source, to: target)
             client.pairs.insert(pair)
             let groupTexts = group.indices.map { texts[$0] }
-            if strategy == .highFidelity, !isAppleIntelligenceOn() {
-                // the language of these texts only the models that need Apple Intelligence know:
-                // they stay as they are
-                group.place(groupTexts.map { Optional($0) }, in: &results)
-                noteNeedsAppleIntelligence(group.source, target, to: [client])
-                continue
+            if strategy == .highFidelity {
+                let state = appleIntelligenceState()
+                guard state == .on else {
+                    // the language of these texts only the models that need Apple Intelligence
+                    // know: they stay as they are
+                    group.place(groupTexts.map { Optional($0) }, in: &results)
+                    noteNeedsAppleIntelligence(group.source, target, state, to: [client])
+                    continue
+                }
             }
             guard let translatable = await isSupported(pair, from: group.source, to: target, with: strategy) else {
                 noteNoAnswer(to: client)
@@ -292,12 +296,16 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     /// Asked once per turn of translating: the user may turn Apple Intelligence on meanwhile
-    private func isAppleIntelligenceOn() -> Bool {
+    private func appleIntelligenceState() -> AppleIntelligence {
         if let known = appleIntelligence { return known }
-        let isOn = availability.appleIntelligenceIsOn()
-        appleIntelligence = isOn
-        if !isOn { Log.info("Translation: Apple Intelligence is off; languages only its models know are left alone") }
-        return isOn
+        let state = availability.appleIntelligence()
+        appleIntelligence = state
+        switch state {
+        case .on: break
+        case .off: Log.info("Translation: Apple Intelligence is off; languages only its models know are left alone")
+        case .notOnThisMac: Log.info("Translation: this Mac has no Apple Intelligence; languages only its models know are left alone")
+        }
+        return state
     }
 
     /// The answer to a question to macOS, or nil when it takes longer than `questionLimit`: a
@@ -773,11 +781,27 @@ final class AppleTranslationEngine: ObservableObject {
     }
 
     private func noteNeedsAppleIntelligence(_ source: Locale.Language, _ target: Locale.Language,
-                                            to receivers: [AppleTranslationClient]) {
-        let sourceName = Self.fullName(of: source), targetName = Self.fullName(of: target)
+                                            _ state: AppleIntelligence, to receivers: [AppleTranslationClient]) {
         note("needs Apple Intelligence " + Self.pair(source, target),
-             String(localized: "Translating from \(sourceName) into \(targetName) needs Apple Intelligence – turn it on in System Settings"),
-             to: receivers)
+             Self.sourceNeedsAppleIntelligenceNotice(source, target, state), to: receivers)
+    }
+
+    /// Why nothing is translated into `target`: Apple Intelligence is off, or this Mac cannot
+    /// run it, so that there is nothing to turn on
+    static func targetNeedsAppleIntelligenceNotice(_ target: Locale.Language, _ state: AppleIntelligence) -> String {
+        let language = fullName(of: target)
+        return state == .notOnThisMac
+            ? String(localized: "Translating into \(language) needs Apple Intelligence, which this Mac doesn’t support – choose another language")
+            : String(localized: "Translating into \(language) needs Apple Intelligence – turn it on in System Settings, or choose another language")
+    }
+
+    /// Why texts in `source` stay as they are
+    static func sourceNeedsAppleIntelligenceNotice(_ source: Locale.Language, _ target: Locale.Language,
+                                                   _ state: AppleIntelligence) -> String {
+        let sourceName = fullName(of: source), targetName = fullName(of: target)
+        return state == .notOnThisMac
+            ? String(localized: "Translating from \(sourceName) into \(targetName) needs Apple Intelligence, which this Mac doesn’t support")
+            : String(localized: "Translating from \(sourceName) into \(targetName) needs Apple Intelligence – turn it on in System Settings")
     }
 
     /// "Danish", "English (India)": the region where the identifier names one, as macOS does in
@@ -995,8 +1019,9 @@ struct AppleTranslationAvailability {
     var languages: () async -> AppleTranslationLanguages
     var status: (_ source: Locale.Language, _ target: Locale.Language,
                  _ strategy: AppleTranslationStrategy) async -> LanguageAvailability.Status
-    /// whether Apple Intelligence is on, which the models of `.highFidelity` need for many languages
-    var appleIntelligenceIsOn: () -> Bool
+    /// what this Mac says about Apple Intelligence, which the models of `.highFidelity` need for
+    /// many languages
+    var appleIntelligence: () -> AppleIntelligence
 
     /// the answers of macOS
     static var system: AppleTranslationAvailability {
@@ -1006,19 +1031,15 @@ struct AppleTranslationAvailability {
                 return await LanguageAvailability(preferredStrategy: strategy.framework).status(from: source, to: target)
             }
             return await LanguageAvailability().status(from: source, to: target)
-        }, appleIntelligenceIsOn: { systemAppleIntelligenceIsOn() })
+        }, appleIntelligence: { systemAppleIntelligence() })
     }
 
     /// Translation says nothing about it: what Foundation Models says about the language model
     /// of Apple Intelligence stands in. Its models still on their way count as on, macOS says
-    /// then what is missing.
-    static func systemAppleIntelligenceIsOn() -> Bool {
-        guard #available(macOS 26.4, *) else { return false }
-        if case .unavailable(let reason) = SystemLanguageModel.default.availability,
-           reason == .appleIntelligenceNotEnabled || reason == .deviceNotEligible {
-            return false
-        }
-        return true
+    /// then what is missing. (Before macOS 26.4 Translation has no models that need it.)
+    static func systemAppleIntelligence() -> AppleIntelligence {
+        guard #available(macOS 26.4, *) else { return .notOnThisMac }
+        return AppleIntelligence(SystemLanguageModel.default.availability)
     }
 
     /// From macOS 26.4 on, a LanguageAvailability without a strategy answers for `.highFidelity`:
@@ -1030,6 +1051,24 @@ struct AppleTranslationAvailability {
             return AppleTranslationLanguages(onDevice: onDevice, all: all)
         }
         return AppleTranslationLanguages(await LanguageAvailability().supportedLanguages)
+    }
+}
+
+/// Whether the models of Translation that need Apple Intelligence can be used on this Mac
+enum AppleIntelligence: Equatable {
+    case on
+    /// this Mac can run it, and it can be turned on in System Settings
+    case off
+    /// this Mac cannot run it: there is nothing to turn on
+    case notOnThisMac
+
+    @available(macOS 26.0, *)
+    init(_ availability: SystemLanguageModel.Availability) {
+        switch availability {
+        case .unavailable(.deviceNotEligible): self = .notOnThisMac
+        case .unavailable(.appleIntelligenceNotEnabled): self = .off
+        default: self = .on
+        }
     }
 }
 

@@ -255,7 +255,8 @@ final class AppleTranslationEngineTests: XCTestCase {
     /// Without Apple Intelligence a pair that only its models know is not asked for: macOS would
     /// show "Apple Intelligence Required", and its calls would not return before the user closes
     /// that. A target that needs it ends the turn with a word; texts in a language that needs it
-    /// stay as they are. Before macOS 26.4 there are no such pairs.
+    /// stay as they are. Before macOS 26.4 there are no such pairs. The word says to turn Apple
+    /// Intelligence on only where this Mac can run it.
     func testWithoutAppleIntelligenceItsModelsAreNotAskedFor() async throws {
         enum Outcome: Equatable {
             case host(target: String, strategy: AppleTranslationStrategy)
@@ -282,10 +283,10 @@ final class AppleTranslationEngineTests: XCTestCase {
             (oneKind, "pt-PT", true, Self.english, .host(target: "pt-PT", strategy: .lowLatency)),
             (oneKind, "de", false, Self.danish, .host(target: "de", strategy: .lowLatency)),
         ]
-        for entry in cases {
-            let label = "\(entry.wanted) chosen: \(entry.chosen), \(entry.lists.onDevice.count) on the device"
+        for (entry, state) in cases.flatMap({ entry in [AppleIntelligence.off, .notOnThisMac].map { (entry, $0) } }) {
+            let label = "\(entry.wanted) chosen: \(entry.chosen), \(entry.lists.onDevice.count) on the device, \(state)"
             let macOS = FakeMacOS(onDevice: entry.lists.onDevice, all: entry.lists.all)
-            macOS.appleIntelligenceIsOn = false
+            macOS.appleIntelligence = state
             let engine = engine(answeredBy: macOS)
             let client = AppleTranslationClient(engine: engine, targetIsChosen: entry.chosen)
             let notices = Box<[String]>([])
@@ -304,14 +305,17 @@ final class AppleTranslationEngineTests: XCTestCase {
                     XCTFail("translated: \(label)")
                 } catch let failure as TranslationFailure {
                     XCTAssertTrue(failure.isPermanent, label)
-                    XCTAssertFalse(failure.message.isEmpty, label)
+                    XCTAssertEqual(failure.message,
+                                   AppleTranslationEngine.targetNeedsAppleIntelligenceNotice(language(entry.wanted), state),
+                                   label)
                 }
                 XCTAssertTrue(macOS.statusAsked.isEmpty, label)
                 client.cancel()
             case .leftAsTheyAre:
                 let translations = try await request.value
                 XCTAssertEqual(translations, [entry.text], label)
-                XCTAssertEqual(notices.value.count, 1, label)
+                XCTAssertEqual(notices.value, [AppleTranslationEngine.sourceNeedsAppleIntelligenceNotice(
+                    language("da"), language(entry.wanted), state)], label)
                 XCTAssertTrue(macOS.statusAsked.isEmpty, label)
                 // once per turn: neither asked nor told again
                 let again = try await client.translate([entry.text], into: language(entry.wanted))
@@ -328,16 +332,33 @@ final class AppleTranslationEngineTests: XCTestCase {
         }
     }
 
+    /// A Mac that cannot run Apple Intelligence is not told to turn it on
+    func testAMacWithoutAppleIntelligenceIsNotToldToTurnItOn() throws {
+        guard #available(macOS 26.0, *) else { throw XCTSkip("no Foundation Models before macOS 26") }
+        XCTAssertEqual(AppleIntelligence(.available), .on)
+        // its models are on their way: macOS says what is missing
+        XCTAssertEqual(AppleIntelligence(.unavailable(.modelNotReady)), .on)
+        XCTAssertEqual(AppleIntelligence(.unavailable(.appleIntelligenceNotEnabled)), .off)
+        XCTAssertEqual(AppleIntelligence(.unavailable(.deviceNotEligible)), .notOnThisMac)
+        let danish = language("da"), german = language("de")
+        for notice in [{ AppleTranslationEngine.targetNeedsAppleIntelligenceNotice(danish, $0) },
+                       { AppleTranslationEngine.sourceNeedsAppleIntelligenceNotice(danish, german, $0) }] {
+            XCTAssertNotEqual(notice(.off), notice(.notOnThisMac))
+            XCTAssertFalse(notice(.off).isEmpty)
+            XCTAssertFalse(notice(.notOnThisMac).isEmpty)
+        }
+    }
+
     /// Turned on in the meantime: the next turn of translating asks again
     func testANewTurnAsksAgainWhetherAppleIntelligenceIsOn() async throws {
         let macOS = FakeMacOS(onDevice: Self.onDevice, all: Self.onDevice + Self.onlyWithAppleIntelligence)
-        macOS.appleIntelligenceIsOn = false
+        macOS.appleIntelligence = .off
         let engine = engine(answeredBy: macOS)
         let first = AppleTranslationClient(engine: engine)
         let unchanged = try await first.translate([Self.danish], into: language("de"))
         XCTAssertEqual(unchanged, [Self.danish])
         first.cancel()
-        macOS.appleIntelligenceIsOn = true
+        macOS.appleIntelligence = .on
         let second = AppleTranslationClient(engine: engine)
         let request = Task { try await second.translate([Self.danish], into: self.language("de")) }
         try await waitUntil { engine.hosts.count == 1 }
@@ -809,7 +830,7 @@ private final class FakeMacOS {
     private(set) var asked: [UUID] = []
     /// what the status of a pair was asked for
     private(set) var statusAsked: [(source: String, strategy: AppleTranslationStrategy)] = []
-    var appleIntelligenceIsOn = true
+    var appleIntelligence = AppleIntelligence.on
     private(set) var appleIntelligenceAsked = 0
     private var installed: Set<String> = []
     private var everything = false
@@ -842,9 +863,9 @@ private final class FakeMacOS {
                 await withCheckedContinuation { self.heldStatus = $0 }
             }
             return self.status(of: source)
-        }, appleIntelligenceIsOn: {
+        }, appleIntelligence: {
             self.appleIntelligenceAsked += 1
-            return self.appleIntelligenceIsOn
+            return self.appleIntelligence
         })
     }
 
