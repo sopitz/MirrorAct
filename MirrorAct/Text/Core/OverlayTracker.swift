@@ -929,7 +929,7 @@ final class OverlayTracker {
             return time - lost > configuration.lostLifetime
         }
         // (a block found again where a later reading lies)
-        dropOverlaps()
+        dropOverlaps(attempts: 0, time: time)
     }
 
     /// Where a block may have gone, the likeliest first: with the scrolling area it moves with,
@@ -1213,6 +1213,9 @@ final class OverlayTracker {
         var readNow: Set<Int> = []
         // (the picture rested all the while: what is cut off by an edge of the view stays so)
         let atRest = pass.startedAtRest && lastMotion < pass.startTime
+        // (a place this pass asks to read again counts one more attempt when the pass itself read
+        // only places to read again)
+        let rereadAttempt = (pass.rereadAttempts ?? -1) + 1
         // (what reaches beyond the frame by more than its size is no paragraph of it)
         let reach = CGRect(x: -Double(current.width), y: -Double(current.height), width: 3 * Double(current.width),
                            height: 3 * Double(current.height))
@@ -1259,7 +1262,7 @@ final class OverlayTracker {
             guard var block = made else { continue }
             closeEdgesInView(&block, rect: rect, atRest: atRest)
             let index: Int
-            if let known = absorb(&block) {
+            if let known = absorb(&block, attempts: rereadAttempt, time: time) {
                 index = known
             } else {
                 tracked.append(block)
@@ -1288,7 +1291,7 @@ final class OverlayTracker {
             }
             return gone
         }
-        dropOverlaps()
+        dropOverlaps(attempts: rereadAttempt, time: time)
         askToReadParagraphsTogether(taken, time: time)
         if pass.whileMovingFast, let bounds = pass.probes.currentBounds {
             plan.add(UnreadArea(rect: bounds.intersection(CGRect(x: 0, y: 0, width: current.width, height: current.height)),
@@ -1549,9 +1552,14 @@ final class OverlayTracker {
     /// both stay (their boxes overlap: a label in a paragraph's box, a tall line over the one
     /// below it); `TranslationCompositor.drawnBlocks` decides what is drawn. The one that stays
     /// shows the translation of the other until it has its own, when their texts are related.
-    private func dropOverlaps() {
+    /// A later reading that lies inside a larger block gives way to it (one word of a paragraph,
+    /// read while its place was not read whole), and a block that gives way to a reading that
+    /// covers only a part of it: in both cases the larger place is read again
+    /// (`askToReadPlace`, `attempts`).
+    private func dropOverlaps(attempts: Int, time: TimeInterval) {
         var visible: [CGRect?] = tracked.map { $0.lostSince == nil ? visibleRect(of: $0) : nil }
         var dropped = Set<Int>()
+        var places: [CGRect] = []
         for first in tracked.indices {
             for second in tracked.indices where second > first {
                 guard !dropped.contains(first), !dropped.contains(second),
@@ -1571,7 +1579,21 @@ final class OverlayTracker {
                     // (read apart in one pass: two texts)
                     continue
                 } else {
-                    loser = tracked[first].readAt < tracked[second].readAt ? first : second
+                    let older = tracked[first].readAt < tracked[second].readAt ? first : second
+                    let newer = older == first ? second : first
+                    let olderArea = older == first ? a.width * a.height : b.width * b.height
+                    let newerArea = older == first ? b.width * b.height : a.width * a.height
+                    if shared >= configuration.containedShare * newerArea, newerArea < olderArea {
+                        // (a small reading inside a larger block does not stand in for it)
+                        loser = newer
+                        places.append(thumbnailRect(of: tracked[older]))
+                    } else {
+                        loser = older
+                        if shared < configuration.containedShare * olderArea {
+                            // (the rest of it was not read: what is there now is read whole)
+                            places.append(thumbnailRect(of: tracked[older]).union(thumbnailRect(of: tracked[newer])))
+                        }
+                    }
                 }
                 let winner = loser == first ? second : first
                 if related, shownTranslation(of: tracked[winner]) == nil {
@@ -1581,8 +1603,23 @@ final class OverlayTracker {
                 visible[loser] = nil
             }
         }
+        for place in places {
+            askToReadPlace(place, attempts: attempts, time: time)
+        }
         guard !dropped.isEmpty else { return }
         tracked = tracked.indices.filter { !dropped.contains($0) }.map { tracked[$0] }
+    }
+
+    /// The place of a block that a reading took over without reading all of it is read again
+    /// whole, as a reread (`Configuration.maxRereads` times at most for a place): no translated
+    /// block is lost for good to a reading of a part of its place
+    private func askToReadPlace(_ rect: CGRect, attempts: Int, time: TimeInterval) {
+        guard attempts < configuration.maxRereads, let previous else { return }
+        let air = configuration.rereadAir
+        let place = rect.insetBy(dx: -air, dy: -air)
+            .intersection(CGRect(x: 0, y: 0, width: previous.width, height: previous.height))
+        guard !place.isNull, place.width >= 1, place.height >= 1 else { return }
+        plan.add(UnreadArea(rect: place, kind: .reread, since: time, attempts: attempts))
     }
 
     /// Two pieces of text may be lines of one paragraph: right above each other, with lines of
@@ -1680,8 +1717,9 @@ final class OverlayTracker {
     /// nearly) keeps the block and its translation; related text keeps the translation shown
     /// as stale until the new one is there; other text replaces it. A part of a known paragraph
     /// read alone is left out (the paragraph took it). Returns the index of the block that took
-    /// it, nil when it is a new block (then it has got an id).
-    private func absorb(_ block: inout Block) -> Int? {
+    /// it, nil when it is a new block (then it has got an id). A reading that takes the place of
+    /// a block whose place it does not cover has that place read again (`askToReadPlace`).
+    private func absorb(_ block: inout Block, attempts: Int, time: TimeInterval) -> Int? {
         let rect = thumbnailRect(of: block)
         var match: Int?
         var bestOverlap = 0.0
@@ -1778,6 +1816,12 @@ final class OverlayTracker {
             nextBlockID += 1
         }
         if block.areaID < 0 { block.areaID = old.areaID }
+        let oldRect = thumbnailRect(of: old)
+        let common = oldRect.intersection(rect)
+        if common.isNull || common.width * common.height < configuration.containedShare * oldRect.width * oldRect.height {
+            // (the rest of the older block was not read: what is there now is read whole)
+            askToReadPlace(oldRect.union(rect), attempts: attempts, time: time)
+        }
         tracked[index] = block
         return index
     }

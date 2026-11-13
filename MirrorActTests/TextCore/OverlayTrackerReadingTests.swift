@@ -87,6 +87,9 @@ final class OverlayTrackerReadingTests: XCTestCase {
         }
         let placed = tracker.advance(screen.thumbnail(offset: 0, noiseSeed: 7), scale: scale, time: 4).placed
         XCTAssertEqual(placed.map(\.text), ["T Something new"])
+        // (the reading did not cover the older block's place: what is left of it is read again)
+        let again = try XCTUnwrap(tracker.beginRecognition(time: 4), "the older block's place is read again")
+        XCTAssertTrue(again.region.contains(SyntheticScreen.block(4, offset: 0, text: "").rect), "\(again.region)")
     }
 
     /// Runs the passes that become due on a still frame for `seconds`, each answered with
@@ -152,6 +155,68 @@ final class OverlayTrackerReadingTests: XCTestCase {
         XCTAssertEqual(Set(tracker.blocks.map(\.text)), [title.text, summary.text])
         let placed = tracker.advance(screen.thumbnail(offset: 0, noiseSeed: 7), scale: scale, time: 2).placed
         XCTAssertTrue(placed.contains { $0.text == "T " + title.text }, "\(placed.map(\.text))")
+    }
+
+    /// A small reading of a later pass inside the place of a larger block (one word of it, read
+    /// while that place was not read as a whole) does not stand in for it: the paragraph keeps
+    /// its translation, and its place is read again
+    func testASmallReadingInsideAParagraphDoesNotStandInForIt() throws {
+        let screen = SyntheticScreen(seed: 27)
+        let tracker = OverlayTracker()
+        let whole = Self.paragraph(4, 9, offset: 0, text: "Zum Schluss noch etwas Text über die Seite hier")
+        try readAtRest(tracker, screen, offset: 0, blocks: [whole], time: 0)
+        let frame = changed(screen, offset: 0, below: 9, mark: 3)
+        _ = tracker.advance(frame, scale: scale, time: 3)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        XCTAssertFalse(request.region.contains(whole.rect), "only a part of the paragraph is read")
+        let line9 = SyntheticScreen.block(9, offset: 0, text: "").rect
+        let word = RecognizedBlock(text: "In", rect: CGRect(x: line9.minX, y: line9.minY, width: 20, height: line9.height))
+        tracker.finishRecognition(request, blocks: [word], time: 3.6)
+        XCTAssertEqual(tracker.blocks.map(\.text), [whole.text])
+        let placed = tracker.advance(frame, scale: scale, time: 3.7).placed
+        XCTAssertEqual(placed.map(\.text), ["T " + whole.text])
+        let after = idle(tracker, frame: frame, from: 3.7, seconds: 3, answer: { region in
+            region.contains(whole.rect) ? [whole] : []
+        })
+        XCTAssertTrue(after.regions.contains { $0.contains(whole.rect) }, "the paragraph's place is read again")
+        XCTAssertLessThanOrEqual(after.regions.count, 2, "\(after.regions)")
+        XCTAssertEqual(tracker.blocks.map(\.text), [whole.text])
+        XCTAssertEqual(after.sent, [])
+    }
+
+    /// One line of a paragraph changes to other words (a status line, a live text) and only the
+    /// place of that line is read: the paragraph's place is read again, and its new text is
+    /// translated, instead of the line taking the place of the paragraph and its other lines
+    /// staying untranslated. Also when the reading covers most of the paragraph (its last two
+    /// lines, read as other words).
+    func testAParagraphPartOfWhichChangedIsReadAgainWhole() throws {
+        let screen = SyntheticScreen(seed: 28)
+        let whole = Self.paragraph(4, 6, offset: 0, text: "alpha beta gamma delta epsilon zeta")
+        let newWhole = Self.paragraph(4, 6, offset: 0, text: "alpha beta omega sigma tau upsilon")
+        // (the second in a box a little taller than its lines: it shares more than
+        // `sameBlockOverlap` with the paragraph, and so takes its place as another text)
+        var lower = Self.paragraph(5, 6, offset: 0, text: "omega sigma tau upsilon")
+        lower.rect = CGRect(x: lower.rect.minX, y: lower.rect.minY - 10, width: lower.rect.width,
+                            height: lower.rect.height + 10)
+        let readings = [[SyntheticScreen.block(5, offset: 0, text: "omega sigma")], [lower]]
+        for reading in readings {
+            let tracker = OverlayTracker()
+            try readAtRest(tracker, screen, offset: 0, blocks: [whole], time: 0)
+            let frame = changed(screen, offset: 0, below: 5, mark: 1)
+            _ = tracker.advance(frame, scale: scale, time: 3)
+            let request = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+            XCTAssertFalse(request.region.contains(whole.rect), "only a part of the paragraph is read")
+            tracker.finishRecognition(request, blocks: reading, time: 3.6)
+            let after = idle(tracker, frame: frame, from: 3.6, seconds: 3, answer: { region in
+                region.contains(newWhole.rect) ? [newWhole] : []
+            })
+            XCTAssertTrue(after.regions.contains { $0.contains(whole.rect) }, "\(reading.map(\.text)): \(after.regions)")
+            XCTAssertLessThanOrEqual(after.regions.count, 2, "\(after.regions)")
+            XCTAssertEqual(tracker.blocks.map(\.text), [newWhole.text], "\(reading.map(\.text))")
+            XCTAssertTrue(after.sent.contains(newWhole.text))
+            let placed = tracker.advance(frame, scale: scale, time: 7).placed
+            XCTAssertEqual(placed.map(\.text), ["T " + newWhole.text])
+        }
     }
 
     /// A paragraph of which only its first line was taken (the rest was not in view then) is
