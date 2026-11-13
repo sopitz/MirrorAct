@@ -424,12 +424,29 @@ final class LeadingMarkTests: XCTestCase {
     }
 
     /// Rows of a settings screen of 412 x 915 pt drawn with AppKit at 2.625x: an SF Symbol
-    /// without a backdrop, a gap, a title in the system font, optionally a summary below
+    /// without a backdrop, a gap, a title in the system font, optionally a summary below. The
+    /// picture is the same whatever displays the Mac has (see `symbol`) and whatever its settings:
+    /// light appearance, text without font smoothing, as a phone draws it.
     struct SettingsRows {
         var seed: Int
         var iconSize: CGFloat = 24, gap: CGFloat = 12, titleSize: CGFloat = 16
         var summary = false
         var scale: CGFloat = 2.625
+
+        /// A symbol of `pointSize` and the size to draw it in. NSImage lays a symbol out on the
+        /// pixels of the displays attached: with one display at scale 1 its size and the inset of
+        /// its glyph are whole points ("textformat" at 19.2 pt: 26 x 16, the glyph 22 x 14 at 2, 1;
+        /// in fact 26.27 x 16.48 and 21.49 x 13.86 at 2.39, 1.31), and drawn at 2.625x the icon
+        /// came out up to two pixels smaller and higher than with displays at scale 2. Made a
+        /// hundred times as large, where that rounding no longer shows, and drawn at its exact
+        /// size, the symbol (a vector image) is the same on any Mac.
+        static func symbol(_ name: String, pointSize: CGFloat, color: NSColor) -> (image: NSImage, size: CGSize)? {
+            let enlarged: CGFloat = 100
+            guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize * enlarged, weight: .regular)
+                    .applying(NSImage.SymbolConfiguration(paletteColors: [color]))) else { return nil }
+            return (image, CGSize(width: image.size.width / enlarged, height: image.size.height / enlarged))
+        }
 
         static let symbols = ["display", "internaldrive", "info.circle", "gearshape", "lock.fill", "wifi", "battery.100",
                               "bell.fill", "person.crop.circle", "key.fill", "line.3.horizontal", "textformat", "sun.max",
@@ -456,43 +473,50 @@ final class LeadingMarkTests: XCTestCase {
                                                      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
             rep.size = NSSize(width: widthPt, height: heightPt)
             let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep))
+            let appearance = try XCTUnwrap(NSAppearance(named: .aqua))
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context.cgContext, flipped: true)
             context.cgContext.translateBy(x: 0, y: heightPt)
             context.cgContext.scaleBy(x: 1, y: -1)
-            NSColor(white: 0.97, alpha: 1).setFill()
-            NSRect(x: 0, y: 0, width: widthPt, height: heightPt).fill()
-            let foreground = NSColor(white: 0.1, alpha: 1), secondary = NSColor(white: 0.4, alpha: 1)
-            let tints: [NSColor] = [.systemBlue, .systemGreen, .systemOrange, .systemRed, .systemPurple, .systemTeal, .systemGray, .systemPink]
-            let rowHeight = summary ? max(iconSize + 24, 72) : max(iconSize + 20, 56)
+            context.cgContext.setShouldSmoothFonts(false)
             var drawn: [(icon: CGRect, title: CGRect)] = []
-            var y: CGFloat = 100, index = seed
-            while y + rowHeight < heightPt - 20 {
-                let icon = NSRect(x: 20, y: y + (rowHeight - iconSize) / 2, width: iconSize, height: iconSize)
-                if let image = NSImage(systemSymbolName: Self.symbols[index % Self.symbols.count], accessibilityDescription: nil)?
-                    .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: iconSize * 0.8, weight: .regular)
-                        .applying(NSImage.SymbolConfiguration(paletteColors: [index % 2 == 0 ? foreground : tints[index % tints.count]]))) {
-                    let size = image.size
-                    image.draw(in: NSRect(x: icon.midX - size.width / 2, y: icon.midY - size.height / 2, width: size.width, height: size.height),
-                               from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            appearance.performAsCurrentDrawingAppearance {
+                NSColor(white: 0.97, alpha: 1).setFill()
+                NSRect(x: 0, y: 0, width: widthPt, height: heightPt).fill()
+                let foreground = NSColor(white: 0.1, alpha: 1), secondary = NSColor(white: 0.4, alpha: 1)
+                let tints: [NSColor] = [.systemBlue, .systemGreen, .systemOrange, .systemRed, .systemPurple, .systemTeal,
+                                        .systemGray, .systemPink]
+                let rowHeight = summary ? max(iconSize + 24, 72) : max(iconSize + 20, 56)
+                var y: CGFloat = 100, index = seed
+                while y + rowHeight < heightPt - 20 {
+                    let icon = NSRect(x: 20, y: y + (rowHeight - iconSize) / 2, width: iconSize, height: iconSize)
+                    if let symbol = Self.symbol(Self.symbols[index % Self.symbols.count], pointSize: iconSize * 0.8,
+                                                color: index % 2 == 0 ? foreground : tints[index % tints.count]) {
+                        let size = symbol.size
+                        symbol.image.draw(in: NSRect(x: icon.midX - size.width / 2, y: icon.midY - size.height / 2,
+                                                     width: size.width, height: size.height),
+                                          from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                    }
+                    let title = Self.titles[index % Self.titles.count] as NSString
+                    let titleAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: titleSize),
+                                                                          .foregroundColor: foreground]
+                    let summaryAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: titleSize * 0.82),
+                                                                            .foregroundColor: secondary]
+                    let summaryText = Self.summaries[index % Self.summaries.count] as NSString
+                    let titleExtent = title.size(withAttributes: titleAttributes)
+                    let block = summary ? titleExtent.height + 2 + summaryText.size(withAttributes: summaryAttributes).height
+                        : titleExtent.height
+                    let origin = NSPoint(x: icon.maxX + gap, y: y + (rowHeight - block) / 2)
+                    title.draw(at: origin, withAttributes: titleAttributes)
+                    if summary {
+                        summaryText.draw(at: NSPoint(x: origin.x, y: origin.y + titleExtent.height + 2), withAttributes: summaryAttributes)
+                    }
+                    let titleRect = CGRect(origin: origin, size: titleExtent)
+                    drawn.append((icon.applying(CGAffineTransform(scaleX: scale, y: scale)),
+                                  titleRect.applying(CGAffineTransform(scaleX: scale, y: scale))))
+                    y += rowHeight
+                    index += 1
                 }
-                let title = Self.titles[index % Self.titles.count] as NSString
-                let titleAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: titleSize), .foregroundColor: foreground]
-                let summaryAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: titleSize * 0.82),
-                                                                        .foregroundColor: secondary]
-                let summaryText = Self.summaries[index % Self.summaries.count] as NSString
-                let titleExtent = title.size(withAttributes: titleAttributes)
-                let block = summary ? titleExtent.height + 2 + summaryText.size(withAttributes: summaryAttributes).height : titleExtent.height
-                let origin = NSPoint(x: icon.maxX + gap, y: y + (rowHeight - block) / 2)
-                title.draw(at: origin, withAttributes: titleAttributes)
-                if summary {
-                    summaryText.draw(at: NSPoint(x: origin.x, y: origin.y + titleExtent.height + 2), withAttributes: summaryAttributes)
-                }
-                let titleRect = CGRect(origin: origin, size: titleExtent)
-                drawn.append((icon.applying(CGAffineTransform(scaleX: scale, y: scale)),
-                              titleRect.applying(CGAffineTransform(scaleX: scale, y: scale))))
-                y += rowHeight
-                index += 1
             }
             NSGraphicsContext.restoreGraphicsState()
             // as gray values, which both pixel formats can show
