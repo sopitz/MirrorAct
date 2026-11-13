@@ -138,8 +138,12 @@ final class SimStage {
     }
 
     /// A title bar with a clock, a title and a label to go back. `title` and `back`: nil = words
-    /// of their own; an empty title = none.
-    func makeTopBar(title givenTitle: String? = nil, back givenBack: String? = nil) -> Int {
+    /// of their own; an empty title = none. `backMisreading`: what the recognition sometimes reads
+    /// instead of `back`, nil = a misreading of its own (give that of another bar when this one
+    /// shows the same label at the same place: the same label read wrong in one frame would
+    /// otherwise belong to one of the two bars only).
+    func makeTopBar(title givenTitle: String? = nil, back givenBack: String? = nil,
+                    backMisreading: String? = nil) -> Int {
         let bar = SimSprite(width: width, height: topHeight, level: theme.bar)
         let size = 17 * unit, baseline = topHeight - 12 * unit - size
         if topHeight >= 80 * unit {
@@ -159,7 +163,9 @@ final class SimStage {
         let back = givenBack ?? words.word(minLength: 4, maxLength: 6, capitalized: true)
         bar.fill(SimRect(x: 10 * unit, y: baseline + 3 * unit, width: 3 * unit, height: size - 6 * unit),
                  level: theme.accent)
-        bar.addText(back, alternate: words.misreading(of: back), x: 18 * unit, y: baseline, size: size,
+        // (drawn in any case, so that the words of everything made after it stay the same)
+        let misreading = words.misreading(of: back)
+        bar.addText(back, alternate: backMisreading ?? misreading, x: 18 * unit, y: baseline, size: size,
                     level: theme.accent, background: theme.bar)
         bar.fill(SimRect(x: 0, y: topHeight - 1, width: width, height: 1), level: theme.separator)
         return scenario.add(bar)
@@ -1596,7 +1602,10 @@ enum TrackingScenarios {
         let back = stage.words.word(minLength: 4, maxLength: 6, capitalized: true)
         // the bar has no title while the large one can be seen
         stage.addBars(title: "", back: back)
-        let plainBar = stage.topBar, titledBar = stage.makeTopBar(title: title, back: back)
+        // (the label to go back is the same in both bars: so is what it is misread as)
+        let plainBar = stage.topBar
+        let backMisreading = stage.scenario.sprites[plainBar].lines.first { $0.text == back }?.alternate
+        let titledBar = stage.makeTopBar(title: title, back: back, backMisreading: backMisreading)
         var random = stage.random
         var hero = SimRect()
         var titleBottom = 0

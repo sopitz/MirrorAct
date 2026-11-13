@@ -1025,6 +1025,19 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
         XCTAssertGreaterThanOrEqual(result.score, 75)
     }
+
+    /// Seed 13 of largeTitle: the label to go back, misread once while the bar has no title, stays
+    /// where it is when the titled bar takes over. Both bars show it with the same misreading;
+    /// with one of their own each, its translation counted as drawn over text that is not on the
+    /// screen for 278 frames.
+    func testLargeTitleSeed13() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("largeTitle", seed: 13)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 45)
+    }
     /// A page that springs back after a flick past its end: what a pass after the movement finds
     /// cut off is read again at rest, not drawn half-read (seeds 2 and 5 fell to 58.7 and 67.6,
     /// with 241 and 288 half-read frames, when such a pass counted as a reread)
