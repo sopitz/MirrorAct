@@ -80,11 +80,18 @@ final class TranslationCompositor: @unchecked Sendable {
     }
 
     /// Draws the text of these blocks ahead of time, off the thread that delivers the frames
-    /// (blocks without translation are skipped). `blocks` are all the blocks the tracker knows:
-    /// the texts of other blocks are dropped, because a block id never comes back (text that
-    /// returns into view gets a new id), so their texts would only fill the cache.
+    /// (blocks without translation are skipped). `blocks` are all the blocks the tracker knows,
+    /// with the translations they show: every other drawn text is dropped. A block id never comes
+    /// back (text that returns into view gets a new id), and a block that keeps its id while its
+    /// text changes (a live transcript, a progress line) shows its new translation from now on,
+    /// so the other texts would only fill the cache. Sizes are not compared: a frame looks texts
+    /// up by the size of the block where it is placed in that frame.
     func prepare(_ blocks: [TrackedBlock]) {
-        texts.keepOnly(ids: Set(blocks.map(\.id)))
+        var shown: [Int: String] = [:]
+        for block in blocks {
+            if let translation = block.translation { shown[block.id] = translation }
+        }
+        texts.keepOnly(shown)
         poolLock.lock()
         let format = poolFormat, language = currentLanguage
         poolLock.unlock()
@@ -494,12 +501,14 @@ final class BlockTextCache: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Drops the texts of every block whose id is not in `ids`
-    func keepOnly(ids: Set<Int>) {
+    /// Keeps only the texts that `shown` gives for their block id (in any size): drops those of
+    /// blocks not in it, and the earlier translations of the blocks that are
+    func keepOnly(_ shown: [Int: String]) {
         lock.lock()
         defer { lock.unlock() }
-        guard entries.keys.contains(where: { !ids.contains($0.id) }) else { return }
-        entries = entries.filter { ids.contains($0.key.id) }
+        func isShown(_ key: Key) -> Bool { shown[key.id] == key.text }
+        guard entries.keys.contains(where: { !isShown($0) }) else { return }
+        entries = entries.filter { isShown($0.key) }
         bytes = entries.values.reduce(0) { $0 + $1.bytes }
     }
 

@@ -1063,6 +1063,41 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertEqual(compositor.texts.count, 0)
     }
 
+    /// A block keeps its id while its text changes in a way the tracker takes for a new reading
+    /// of the same place (a live transcript, a progress line): only the translation it shows now
+    /// is kept, in every size a frame needs, and that one is not drawn again
+    func testEarlierTranslationsOfABlockThatKeepsItsIdAreDropped() throws {
+        let rect = CGRect(x: 40, y: 50, width: 400, height: 48)
+        func tracked(_ step: Int) -> TrackedBlock {
+            TrackedBlock(id: 1, text: "Kopiere \(step) von 5000 Dateien", rect: rect, lineCount: 1,
+                         colors: darkOnLight, translation: "Copying \(step) of 5000 files", isStale: false)
+        }
+        let compositor = TranslationCompositor()
+        let source = try videoFrame(width: 640, height: 240)
+        for step in 1...50 {
+            compositor.prepare([tracked(step), tracked(step + 1000).with(id: 2)])
+            XCTAssertLessThanOrEqual(compositor.texts.count, 2, "step \(step)")
+            // the frames draw the current text where the block is now, in its sizes there
+            let drawn = compositor.texts.drawCount
+            var placed = PlacedBlock(id: 1, text: "Copying \(step) of 5000 files", rect: rect, visibleRect: nil,
+                                     lineCount: 1, colors: darkOnLight)
+            XCTAssertNotNil(compositor.compose(source, blocks: [placed]))
+            XCTAssertEqual(compositor.texts.drawCount, drawn, "compose must use what prepare has drawn")
+            placed.rect.size.width = 380
+            XCTAssertNotNil(compositor.compose(source, blocks: [placed]))
+        }
+        // the current translation of both blocks, and the other size of block 1
+        XCTAssertEqual(compositor.texts.count, 3)
+        // a size a frame drew is kept by the next prepare that shows the same translation
+        compositor.prepare([tracked(50), tracked(1050).with(id: 2)])
+        XCTAssertEqual(compositor.texts.count, 3)
+        // a block whose translation is not there (yet) keeps no text
+        var pending = tracked(51)
+        pending.translation = nil
+        compositor.prepare([pending, tracked(1050).with(id: 2)])
+        XCTAssertEqual(compositor.texts.count, 1)
+    }
+
     func testOldTextsMakeRoomForNewOnes() throws {
         let cache = BlockTextCache(limit: 8, byteLimit: 1 << 20)
         for id in 0..<8 {
@@ -1365,5 +1400,13 @@ final class TranslationCompositorTests: XCTestCase {
         }
 
         var bounds: PixelRect? { bounds(rows: 0..<height) }
+    }
+}
+
+private extension TrackedBlock {
+    /// the same block under another id
+    func with(id: Int) -> TrackedBlock {
+        TrackedBlock(id: id, text: text, rect: rect, lineCount: lineCount, colors: colors, translation: translation,
+                     isStale: isStale)
     }
 }
