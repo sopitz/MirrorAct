@@ -180,6 +180,29 @@ final class OverlayTrackerReadingTests: XCTestCase {
         try run(restAfterwards: true)
         try run(restAfterwards: false)
     }
+
+    /// The end of a page whose ground below its last line shows no movement (it stops there
+    /// while it springs back) is not taken for a bar: a translation there is not cut off
+    func testTheEndOfAPageIsNoBar() {
+        var image = LumaImage(width: 200, height: 400, pixels: [UInt8](repeating: 240, count: 200 * 400))
+        // the last line of the page, the plain ground below it, a bar from row 370
+        for y in 280..<292 {
+            for x in stride(from: 10, to: 150, by: 3) { image[x, y] = 30 }
+        }
+        for y in 370..<400 {
+            for x in 0..<200 { image[x, y] = (x / 4) % 2 == 0 ? 200 : 120 }
+        }
+        let known = ThumbnailRect(x: 0, y: 30, width: 200, height: 340)
+        let atPageEnd = FrameMotion(dx: 0, dy: -1, area: ThumbnailRect(x: 0, y: 30, width: 200, height: 264), tiles: 200,
+                                    refinedEdges: FrameMotion.top | FrameMotion.bottom)
+        XCTAssertEqual(OverlayTracker.plainShrink(of: known, edges: FrameMotion.top | FrameMotion.bottom, to: atPageEnd,
+                                                  in: image, plainRange: 10), FrameMotion.bottom)
+        // something that is not plain between the edges: a bar that came up
+        let atBar = FrameMotion(dx: 0, dy: -1, area: ThumbnailRect(x: 0, y: 30, width: 200, height: 240), tiles: 200,
+                                refinedEdges: FrameMotion.top | FrameMotion.bottom)
+        XCTAssertEqual(OverlayTracker.plainShrink(of: known, edges: FrameMotion.top | FrameMotion.bottom, to: atBar,
+                                                  in: image, plainRange: 10), 0)
+    }
 }
 
 extension ReadingPlanTests {

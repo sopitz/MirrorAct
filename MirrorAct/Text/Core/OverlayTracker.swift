@@ -551,7 +551,7 @@ final class OverlayTracker {
         lastChange = time
         let motions = estimator.motions
         updateOverlays()
-        updateScrollAreas(motions, time: time)
+        updateScrollAreas(motions, in: current, time: time)
         moveBlocks(in: current, motions: motions, time: time)
         if running != nil { moveProbes(motions) }
 
@@ -674,7 +674,7 @@ final class OverlayTracker {
 
     /// Every movement belongs to the scrolling area it overlaps most, or to a new one; areas that
     /// changed for the most part (another screen) are forgotten
-    private func updateScrollAreas(_ motions: [FrameMotion], time: TimeInterval) {
+    private func updateScrollAreas(_ motions: [FrameMotion], in current: LumaImage, time: TimeInterval) {
         // forget what is gone
         areas.removeAll { area in
             var changed = 0, total = 0
@@ -706,6 +706,10 @@ final class OverlayTracker {
                 }
             }
             if let index = found {
+                var motion = motion
+                motion.refinedEdges &= ~OverlayTracker.plainShrink(of: areas[index].rect, edges: areas[index].refinedEdges,
+                                                                    to: motion, in: current,
+                                                                    plainRange: configuration.plainRange)
                 let seen = confirmedEdges(of: motion, in: &areas[index])
                 areas[index].rect = OverlayTracker.merged(areas[index].rect, refinedEdges: areas[index].refinedEdges,
                                                           with: seen.area, refined: seen.refined)
@@ -719,6 +723,37 @@ final class OverlayTracker {
                 nextAreaID += 1
             }
         }
+    }
+
+    /// The refined top and bottom edges of a movement that lie inside the known refined edges of
+    /// its area with nothing but plain rows between them: the end of a page whose ground shows no
+    /// movement (it stops there while it springs back), not a bar. They do not move the edge.
+    static func plainShrink(of known: ThumbnailRect, edges: Int, to motion: FrameMotion, in image: LumaImage,
+                            plainRange: Int) -> Int {
+        let left = max(0, motion.area.x), right = min(image.width, motion.area.maxX)
+        guard right > left else { return 0 }
+        func isPlain(_ rows: Range<Int>) -> Bool {
+            for y in rows where y >= 0 && y < image.height {
+                var low = UInt8.max, high = UInt8.min
+                for x in left..<right {
+                    let value = image[x, y]
+                    low = min(low, value)
+                    high = max(high, value)
+                }
+                if Int(high) - Int(low) > plainRange { return false }
+            }
+            return true
+        }
+        var result = 0
+        if motion.refinedEdges & FrameMotion.top != 0, edges & FrameMotion.top != 0,
+           motion.area.y > known.y, isPlain(known.y..<motion.area.y) {
+            result |= FrameMotion.top
+        }
+        if motion.refinedEdges & FrameMotion.bottom != 0, edges & FrameMotion.bottom != 0,
+           motion.area.maxY < known.maxY, isPlain(motion.area.maxY..<known.maxY) {
+            result |= FrameMotion.bottom
+        }
+        return result
     }
 
     /// The movement's area with a refined top or bottom edge left out (as not refined) when it
