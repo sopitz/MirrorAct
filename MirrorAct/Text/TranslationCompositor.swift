@@ -18,7 +18,8 @@ final class TranslationCompositor: @unchecked Sendable {
     /// the texts of the blocks as they were drawn (internal for the tests)
     let texts = BlockTextCache()
 
-    /// protects the pool and the language: `reset` and `language` may come from another thread than the frames
+    /// protects the pool, the language and the originals: `reset`, `language` and `prepare` may
+    /// come from another thread than the frames
     private let poolLock = NSLock()
     private var pool: CVPixelBufferPool?
     private var poolWidth = 0
@@ -41,6 +42,10 @@ final class TranslationCompositor: @unchecked Sendable {
         }
     }
     private var currentLanguage: String?
+    /// The recognized text of every block the tracker knows, by block id, as `prepare` was
+    /// given them last. The size of a translation follows from the letters of its original
+    /// (`BlockTextMask.originalFontSize`), and the frames get only the translations.
+    private var originals: [Int: String] = [:]
 
     // "Device" color spaces: the bytes get the values given here, nothing is color matched
     private let gray = CGColorSpaceCreateDeviceGray()
@@ -71,11 +76,14 @@ final class TranslationCompositor: @unchecked Sendable {
         // display and the recorder would take the copy for another kind of video
         CVBufferPropagateAttachments(source, copy)
 
-        let language = self.language
+        poolLock.lock()
+        let language = currentLanguage, originals = self.originals
+        poolLock.unlock()
         let blocks = Self.drawnBlocks(blocks, frameWidth: width, frameHeight: height)
         let drawn = biPlanar
-            ? drawVideo(blocks, into: copy, width: width, height: height, fullRange: fullRange, language: language)
-            : drawBGRA(blocks, into: copy, width: width, height: height, language: language)
+            ? drawVideo(blocks, into: copy, width: width, height: height, fullRange: fullRange, language: language,
+                        originals: originals)
+            : drawBGRA(blocks, into: copy, width: width, height: height, language: language, originals: originals)
         return drawn ? copy : nil
     }
 
@@ -85,21 +93,25 @@ final class TranslationCompositor: @unchecked Sendable {
     /// back (text that returns into view gets a new id), and a block that keeps its id while its
     /// text changes (a live transcript, a progress line) shows its new translation from now on,
     /// so the other texts would only fill the cache. Sizes are not compared: a frame looks texts
-    /// up by the size of the block where it is placed in that frame.
+    /// up by the size of the block where it is placed in that frame. The recognized texts of all
+    /// the blocks are kept for the frames: they set the size of the translations.
     func prepare(_ blocks: [TrackedBlock]) {
-        var shown: [Int: String] = [:]
+        var shown: [Int: String] = [:], originals: [Int: String] = [:]
         for block in blocks {
+            originals[block.id] = block.text
             if let translation = block.translation { shown[block.id] = translation }
         }
-        texts.keepOnly(shown)
+        texts.keepOnly(shown, originals: originals)
         poolLock.lock()
+        self.originals = originals
         let format = poolFormat, language = currentLanguage
         poolLock.unlock()
         let fullRange = format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
         for block in blocks {
             guard let translation = block.translation, let size = BlockPlacement.textSize(of: block.rect),
                   let text = texts.entry(id: block.id, text: translation, width: size.width, height: size.height,
-                                         lineCount: block.lineCount, language: language) else { continue }
+                                         lineCount: block.lineCount, original: block.text,
+                                         language: language) else { continue }
             // Text in a color of its own on 4:2:0 video also needs its masks for the color
             // plane: all four, because scrolling moves a block between odd and even positions
             guard format != kCVPixelFormatType_32BGRA else { continue }
@@ -118,6 +130,7 @@ final class TranslationCompositor: @unchecked Sendable {
         texts.removeAll()
         poolLock.lock()
         pool = nil
+        originals = [:]
         poolLock.unlock()
     }
 
@@ -240,7 +253,7 @@ final class TranslationCompositor: @unchecked Sendable {
     /// 4:2:0 video: the first plane is the brightness of every pixel, the second the color of
     /// every 2 × 2 pixels
     private func drawVideo(_ blocks: [(block: PlacedBlock, placement: BlockPlacement)], into frame: CVPixelBuffer, width: Int, height: Int,
-                           fullRange: Bool, language: String?) -> Bool {
+                           fullRange: Bool, language: String?, originals: [Int: String]) -> Bool {
         guard let luma = CVPixelBufferGetBaseAddressOfPlane(frame, 0),
               let chromaBase = CVPixelBufferGetBaseAddressOfPlane(frame, 1),
               let context = CGContext(data: luma, width: width, height: height, bitsPerComponent: 8,
@@ -253,7 +266,7 @@ final class TranslationCompositor: @unchecked Sendable {
         for (block, placement) in blocks {
             guard let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
                                          height: placement.text.height, lineCount: block.lineCount,
-                                         language: language) else { continue }
+                                         original: originals[block.id], language: language) else { continue }
             // the values the frame had there, so a box has exactly the brightness and color of what surrounds it
             let (background, foreground) = Self.videoColors(of: block.colors, fullRange: fullRange)
             Self.draw(text.mask, at: placement, background: .gray(background.y), foreground: .gray(foreground.y),
@@ -277,7 +290,7 @@ final class TranslationCompositor: @unchecked Sendable {
     }
 
     private func drawBGRA(_ blocks: [(block: PlacedBlock, placement: BlockPlacement)], into frame: CVPixelBuffer, width: Int, height: Int,
-                          language: String?) -> Bool {
+                          language: String?, originals: [Int: String]) -> Bool {
         guard let base = CVPixelBufferGetBaseAddress(frame),
               let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: CVPixelBufferGetBytesPerRow(frame), space: rgb,
@@ -287,7 +300,7 @@ final class TranslationCompositor: @unchecked Sendable {
         for (block, placement) in blocks {
             guard let text = texts.entry(id: block.id, text: block.text, width: placement.text.width,
                                          height: placement.text.height, lineCount: block.lineCount,
-                                         language: language) else { continue }
+                                         original: originals[block.id], language: language) else { continue }
             Self.draw(text.mask, at: placement, background: .rgb(block.colors.background),
                       foreground: .rgb(block.colors.foreground), in: context)
         }
@@ -395,9 +408,11 @@ final class BlockTextCache: @unchecked Sendable {
         let width: Int
         let height: Int
         let lineCount: Int
+        /// the recognized text of the block, which sets the size (nil = not known)
+        let original: String?
         let language: String?
 
-        // The text is compared but not hashed: every block of every frame is looked up, and
+        // The texts are compared but not hashed: every block of every frame is looked up, and
         // hashing a paragraph costs more than drawing its box. Blocks rarely share the rest.
         func hash(into hasher: inout Hasher) {
             hasher.combine(id)
@@ -439,9 +454,12 @@ final class BlockTextCache: @unchecked Sendable {
 
     /// The text of a block, drawn now if it is not there yet. `id`: of the block; `text`: its
     /// translation; `width`, `height`: size of the block in whole pixels; `lineCount`: lines
-    /// of the original; `language`: of the translation. nil when it cannot be drawn.
-    func entry(id: Int, text: String, width: Int, height: Int, lineCount: Int, language: String? = nil) -> Entry? {
-        let key = Key(id: id, text: text, width: width, height: height, lineCount: lineCount, language: language)
+    /// of the original; `original`: the recognized text (nil = not known); `language`: of the
+    /// translation. nil when it cannot be drawn.
+    func entry(id: Int, text: String, width: Int, height: Int, lineCount: Int, original: String? = nil,
+               language: String? = nil) -> Entry? {
+        let key = Key(id: id, text: text, width: width, height: height, lineCount: lineCount, original: original,
+                      language: language)
         lock.lock()
         uses += 1
         if let entry = entries[key] {
@@ -453,7 +471,7 @@ final class BlockTextCache: @unchecked Sendable {
 
         // Core Text works outside the lock: a frame must not wait for a text that `prepare` is drawing
         guard let mask = BlockTextMask(text: text, width: width, height: height, lineCount: lineCount,
-                                       language: language) else { return nil }
+                                       original: original, language: language) else { return nil }
         let entry = Entry(mask: mask, key: key)
         lock.lock()
         defer { lock.unlock() }
@@ -501,12 +519,13 @@ final class BlockTextCache: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Keeps only the texts that `shown` gives for their block id (in any size): drops those of
-    /// blocks not in it, and the earlier translations of the blocks that are
-    func keepOnly(_ shown: [Int: String]) {
+    /// Keeps only the texts that `shown` gives for their block id (in any size), drawn for the
+    /// original that `originals` gives for it: drops those of blocks not in it, the earlier
+    /// translations of the blocks that are, and texts drawn for another original or none
+    func keepOnly(_ shown: [Int: String], originals: [Int: String] = [:]) {
         lock.lock()
         defer { lock.unlock() }
-        func isShown(_ key: Key) -> Bool { shown[key.id] == key.text }
+        func isShown(_ key: Key) -> Bool { shown[key.id] == key.text && originals[key.id] == key.original }
         guard entries.keys.contains(where: { !isShown($0) }) else { return }
         entries = entries.filter { isShown($0.key) }
         bytes = entries.values.reduce(0) { $0 + $1.bytes }

@@ -7,9 +7,10 @@ import Foundation
 /// black around it. The compositor fills the color of the text through it in every frame;
 /// Core Text, which takes far longer than that, runs once per text.
 ///
-/// The text is set in the system font, broken into lines of the width of the block and
-/// centered in its height. The font is as large as fits: a translation is seldom as long as
-/// its original, and it has to stay inside the place of the original.
+/// The text is set in the system font, in the size of the original text as far as it fits
+/// (see `originalFontSize`), broken into lines of the width of the block and placed in its
+/// height where the letters of the original stood. Only a translation too long for the block
+/// at that size is set smaller: it has to stay inside the place of the original.
 struct BlockTextMask {
     /// size of the picture in pixels: that of the block
     let width: Int
@@ -27,39 +28,61 @@ struct BlockTextMask {
     /// false: too long for the block even in the smallest font; the last line drawn ends with an ellipsis
     let fits: Bool
 
-    /// The font starts at this share of the height of a line of the original. The system
-    /// font is about 1.2 times its size high from ascender to descender, so a line of the
-    /// translation then just fills a line of the original.
-    static let largestFontShare: CGFloat = 0.82
-    /// It does not get smaller than this share, nor smaller than `smallestFontSize` pixels
-    /// (unless the original is that small): below that nobody can read it anyway.
+    /// The font does not get smaller than this share of the height of a line of the original,
+    /// nor smaller than `smallestFontSize` pixels (unless the original is that small): below
+    /// that nobody can read it anyway.
     static let smallestFontShare: CGFloat = 0.28
     static let smallestFontSize: CGFloat = 9
 
+    /// The rectangle of a line of text that the text recognition gives is as high as its
+    /// letters reach above the baseline times `lineBoxPerTop`, plus as deep as they reach below
+    /// it times `lineBoxPerBottom`, both in the size of the font (`originalFontSize`): "Aus" (a
+    /// capital, nothing below the line) gets a box of 0.88 of its font size, "Displaysperre"
+    /// 0.98, "aus" 0.66. Fitted to 673 lines of Android screens, whose font size was measured
+    /// from the ink of their letters; it errs by 5 % of the size in the median and by 13 % or
+    /// more in the worst tenth (that much do the boxes of the text recognition vary).
+    static let lineBoxPerTop: CGFloat = 1.25
+    static let lineBoxPerBottom: CGFloat = 0.6
+    /// The letters of a text reach at least this high (a share of the font size, about the
+    /// height of a small letter): a text of dots or dashes does not make the font huge.
+    static let leastTop: CGFloat = 0.5
+    /// From one line of a paragraph to the next, in the size of its font: 1.1 to 1.4 on the
+    /// screens measured (Android summaries 1.1, large titles 1.23, web pages 1.31 and 1.38)
+    static let linePitch: CGFloat = 1.3
+    /// Rows at the top and bottom edge of the block that the letters of a translation keep clear
+    static let clearance: CGFloat = 1
+    /// How far the drawn letters reach beyond their outlines: the smoothing of their edges
+    /// covers up to a pixel more (measured on kanji at 9 pixels, which reached a row above the
+    /// top of their outlines)
+    static let smoothing: CGFloat = 1
+
     /// `width`, `height`: size of the block in pixels; `lineCount`: lines of the original text;
-    /// `language`: BCP 47 identifier of the language of the text, which chooses the forms of
-    /// characters that languages share (Japanese kanji are not drawn as Chinese hanzi); nil =
-    /// as the languages of the Mac say. nil when there is nothing to draw or no picture could be made.
-    init?(text: String, width: Int, height: Int, lineCount: Int, language: String? = nil) {
+    /// `original`: the original text, whose letters say how large its font is (see
+    /// `originalFontSize`), nil = not known; `language`: BCP 47 identifier of the language of
+    /// the text, which chooses the forms of characters that languages share (Japanese kanji are
+    /// not drawn as Chinese hanzi); nil = as the languages of the Mac say. nil when there is
+    /// nothing to draw or no picture could be made.
+    init?(text: String, width: Int, height: Int, lineCount: Int, original: String? = nil, language: String? = nil) {
         // one paragraph: a line break inside a translation would cost a line the block does not have
         let text = text.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
         guard width > 0, height > 0, !text.isEmpty else { return nil }
         let lineHeight = BlockPlacement.lineHeight(height: height, lineCount: lineCount)
         let box = CGSize(width: CGFloat(width), height: CGFloat(height))
-        let largest = max(1, lineHeight * BlockTextMask.largestFontShare)
+        let letters = BlockTextMask.letters(of: original)
+        let largest = max(1, BlockTextMask.originalFontSize(width: width, height: height, lineCount: lineCount,
+                                                            letters: letters))
         let smallest = min(largest, max(lineHeight * BlockTextMask.smallestFontShare, BlockTextMask.smallestFontSize))
         let lineEnds = BlockTextMask.wordKeepingLineEnds(in: text, language: language)
         let rightToLeft = BlockTextMask.isRightToLeft(text)
 
-        // The largest font that fits: usually the first one tried. Otherwise halve the range
-        // between a size that fits and one that does not (see `largest`).
+        // The largest font that fits: usually the first one tried, the size of the original.
+        // Otherwise halve the range between a size that fits and one that does not (see `largest`).
         // A word broken between two letters, or parted from its punctuation, does not count as
         // fitting. When even the smallest font has to break a word, the largest size is taken
         // at which the lines fit the block and no more words are broken than at the smallest
         // size: so that it is no smaller than it has to be, and breaks no word it need not.
         func set(_ fontSize: CGFloat) -> Layout {
-            Layout(text, fontSize: fontSize, in: box, lineHeight: lineHeight, lineEnds: lineEnds,
-                   rightToLeft: rightToLeft, language: language)
+            Layout(text, fontSize: fontSize, in: box, lineEnds: lineEnds, rightToLeft: rightToLeft, language: language)
         }
         let first = set(largest)
         var layout = first
@@ -77,7 +100,7 @@ struct BlockTextMask {
 
         // (only a text that is too long needs them)
         let ellipsisStops = layout.fitsBox ? [] : BlockTextMask.ellipsisStops(in: text, language: language)
-        guard let picture = BlockTextMask.draw(layout, width: width, height: height, lineHeight: lineHeight,
+        guard let picture = BlockTextMask.draw(layout, width: width, height: height, letters: letters,
                                                ellipsisStops: ellipsisStops) else { return nil }
         self.width = width
         self.height = height
@@ -87,6 +110,77 @@ struct BlockTextMask {
         self.lineCount = picture.lines.count
         lines = picture.lines
         fits = layout.fitsBox
+    }
+
+    /// How far the letters of a text reach above and below the baseline, and how wide they
+    /// are, in the size of the font (glyph outlines, not the line height of the font)
+    struct Letters: Equatable {
+        var top: CGFloat
+        var bottom: CGFloat
+        var width: CGFloat
+    }
+
+    /// The letters of a text set in the system font; nil for no text or one without letters.
+    /// Core Text measures them, so every script is covered: capitals and ascenders, small
+    /// letters only, letters below the line, marks above, the square characters of Chinese and
+    /// Japanese, the stacked marks of Thai.
+    static func letters(of text: String?) -> Letters? {
+        guard let text, text.contains(where: { !$0.isWhitespace }) else { return nil }
+        // measured large: outlines at a size of 1 come out rounded
+        let size: CGFloat = 100
+        let font = CTFontCreateUIFontForLanguage(.system, size, nil) ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
+        let string = NSAttributedString(string: text, attributes: [
+            NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font,
+        ])
+        let bounds = CTLineGetBoundsWithOptions(CTLineCreateWithAttributedString(string as CFAttributedString),
+                                                .useGlyphPathBounds)
+        guard !bounds.isEmpty, bounds.height > 0 else { return nil }
+        return Letters(top: bounds.maxY / size, bottom: -bounds.minY / size, width: bounds.width / size)
+    }
+
+    /// What is taken for the letters of an original that is not known: capitals or ascenders
+    /// and letters below the line, the tallest box ordinary text gets, so that the font is not
+    /// taken larger than the original's
+    static let typicalLetters = letters(of: "Hg") ?? Letters(top: 0.71, bottom: 0.2, width: 1.2)
+
+    /// The size of the font of the original text of a block, in pixels: the size its
+    /// translation is set in, as far as it fits. `letters`: of the original text (see
+    /// `letters(of:)`), nil = not known.
+    ///
+    /// The rule: the rectangle of the block holds `lineCount` lines, `linePitch` apart, and the
+    /// box of the last one is as high as its letters reach (`lineBoxPerTop`, `lineBoxPerBottom`).
+    /// The height alone gives a font size from the line spacing of the original when there are
+    /// several lines, and from the letters of the original when there is one: "Aus" and "An"
+    /// have a capital and nothing below the line, so their box is lower than that of a text with
+    /// "p" or "g" in the same font, and their font is larger than the box suggests. A box of the
+    /// text recognition is uncertain by a tenth or more of its height, its width by much less:
+    /// a line of the original is as wide as its letters, and the system font sets them about as
+    /// wide as the fonts of phones do. So the size is also taken from the width, the width of the
+    /// block for one line or `lineCount` times it for the whole text (an upper bound, as lines
+    /// end at different places), and the smaller of the two counts. When the original is not
+    /// known, `typicalLetters` stand in for it and the width is not used.
+    /// Several lines: the line spacing of the original dominates the height, and a guess of
+    /// `linePitch` errs by up to a sixth of the size; the width bound and the fit (as long as
+    /// the lines of the translation at that size do not fit, it is set smaller) keep it inside
+    /// the block.
+    /// All capitals: like a capital with small letters (the box is that of the capitals).
+    /// Digits only: as high as capitals; the text recognition draws larger boxes around digits,
+    /// and their width keeps the size from being taken too large.
+    /// Chinese, Japanese, Korean: the characters reach 0.8 to 0.9 of the size above the baseline
+    /// and a little below it, and each is about as wide as the font is large, which the width
+    /// takes into account.
+    static func originalFontSize(width: Int, height: Int, lineCount: Int, letters: Letters?) -> CGFloat {
+        let lines = CGFloat(max(1, lineCount))
+        let measured = letters ?? typicalLetters
+        let box = lineBoxPerTop * max(leastTop, measured.top) + lineBoxPerBottom * max(0, measured.bottom)
+        let byHeight = CGFloat(height) / ((lines - 1) * linePitch + box)
+        guard let letters, letters.width > 0 else { return byHeight }
+        return min(byHeight, CGFloat(width) * lines / letters.width)
+    }
+
+    /// The same for an original given as text
+    static func originalFontSize(width: Int, height: Int, lineCount: Int, original: String?) -> CGFloat {
+        originalFontSize(width: width, height: height, lineCount: lineCount, letters: letters(of: original))
     }
 
     /// The largest layout that passes `test`, of the sizes from `fitting` (which passed) up to
@@ -127,6 +221,15 @@ struct BlockTextMask {
         let rightToLeft: Bool
         /// what the text needs when it is broken into lines of the width of the block
         let size: CGSize
+        /// the lines, broken to the width of the block, and their origins (baselines), with y
+        /// counted upwards from the bottom of a frame higher than the text
+        let lines: [CTLine]
+        let origins: [CGPoint]
+        /// how far their letters reach up and down from each origin (glyph outlines)
+        let extents: [(top: CGFloat, bottom: CGFloat)]
+        /// highest and lowest point of the letters of all lines, in the same coordinates
+        let inkTop: CGFloat
+        let inkBottom: CGFloat
         /// all lines fit into the block
         let fitsBox: Bool
         /// line ends that break a word or part it from its punctuation (counted only when the lines fit)
@@ -136,8 +239,7 @@ struct BlockTextMask {
 
         /// `lineEnds`: where a line may end without breaking a word, in UTF-16 units as Core
         /// Text counts its ranges (see `wordKeepingLineEnds`); `rightToLeft`: the direction of the paragraph
-        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineHeight: CGFloat, lineEnds: Set<Int>,
-             rightToLeft: Bool, language: String?) {
+        init(_ text: String, fontSize: CGFloat, in box: CGSize, lineEnds: Set<Int>, rightToLeft: Bool, language: String?) {
             // The language picks the fonts for the characters the system font does not have
             // (Hiragino for Japanese, PingFang SC or TC for Chinese) and their local forms.
             let font = CTFontCreateUIFontForLanguage(.system, fontSize, language as CFString?)
@@ -167,10 +269,6 @@ struct BlockTextMask {
             let size = CTFramesetterSuggestFrameSizeWithConstraints(
                 framesetter, CFRange(location: 0, length: 0), nil,
                 CGSize(width: box.width, height: CGFloat.greatestFiniteMagnitude), nil)
-            // The height of a line gets rounded to whole pixels. A line that is higher than
-            // the block by that little still shows all of its letters: they do not reach the
-            // upper and lower edge of their line.
-            let slack = max(1, lineHeight * 0.04)
             self.text = text
             self.fontSize = fontSize
             self.string = string
@@ -178,15 +276,37 @@ struct BlockTextMask {
             self.lineEnds = lineEnds
             self.rightToLeft = rightToLeft
             self.size = size
-            fitsBox = size.height <= box.height + slack && size.width <= box.width + 0.5
+            let path = CGPath(rect: CGRect(x: 0, y: 0, width: box.width, height: size.height + box.height + 100),
+                              transform: nil)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+            let lines = CTFrameGetLines(frame) as? [CTLine] ?? []
+            var origins = [CGPoint](repeating: .zero, count: lines.count)
+            CTFrameGetLineOrigins(frame, CFRange(location: 0, length: lines.count), &origins)
+            self.lines = lines
+            self.origins = origins
+            // What has to fit is the letters, not the lines of the font: a line of the system
+            // font is 1.18 times its size high, with room above the tallest letters, while the
+            // box of the original is about as high as its letters (`lineBoxPerTop`). A line of
+            // only spaces has no letters.
+            let smoothing = BlockTextMask.smoothing
+            let extents = lines.map { line -> (top: CGFloat, bottom: CGFloat) in
+                let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+                return bounds.isEmpty || bounds.height <= 0 ? (0, 0) : (bounds.maxY + smoothing, smoothing - bounds.minY)
+            }
+            self.extents = extents
+            var inkTop = -CGFloat.greatestFiniteMagnitude, inkBottom = CGFloat.greatestFiniteMagnitude
+            for (origin, extent) in zip(origins, extents) where extent.top > 0 || extent.bottom > 0 {
+                inkTop = max(inkTop, origin.y + extent.top)
+                inkBottom = min(inkBottom, origin.y - extent.bottom)
+            }
+            if inkTop < inkBottom { (inkTop, inkBottom) = (0, 0) }
+            self.inkTop = inkTop
+            self.inkBottom = inkBottom
+            fitsBox = inkTop - inkBottom <= box.height - 2 * BlockTextMask.clearance && size.width <= box.width + 0.5
             // A word wider than the block is broken by Core Text between two letters, without
             // a hyphen, and the size above still fits. Such a line end does not count as fitting.
             var brokenWords = 0
             if fitsBox {
-                let path = CGPath(rect: CGRect(x: 0, y: 0, width: box.width, height: size.height + box.height + 100),
-                                  transform: nil)
-                let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
-                let lines = CTFrameGetLines(frame) as? [CTLine] ?? []
                 for line in lines.dropLast() {
                     let range = CTLineGetStringRange(line)
                     if !lineEnds.contains(range.location + range.length) {
@@ -324,8 +444,9 @@ struct BlockTextMask {
     ]
 
     /// Draws the coverage of the text, one byte per pixel: 0 where there is none, 255 where it covers fully
-    /// `ellipsisStops`: where the last line of a text that goes on may end (see `ellipsisStops(in:)`)
-    private static func draw(_ layout: Layout, width: Int, height: Int, lineHeight: CGFloat,
+    /// `letters`: of the original (nil = not known); `ellipsisStops`: where the last line of a
+    /// text that goes on may end (see `ellipsisStops(in:)`)
+    private static func draw(_ layout: Layout, width: Int, height: Int, letters: Letters?,
                              ellipsisStops: Set<Int>) -> (pixels: [UInt8], image: CGImage, lines: [String])? {
         // The first row in memory is the top row of the picture, as in a frame. Core Graphics
         // and Core Text count y from the bottom row upwards, and nothing is flipped here: text
@@ -348,51 +469,63 @@ struct BlockTextMask {
         context.setShouldSubpixelPositionFonts(true)
         context.textMatrix = .identity
 
-        // Core Text fills a frame from its top edge (the largest y) downwards. To center the
-        // lines, the top edge lies half of the space that is left over below the top of the
-        // picture. The frame reaches below the picture, so that the last line is not left out
-        // when the measured height was a fraction too small.
-        let boxHeight = CGFloat(height)
-        let used = layout.size.height.rounded(.up)
-        let top = layout.fitsBox ? ((boxHeight + used) / 2).rounded() : boxHeight
-        let below = -(lineHeight + 16)
-        var bottom = layout.fitsBox ? below : 0
-        var frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: bottom)
-        var lineLimit = Int.max
-        if !layout.fitsBox, CFArrayGetCount(CTFrameGetLines(frame)) == 0 {
-            // Too long: only the lines that fit as a whole are drawn. Here not even one does;
-            // then rather a line that is cut off than an empty box over the original. Only the
-            // first: those below it would lie below the picture, with the ellipsis.
-            bottom = below
-            frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: bottom)
-            lineLimit = 1
+        // How far the lines of the layout are moved up into the picture (whole pixels), and how
+        // many of them are drawn
+        let boxHeight = CGFloat(height), clearance = BlockTextMask.clearance
+        let firstOrigin = layout.origins.first?.y ?? 0
+        let firstExtent = layout.extents.first ?? (top: 0, bottom: 0)
+        var shift: CGFloat
+        var lineCount = layout.lines.count
+        if layout.fitsBox {
+            // Where the letters of the original stood. Its box is about as high as its letters
+            // reach (`lineBoxPerTop`), and they stand in its middle: the lines are placed so that
+            // letters like the original's, on their baselines, would fill the same height in the
+            // middle of the block. A translation with other letters then stands on the baselines
+            // of the original ("Off" where "Aus" was, an underscore at the foot of its line), and
+            // is moved only as far as its own letters need to stay inside the block.
+            let original = letters ?? BlockTextMask.typicalLetters
+            let top = firstOrigin + max(BlockTextMask.leastTop, original.top) * layout.fontSize
+            let bottom = (layout.origins.last?.y ?? 0) - max(0, original.bottom) * layout.fontSize
+            shift = (boxHeight / 2 - (top + bottom) / 2).rounded()
+            shift = min(shift, (boxHeight - clearance - layout.inkTop).rounded(.down))
+            shift = max(shift, (clearance - layout.inkBottom).rounded(.up))
+        } else {
+            // Too long: only the lines whose letters fit as a whole are drawn, from the top
+            shift = (boxHeight - clearance - (firstOrigin + firstExtent.top)).rounded(.down)
+            lineCount = 0
+            for (origin, extent) in zip(layout.origins, layout.extents) {
+                guard origin.y + shift - extent.bottom >= clearance - 0.001 else { break }
+                lineCount += 1
+            }
+            if lineCount == 0 {
+                // Here not even one does; then rather a line that is cut off than an empty box
+                // over the original. Only the first, in the middle: those below it would lie below
+                // the picture, with the ellipsis.
+                lineCount = min(1, layout.lines.count)
+                shift = (boxHeight / 2 - (firstOrigin + (firstExtent.top - firstExtent.bottom) / 2)).rounded()
+            }
         }
         let text = layout.text as NSString
-        var lines = Array((CTFrameGetLines(frame) as? [CTLine] ?? []).prefix(lineLimit))
+        var lines = Array(layout.lines.prefix(lineCount))
+        var origins = layout.origins.prefix(lineCount).map { CGPoint(x: $0.x, y: $0.y + shift) }
         var texts = lines.map { line -> String in
             let range = CTLineGetStringRange(line)
             return text.substring(with: NSRange(location: range.location, length: range.length))
         }
-        if !layout.fitsBox, let last = lines.last {
-            var origins = [CGPoint](repeating: .zero, count: lines.count)
-            CTFrameGetLineOrigins(frame, CFRange(location: 0, length: lines.count), &origins)
-            // Too long: the last line drawn ends with an ellipsis, so that the text is seen to
-            // go on instead of just stopping in the middle of a sentence
-            if let ending = endingWithEllipsis(last, layout, stops: ellipsisStops, width: CGFloat(width)) {
-                // A line of a paragraph written from the right stays aligned at the right
-                if layout.rightToLeft {
-                    origins[lines.count - 1].x = CGFloat(CTLineGetPenOffsetForFlush(ending.line, 1, Double(width)))
-                }
-                lines[lines.count - 1] = ending.line
-                texts[texts.count - 1] = ending.text
+        // Too long: the last line drawn ends with an ellipsis, so that the text is seen to go on
+        // instead of just stopping in the middle of a sentence
+        if !layout.fitsBox, let last = lines.last,
+           let ending = endingWithEllipsis(last, layout, stops: ellipsisStops, width: CGFloat(width)) {
+            // A line of a paragraph written from the right stays aligned at the right
+            if layout.rightToLeft {
+                origins[lines.count - 1].x = CGFloat(CTLineGetPenOffsetForFlush(ending.line, 1, Double(width)))
             }
-            for (line, origin) in zip(lines, origins) {
-                // the origins are counted from the corner of the frame's rectangle
-                context.textPosition = CGPoint(x: origin.x, y: origin.y + bottom)
-                CTLineDraw(line, context)
-            }
-        } else {
-            CTFrameDraw(frame, context)
+            lines[lines.count - 1] = ending.line
+            texts[texts.count - 1] = ending.text
+        }
+        for (line, origin) in zip(lines, origins) {
+            context.textPosition = origin
+            CTLineDraw(line, context)
         }
         let pixels = Array(UnsafeBufferPointer(start: memory, count: count))
         // `clip(to:mask:)` takes gray without alpha: the coverage becomes the gray level
@@ -458,12 +591,5 @@ struct BlockTextMask {
             if let found = ending(at: stop, trimming: false) { return found }
         }
         return nil
-    }
-
-    /// A frame as wide as the block between two heights (y counted upwards from the bottom of the picture)
-    private static func textFrame(_ framesetter: CTFramesetter, width: CGFloat, from top: CGFloat,
-                                  to bottom: CGFloat) -> CTFrame {
-        let path = CGPath(rect: CGRect(x: 0, y: bottom, width: width, height: top - bottom), transform: nil)
-        return CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
     }
 }

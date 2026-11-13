@@ -314,11 +314,112 @@ final class TranslationCompositorTests: XCTestCase {
         let mask = try XCTUnwrap(BlockTextMask(text: "Two words", width: 600, height: 60, lineCount: 1))
         XCTAssertEqual(mask.lineCount, 1, "text that fits is not broken")
         XCTAssertTrue(mask.fits)
-        // 82 % of the line height unless the font is unusually tall
-        XCTAssertGreaterThan(mask.fontSize, 42)
-        XCTAssertLessThanOrEqual(mask.fontSize, 0.82 * 60 + 0.001)
+        // the size of a line of the original whose letters are not known
+        XCTAssertEqual(mask.fontSize, BlockTextMask.originalFontSize(width: 600, height: 60, lineCount: 1, original: nil),
+                       accuracy: 0.001)
+        XCTAssertGreaterThan(mask.fontSize, 55)
         XCTAssertEqual(mask.width, 600)
         XCTAssertEqual(mask.height, 60)
+        // and that of the original when it is known
+        let known = try XCTUnwrap(BlockTextMask(text: "Two words", width: 600, height: 60, lineCount: 1, original: "Zwei Wörter"))
+        XCTAssertEqual(known.fontSize,
+                       BlockTextMask.originalFontSize(width: 600, height: 60, lineCount: 1, original: "Zwei Wörter"),
+                       accuracy: 0.001)
+    }
+
+    /// The size of the original follows from the box the text recognition gave and from the
+    /// letters of its text: a box is as high as the letters reach, so "Aus" (a capital and
+    /// nothing below the line) has a lower box than a text with "p" or "g" in the same font.
+    /// Boxes and font sizes as measured on Android screens (the size from the ink of the letters
+    /// in the frame) and on text set in the system font. Taken as 82 % of the height of a line,
+    /// as before, every single line came out a fifth to two fifths too small.
+    func testTheSizeOfTheOriginalFollowsFromItsBoxAndItsLetters() throws {
+        let cases: [(original: String, width: CGFloat?, height: CGFloat, lineCount: Int, size: CGFloat, label: String)] = [
+            ("Aus", 62.7, 34.9, 1, 36.4, "a capital and small letters, nothing below the line"),
+            ("Datensparmodus", 407.6, 55.8, 1, 58.3, "with a letter below the line"),
+            ("SIM-Karten", 275.6, 51.0, 1, 52.2, "mostly capitals"),
+            ("Gespeicherte Geräte", 337.9, 38.4, 1, 39.4, "a small header"),
+            ("Netzwerk & Internet", 839.6, 118.6, 1, 98.9, "a large title in a box 1.2 times its size"),
+            ("Wird aktiviert, wenn der Modus „Bedtime\" beginnt", 683.8, 89.2, 2, 38.5, "two lines"),
+            ("Am Montag bleibt es überwiegend bewölkt, gelegentlich fällt leichter Regen. Die Temperaturen steigen "
+                + "tagsüber auf zwölf Grad, in der Nacht kühlt es auf etwa fünf Grad ab. Der Wind weht mäßig aus "
+                + "westlicher Richtung.", 954.6, 397.7, 6, 51, "six lines"),
+            ("Display & Touchbedienung", 700.2, 242.8, 2, 98.9, "two lines of a large title"),
+            // set in the system font, boxes as Vision drew them; as wide as the letters
+            ("AUS", nil, 54.0, 1, 64, "capitals only"),
+            ("ermessen", nil, 34.7, 1, 48, "small letters only"),
+            ("设置", nil, 67.5, 1, 64, "Chinese"),
+        ]
+        for item in cases {
+            let letters = try XCTUnwrap(BlockTextMask.letters(of: item.original), item.label)
+            let width = Int((item.width ?? letters.width * item.size + 1).rounded())
+            let height = Int(item.height.rounded())
+            let size = BlockTextMask.originalFontSize(width: width, height: height, lineCount: item.lineCount,
+                                                      original: item.original)
+            // the line pitch of several lines is held to 5 %; a large title's own spacing is
+            // farther from the assumed pitch, so it keeps 12 %
+            XCTAssertEqual(size, item.size,
+                           accuracy: item.size * (item.lineCount == 1 ? 0.1
+                                                  : (item.label.contains("large title") ? 0.12 : 0.05)),
+                           "\(item.label): \(item.original)")
+            // a translation that fits is set in that size (small letters fit any of these boxes)
+            let mask = try XCTUnwrap(BlockTextMask(text: "no", width: width, height: height, lineCount: item.lineCount,
+                                                   original: item.original))
+            XCTAssertEqual(mask.fontSize, size, accuracy: 0.001, item.label)
+        }
+        // what the letters say
+        let capital = try XCTUnwrap(BlockTextMask.letters(of: "Aus")), below = try XCTUnwrap(BlockTextMask.letters(of: "gut"))
+        let small = try XCTUnwrap(BlockTextMask.letters(of: "ermessen")), marks = try XCTUnwrap(BlockTextMask.letters(of: "ÄÖÜ"))
+        XCTAssertLessThan(small.top, capital.top - 0.1)
+        XCTAssertGreaterThan(marks.top, capital.top + 0.1)
+        XCTAssertGreaterThan(below.bottom, 0.15)
+        XCTAssertLessThan(capital.bottom, 0.05)
+        XCTAssertNil(BlockTextMask.letters(of: "  "))
+        XCTAssertNil(BlockTextMask.letters(of: nil))
+        // a box of the same height holds a larger font for "Aus" than for "Display"
+        XCTAssertGreaterThan(BlockTextMask.originalFontSize(width: 1000, height: 40, lineCount: 1, original: "Aus"),
+                             1.08 * BlockTextMask.originalFontSize(width: 1000, height: 40, lineCount: 1, original: "Display"))
+        // dots alone do not make the font huge
+        XCTAssertLessThan(BlockTextMask.originalFontSize(width: 1000, height: 40, lineCount: 1, original: "…"), 66)
+    }
+
+    /// A translation stands where the letters of its original stood, on the same baseline, and
+    /// its letters stay inside the block
+    func testATranslationStandsWhereTheLettersOfItsOriginalStood() throws {
+        func ink(_ mask: BlockTextMask) -> (top: Int, bottom: Int)? {
+            let rows = (0..<mask.height).filter { y in (0..<mask.width).contains { mask.pixels[y * mask.width + $0] > 127 } }
+            guard let top = rows.first, let bottom = rows.last else { return nil }
+            return (top, bottom + 1)
+        }
+        // the same kinds of letters as the original: the letters fill the middle of its box
+        for (translation, original, width, height) in [("Off", "Aus", 63, 35), ("Display lock", "Displaysperre", 330, 40),
+                                                       ("Saved places", "Gespeicherte Orte", 338, 38)] {
+            let mask = try XCTUnwrap(BlockTextMask(text: translation, width: width, height: height, lineCount: 1,
+                                                   original: original))
+            XCTAssertTrue(mask.fits, translation)
+            let letters = try XCTUnwrap(ink(mask), translation)
+            XCTAssertEqual(Double(letters.top + letters.bottom) / 2, Double(height) / 2, accuracy: 1.5,
+                           "\(translation): \(letters)")
+            // as high as the letters of the translation at the size of the original, not a fifth
+            // smaller as before
+            let originalLetters = try XCTUnwrap(BlockTextMask.letters(of: original))
+            let translationLetters = try XCTUnwrap(BlockTextMask.letters(of: translation))
+            XCTAssertGreaterThan(CGFloat(letters.bottom - letters.top),
+                                 0.9 * (translationLetters.top + translationLetters.bottom) * mask.fontSize, translation)
+            XCTAssertGreaterThan(mask.fontSize, 0.95 * CGFloat(height)
+                                    / (1.25 * originalLetters.top + 0.6 * originalLetters.bottom), translation)
+        }
+        // other letters stand on the baseline of the original and stay inside the block
+        let off = try XCTUnwrap(ink(try XCTUnwrap(BlockTextMask(text: "Off", width: 120, height: 35, lineCount: 1, original: "Aus"))))
+        for translation in ["Übersicht", "Typography", "设置", "gypsy", "_", "Ä"] {
+            let mask = try XCTUnwrap(BlockTextMask(text: translation, width: 120, height: 35, lineCount: 1, original: "Aus"))
+            let letters = try XCTUnwrap(ink(mask), translation)
+            XCTAssertGreaterThanOrEqual(letters.top, 1, "\(translation): the top row stays clear")
+            XCTAssertLessThanOrEqual(letters.bottom, 34, "\(translation): the bottom row stays clear")
+            if translation == "_" {
+                XCTAssertGreaterThanOrEqual(letters.top, off.bottom - 2, "an underscore lies at the foot of the line")
+            }
+        }
     }
 
     func testLongTextIsSetSmallerUntilItFits() throws {
@@ -361,7 +462,8 @@ final class TranslationCompositorTests: XCTestCase {
         // Chinese is broken between any two characters, as everywhere: that is no reason to set it smaller
         let chinese = try XCTUnwrap(BlockTextMask(text: "设置与隐私：翻译后的文字", width: 300, height: 120, lineCount: 2))
         XCTAssertEqual(chinese.lineCount, 2)
-        XCTAssertEqual(chinese.fontSize, 0.82 * 60, accuracy: 0.001)
+        XCTAssertEqual(chinese.fontSize, BlockTextMask.originalFontSize(width: 300, height: 120, lineCount: 2, original: nil),
+                       accuracy: 0.001)
 
         // a word too long even for the smallest font is still drawn, broken where it has to be
         let endless = try XCTUnwrap(BlockTextMask(text: "Donaudampfschifffahrtsgesellschaftskapitänsmütze",
@@ -992,7 +1094,13 @@ final class TranslationCompositorTests: XCTestCase {
         let untranslated = TrackedBlock(id: 8, text: "Noch nicht", rect: place.offsetBy(dx: 0, dy: 80), lineCount: 1,
                                         colors: darkOnLight, translation: nil, isStale: false)
 
+        // (the original sets the size: the compositor learns it from the tracker's blocks, here
+        // while the translation is still on its way)
         let direct = TranslationCompositor()
+        var waiting = translated
+        waiting.translation = nil
+        direct.prepare([waiting])
+        XCTAssertEqual(direct.texts.drawCount, 0)
         let expected = picture(of: try XCTUnwrap(direct.compose(source, blocks: [placed])))
         XCTAssertEqual(direct.texts.drawCount, 1)
 
@@ -1020,6 +1128,7 @@ final class TranslationCompositorTests: XCTestCase {
 
         prepared.reset()
         XCTAssertEqual(prepared.texts.count, 0)
+        prepared.prepare([waiting])
         let again = picture(of: try XCTUnwrap(prepared.compose(source, blocks: [placed])))
         XCTAssertTrue(again == expected, "after a reset everything is drawn anew")
         XCTAssertEqual(prepared.texts.drawCount, 4)
@@ -1031,10 +1140,15 @@ final class TranslationCompositorTests: XCTestCase {
         let source = try videoFrame(width: 640, height: 240)
         let place = CGRect(x: 41, y: 51, width: 300, height: 48)
         let placed = PlacedBlock(id: 7, text: "Yellow on blue", rect: place, visibleRect: nil, lineCount: 1, colors: colors)
-        let expected = picture(of: try XCTUnwrap(TranslationCompositor().compose(source, blocks: [placed])))
+        let tracked = TrackedBlock(id: 7, text: "Gelb auf Blau", rect: place, lineCount: 1, colors: colors,
+                                   translation: "Yellow on blue", isStale: false)
+        let direct = TranslationCompositor()
+        var waiting = tracked
+        waiting.translation = nil
+        direct.prepare([waiting])
+        let expected = picture(of: try XCTUnwrap(direct.compose(source, blocks: [placed])))
         let prepared = TranslationCompositor()
-        prepared.prepare([TrackedBlock(id: 7, text: "Gelb auf Blau", rect: place, lineCount: 1, colors: colors,
-                                       translation: "Yellow on blue", isStale: false)])
+        prepared.prepare([tracked])
         XCTAssertTrue(picture(of: try XCTUnwrap(prepared.compose(source, blocks: [placed]))) == expected)
         XCTAssertEqual(prepared.texts.drawCount, 1)
     }
