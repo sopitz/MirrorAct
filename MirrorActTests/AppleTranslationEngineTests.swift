@@ -1291,6 +1291,11 @@ final class AppleTranslationEngineTests: XCTestCase {
         // what was measured stays believable
         XCTAssertNotNil(AppleTranslationJoining.parts(of: "Hinzufügen | Rechtliche und regulatorische Informationen",
                                                       for: ["Add", "Legal & regulatory"]))
+        // the limit the rule's comment states: parts of the right count and length in another
+        // order are taken as they are (measured: the two pieces of "Hier tippen", after a label
+        // sent before them)
+        XCTAssertEqual(AppleTranslationJoining.parts(of: "Settings | Tap | Here", for: ["Einstellungen", "Hier", "tippen"]),
+                       ["Settings", "Tap", "Here"])
     }
 
     /// The log line of a call says how many texts it translated

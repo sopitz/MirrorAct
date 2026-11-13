@@ -1208,8 +1208,15 @@ typealias AppleTranslationCall = @MainActor ([TranslationSession.Request]) async
 /// - An answer counts only if it splits at the separators into exactly as many parts as labels
 ///   went in, no part is empty, and no part is longer than `longestPart` for its label (4 times
 ///   its weight and 10 more: a separator that moved shifts words from one label to another).
-///   Otherwise the labels of that text are sent once more, one by one, in one more call: a failure
-///   costs one call, never a label that shows the translation of another.
+///   Otherwise the labels of that text are sent once more, one by one, in one more call: a part
+///   count or a length that does not fit costs one call, and never gives a label such a part.
+///   What this does not catch is an answer with the right count of parts in another order. The
+///   labels of one screen never came back reordered (none of 200 sets of rows, none of 100
+///   orders of a screen), but the pieces of one phrase, sent as two texts, can: "Einstellungen |
+///   Hier | tippen" came back as "Settings | Tap | Here", so "Hier" shows "Tap" and "tippen"
+///   "Here", and "Add to | Cart" into German as "Zu | Warenkorb hinzufügen". That happens only
+///   where the layout leaves the lines of one phrase apart; alone, each piece would get a
+///   translation of its own, often a poor one.
 ///
 /// Measured with German and English (US) on macOS 26.5, the only pair on the Mac it was made on,
 /// with 141 German and 139 English texts of Android's Settings, a login page and a list of common
