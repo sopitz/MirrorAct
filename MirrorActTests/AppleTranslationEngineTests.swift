@@ -1212,6 +1212,164 @@ final class AppleTranslationEngineTests: XCTestCase {
         _ = try await request.value
     }
 
+    // MARK: Screens of two languages (the language recognizer of macOS, FakeSession in place of the framework)
+
+    /// Languages of the recognizer, as many as macOS lists, so that it chooses among them as it
+    /// does in the app; German and English (US) are on this Mac, as on the Mac the screens were
+    /// read on
+    private static let manyLanguages = ["de", "en", "da", "es", "fr", "id", "it", "nb", "nl", "pl", "pt", "sv", "tr"]
+
+    /// Serves every host of `engine` with `session` until cancelled
+    private func serveAll(_ engine: AppleTranslationEngine, with session: FakeSession) -> Task<Void, Never> {
+        Task {
+            var served: Set<UUID> = []
+            var sessions: [Task<Void, Never>] = []
+            while !Task.isCancelled {
+                for host in engine.hosts where served.insert(host.id).inserted {
+                    sessions.append(Task {
+                        await engine.serve(host, prepare: {}, work: { await engine.work(for: host, calling: session.call) })
+                    })
+                }
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+            for task in sessions { await task.value }
+        }
+    }
+
+    /// Android's Security & privacy page into English, as Vision read it: rows of Google's in
+    /// English among German ones. The screen is English, and the German labels of two words used
+    /// to take its language and come back as they were ("Displaysperre einrichten", heading and
+    /// button). German is a language of this turn (the sentence), so they are translated from
+    /// it. "Keine" decides nothing on its own and still goes with the English screen.
+    func testGermanLabelsOnAnEnglishScreenAreTranslated() async throws {
+        let page = ["Security & privacy", "Device may be at risk", "See alerts", "Device unlock",
+                    "Displaysperre einrichten",
+                    "Für mehr Sicherheit kannst du eine PIN, ein Muster oder ein Passwort einrichten.",
+                    "Displaysperre einrichten", "More alerts", "Security", "App security", "No info yet",
+                    "Device unlock", "Keine", "Account security Add a Google Account"]
+        let sentence = "For more security, you can set up a PIN, pattern, or password."
+        let session = FakeSession(["Displaysperre einrichten": "Set up screen lock", page[5]: sentence])
+        let macOS = FakeMacOS(supported: Self.manyLanguages)
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let served = serveAll(engine, with: session)
+        let client = AppleTranslationClient(engine: engine)
+        let translations = try await client.translate(page, into: language("en"))
+        var expected = page.map { Optional($0) }
+        expected[4] = "Set up screen lock"
+        expected[5] = sentence
+        expected[6] = "Set up screen lock"
+        XCTAssertEqual(translations, expected)
+        // no English row went to the German pair, and no other pair was asked about
+        XCTAssertEqual(Set(session.calls.joined()), ["Displaysperre einrichten | Displaysperre einrichten", page[5]])
+        XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["de"])
+        XCTAssertTrue(macOS.asked.isEmpty)
+        client.cancel()
+        served.cancel()
+        try await waitFor(served)
+    }
+
+    /// The German/English lab page after a fling: German labels, the English paragraph, then
+    /// "Ende der Seite" alone. After the paragraph the screen is English; the label is German, a
+    /// language the turn has shown, and is translated instead of being left as it was.
+    func testAGermanLabelAfterAnEnglishParagraphIsTranslated() async throws {
+        let english = "A second English paragraph near the end of the page. Nothing about it should change while the translation is switched on."
+        let session = FakeSession(["Lieferadresse ändern": "Change delivery address", "In den Warenkorb": "Add to cart",
+                                   "Ende der Seite": "End of page"])
+        let macOS = FakeMacOS(supported: Self.manyLanguages)
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let served = serveAll(engine, with: session)
+        let client = AppleTranslationClient(engine: engine)
+        let first = try await client.translate(["Lieferadresse ändern", "In den Warenkorb"], into: language("en"))
+        XCTAssertEqual(first, ["Change delivery address", "Add to cart"])
+        let paragraph = try await client.translate([english], into: language("en"))
+        XCTAssertEqual(paragraph, [english])
+        let last = try await client.translate(["Ende der Seite"], into: language("en"))
+        XCTAssertEqual(last, ["End of page"])
+        XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["de"])
+        XCTAssertTrue(macOS.asked.isEmpty)
+        client.cancel()
+        served.cancel()
+        try await waitFor(served)
+    }
+
+    /// English labels whose words are German as well ("Gift", "Handy", "Art", "Tag", "Brief",
+    /// "Bad", "Fast"), on an English screen of a turn that has shown German: none of them is
+    /// translated as if it were German, and no other language is asked about ("Brief overview"
+    /// is taken for Dutch, "Navigation mode" for French, both languages no text of the turn was in)
+    func testEnglishLabelsWithGermanWordsStayEnglish() async throws {
+        let session = FakeSession([Self.german: "This is a quite ordinary German sentence about today's and tomorrow's weather."])
+        let macOS = FakeMacOS(supported: Self.manyLanguages)
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let served = serveAll(engine, with: session)
+        let client = AppleTranslationClient(engine: engine)
+        _ = try await client.translate([Self.german, "Netzwerk & Internet", "Verbundene Geräte"], into: language("en"))
+        let calls = session.calls.count
+        let screen = ["Security & privacy", "Device may be at risk", "Account security Add a Google Account",
+                      "Gift cards", "Fast charging", "Handy tips", "Art gallery", "Brief overview", "Bad request",
+                      "Tag friends", "Navigation mode", "Gift", "Handy", "Art", "Tag", "Brief", "Bad", "Fast"]
+        let translations = try await client.translate(screen, into: language("en"))
+        XCTAssertEqual(translations, screen.map { Optional($0) })
+        XCTAssertEqual(session.calls.count, calls)
+        // in pieces, as the texts of a changing screen come
+        for piece in [["Gift cards", "Handy tips"], ["Fast charging"], ["Brief overview", "Bad request"], ["Tag friends"]] {
+            let answer = try await client.translate(piece, into: language("en"))
+            XCTAssertEqual(answer, piece.map { Optional($0) })
+        }
+        XCTAssertEqual(session.calls.count, calls)
+        XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["de"])
+        XCTAssertTrue(macOS.asked.isEmpty)
+        client.cancel()
+        served.cancel()
+        try await waitFor(served)
+    }
+
+    /// Into German: English rows on a German screen of a turn that has shown English are
+    /// translated from English, and the German rows stay as they are
+    func testEnglishLabelsOnAGermanScreenAreTranslatedIntoGerman() async throws {
+        let session = FakeSession(["Device may be at risk": "Gerät könnte gefährdet sein", Self.english: "Ein englischer Satz."])
+        let macOS = FakeMacOS(supported: Self.manyLanguages)
+        macOS.install("en")
+        let engine = engine(answeredBy: macOS)
+        let served = serveAll(engine, with: session)
+        let client = AppleTranslationClient(engine: engine)
+        _ = try await client.translate([Self.english], into: language("de"))
+        let screen = [Self.german, "Netzwerk & Internet", "Device may be at risk", "Verbundene Geräte", "Datenschutz"]
+        let translations = try await client.translate(screen, into: language("de"))
+        XCTAssertEqual(translations, [Self.german, "Netzwerk & Internet", "Gerät könnte gefährdet sein",
+                                      "Verbundene Geräte", "Datenschutz"])
+        XCTAssertEqual(Set(macOS.statusAsked.map(\.source)), ["en"])
+        XCTAssertTrue(macOS.asked.isEmpty)
+        client.cancel()
+        served.cancel()
+        try await waitFor(served)
+    }
+
+    /// German labels the recognizer takes for Swedish ("Telefonnummer ändern", "Telefonnummer
+    /// bestätigen") make Swedish a language of the turn. Its pair is not on this Mac: the labels
+    /// go with the German screen, as before, instead of waiting for good
+    func testALanguageOfTheTurnWhosePairIsNotOnThisMacGivesWayToTheScreens() async throws {
+        let session = FakeSession(["Persönliche Daten": "Personal data", "Kontaktdaten": "Contact details",
+                                   "Telefonnummer ändern": "Change phone number",
+                                   "Telefonnummer bestätigen": "Confirm phone number"])
+        let macOS = FakeMacOS(supported: Self.manyLanguages)
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let served = serveAll(engine, with: session)
+        let client = AppleTranslationClient(engine: engine)
+        _ = try await client.translate(["Persönliche Daten", "Kontaktdaten"], into: language("en"))
+        let first = try await client.translate(["Telefonnummer ändern"], into: language("en"))
+        XCTAssertEqual(first, ["Change phone number"])
+        let second = try await client.translate(["Telefonnummer bestätigen"], into: language("en"))
+        XCTAssertEqual(second, ["Confirm phone number"])
+        XCTAssertTrue(macOS.asked.isEmpty)
+        client.cancel()
+        served.cancel()
+        try await waitFor(served)
+    }
+
     // MARK: Short labels together (FakeSession answers in place of the framework)
 
     /// Rows of Android's Network & internet page as Vision read them, and a paragraph

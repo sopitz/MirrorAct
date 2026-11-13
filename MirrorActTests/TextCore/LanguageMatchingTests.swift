@@ -648,6 +648,92 @@ final class LanguageMatchingTests: XCTestCase {
         XCTAssertEqual(alone.postponed, [0, 1, 2, 4])
     }
 
+    /// Android's Security page, into English: rows of Google's in English among German ones. The
+    /// screen is English (more letters), and the German labels of two words, decided but too
+    /// short to stand apart, took its language: into English they stayed as they were, for good.
+    /// German is a language of the turn (the German sentence), so they keep their own; "Keine"
+    /// decides nothing and goes with the screen.
+    func testALabelKeepsItsOwnLanguageWhenTheTurnShowsThatLanguage() {
+        let texts = ["Security & privacy", "Device may be at risk", "Displaysperre einrichten",
+                     "Für mehr Sicherheit kannst du eine PIN, ein Muster oder ein Passwort einrichten.",
+                     "Displaysperre einrichten", "Device unlock", "Keine", "Account security Add a Google Account"]
+        let findings = [decided("en", letters: 15), decided("en", letters: 17), decided("de", letters: 23),
+                        apart("de", letters: 63), decided("de", letters: 23), decided("en", letters: 12),
+                        LanguageMatching.Finding(guess: language("de"), letters: 5), apart("en", letters: 32)]
+        let english = screen("en", letters: 140)
+        var turn = LanguageMatching.TurnLanguages()
+        turn.add(texts, findings: findings, screen: english)
+        XCTAssertEqual(turn.present.map { $0.languageCode?.identifier }, ["en", "de"])
+        let plan = LanguageMatching.Plan(findings: findings, screen: english, target: language("en"), supported: supported,
+                                         present: turn.present)
+        XCTAssertEqual(plan.groups.map { $0.source.languageCode?.identifier }, ["de"])
+        XCTAssertEqual(plan.groups.map(\.indices), [[2, 3, 4]])
+        XCTAssertEqual(plan.unchanged, [0, 1, 5, 6, 7])
+        // the labels alone do not make a pair that may have to be loaded first
+        let labels = LanguageMatching.Plan(findings: [findings[2], findings[4]], screen: english, target: language("en"),
+                                           supported: supported, present: turn.present)
+        XCTAssertEqual(labels.groups.map(\.indices), [[0, 1]])
+        XCTAssertEqual(labels.groups.map(\.mayAskForTheLanguage), [false])
+        // without the languages of the turn: as before, they stay as they are
+        let before = LanguageMatching.Plan(findings: findings, screen: english, target: language("en"), supported: supported)
+        XCTAssertEqual(before.groups.map(\.indices), [[3]])
+        XCTAssertEqual(before.unchanged, [0, 1, 2, 4, 5, 6, 7])
+
+        // the reverse, into German: an English row on a German screen of a turn that showed English
+        let rows = [decided("de", letters: 40), decided("en", letters: 17), decided("de", letters: 30)]
+        let german = LanguageMatching.Plan(findings: rows, screen: screen("de", letters: 70), target: language("de"),
+                                           supported: supported, present: turn.present)
+        XCTAssertEqual(german.groups.map { $0.source.languageCode?.identifier }, ["en"])
+        XCTAssertEqual(german.groups.map(\.indices), [[1]])
+        XCTAssertEqual(german.unchanged, [0, 2])
+        // and into English that row is left as it is, not translated as if it were German
+        let intoEnglish = LanguageMatching.Plan(findings: rows, screen: screen("de", letters: 70), target: language("en"),
+                                                supported: supported, present: turn.present)
+        XCTAssertEqual(intoEnglish.groups.map(\.indices), [[0, 2]])
+        XCTAssertEqual(intoEnglish.unchanged, [1])
+    }
+
+    /// A language decided for a short text that no text of the turn was in is a stray guess of
+    /// the recognizer ("Navigation mode" as French, 0.66): the text goes with the screen, as before
+    func testALanguageNoTextOfTheTurnWasInGivesWayToTheScreens() {
+        let findings = [decided("fr", letters: 14), decided("en", letters: 40)]
+        var turn = LanguageMatching.TurnLanguages()
+        turn.add(["Navigation mode", "Some English text"], findings: findings, screen: screen("en", letters: 40))
+        XCTAssertEqual(turn.present, [language("en")])
+        let plan = LanguageMatching.Plan(findings: findings, screen: screen("en", letters: 40), target: language("en"),
+                                         supported: supported, present: turn.present)
+        XCTAssertTrue(plan.groups.isEmpty)
+        XCTAssertEqual(plan.unchanged, [0, 1])
+    }
+
+    /// A language is present from `lettersToChangeTheScreensLanguage` letters in words of decided
+    /// texts, added up over the requests of the turn, each text once; and so is the screen's
+    /// language with as many letters. It stays for the turn.
+    func testTheLanguagesOfATurnAddUp() {
+        let limit = LanguageMatching.lettersToChangeTheScreensLanguage
+        var turn = LanguageMatching.TurnLanguages()
+        // "Lieferadresse ändern", then "In den Warenkorb", a request each
+        turn.add(["Lieferadresse ändern"], findings: [decided("de", letters: 19)], screen: screen("de", letters: 19))
+        XCTAssertEqual(turn.present, [])
+        // the same text read again adds nothing
+        turn.add(["Lieferadresse ändern"], findings: [decided("de", letters: 19)], screen: screen("de", letters: 19))
+        XCTAssertEqual(turn.present, [])
+        turn.add(["In den Warenkorb"], findings: [decided("de", letters: 14)], screen: screen("de", letters: 19))
+        XCTAssertEqual(turn.present, [language("de")])
+        // texts that decide nothing count for nothing, and neither does a guessed screen
+        turn.add(["Gift", "Art"], findings: [LanguageMatching.Finding(guess: language("en"), letters: 4),
+                                             LanguageMatching.Finding(guess: language("en"), letters: 3)],
+                 screen: screen("en", letters: 0))
+        XCTAssertEqual(turn.present, [language("de")])
+        // a screen with enough letters behind it
+        turn.add(["un paragraphe"], findings: [LanguageMatching.Finding(letters: 3)], screen: screen("fr", letters: limit))
+        XCTAssertEqual(turn.present, [language("de"), language("fr")])
+        // less than the limit is not enough, and another form of a present language is the same one
+        turn.add(["Brief overview"], findings: [decided("nl", letters: limit - 1)], screen: nil)
+        turn.add(["Grüezi mitenand"], findings: [decided("de-CH", letters: limit)], screen: nil)
+        XCTAssertEqual(turn.present, [language("de"), language("fr")])
+    }
+
     /// A paragraph in another language keeps its own, on a screen in any language
     func testATextThatStandsApartKeepsItsLanguage() {
         let findings = [decided("de", letters: 20), apart("fr", letters: 70), decided("fr", letters: 16),

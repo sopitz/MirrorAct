@@ -165,9 +165,38 @@ final class AppleTranslationEngine: ObservableObject {
             AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: all, before: before)
         }.value
         client.screenLanguage = read.screen
-        // the languages on the screen, too, as the on-device models know them where they can
+        client.turnLanguages.add(texts, findings: read.findings, screen: read.screen)
+        // the languages on the screen, too, as the on-device models know them where they can.
+        // A label that keeps one of the turn's languages instead of the screen's never makes
+        // macOS ask: on its own it gives its group no right to (`mayAskForTheLanguage`). So it
+        // keeps a language of the turn only where that language is the target, the screen's, or
+        // its pair is on this Mac. Otherwise it goes with the screen's language as before: German
+        // labels the recognizer takes for Dutch ("Google Dienste", "Autofill Dienst") make Dutch a
+        // language of the turn, and they would wait for good for a pair that never comes.
+        var present: [Locale.Language] = []
+        for language in client.turnLanguages.present {
+            guard let source = LanguageMatching.match(language, inFirstOf: languages.lists) else { continue }
+            // the target and the screen's language need no check: the screen's texts keep it anyway
+            if LanguageMatching.sameLanguage(source, target)
+                || read.screen.map({ LanguageMatching.sameLanguage($0.language, language) }) == true {
+                present.append(language)
+                continue
+            }
+            // models that need Apple Intelligence while it is off: not looked for
+            if languages.strategy(from: source, to: target) == .highFidelity,
+               appleIntelligenceState() != .on { continue }
+            var pairTarget = target
+            if !client.targetIsChosen, languages.strategy(from: source, to: target) == .lowLatency
+                || appleIntelligenceState() == .on {
+                pairTarget = await installedForm(of: target, from: source, in: languages)
+            }
+            if await isInstalled(Self.pair(source, pairTarget), from: source, to: pairTarget,
+                                 with: languages.strategy(from: source, to: pairTarget)) {
+                present.append(language)
+            }
+        }
         let plan = LanguageMatching.Plan(findings: read.findings, screen: read.screen, target: target,
-                                         lists: languages.lists)
+                                         lists: languages.lists, present: present)
         var results = plan.results(for: texts)
         for language in plan.unknown { noteUntranslatable(language, to: [client]) }
 
@@ -1112,6 +1141,8 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     fileprivate var noticed: Set<String> = []
     /// the language of the screen, for texts that do not have one of their own
     fileprivate var screenLanguage: LanguageMatching.ScreenLanguage?
+    /// the languages enough text of this turn was in
+    fileprivate var turnLanguages = LanguageMatching.TurnLanguages()
     /// the language pairs this client asked for: it is told what becomes of them
     fileprivate var pairs: Set<String> = []
     /// the lasting notice given last

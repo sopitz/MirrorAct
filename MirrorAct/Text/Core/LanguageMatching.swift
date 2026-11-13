@@ -496,6 +496,45 @@ enum LanguageMatching {
         return ScreenLanguage(language: best.language, letters: best.letters)
     }
 
+    /// The languages enough text of a turn of translating was in. The letters in words of the
+    /// texts with a decided language are added up by language over the turn, each text once
+    /// (by its text: the same label read again on the next frame or screen adds nothing); a
+    /// language (whatever its script or region) is present from
+    /// `lettersToChangeTheScreensLanguage` letters on, and so is the language of the screen when
+    /// as many letters speak for it. A language stays present for the rest of the turn: a screen
+    /// that shows two languages shows them again as it scrolls, and the texts of a changing
+    /// screen come one or two at a time. Only the texts of languages not present yet are
+    /// remembered, a few per language (a decided text has `lettersToDecide` letters or more).
+    struct TurnLanguages: Equatable {
+        /// the present languages, in the order in which they became present
+        private(set) var present: [Locale.Language] = []
+        /// letters in words of the texts counted so far, by language (`code`: whatever the
+        /// script or region)
+        private var letters: [String: Int] = [:]
+        /// the texts counted so far in languages not present yet
+        private var counted: Set<String> = []
+
+        init() {}
+
+        /// Adds a request: its texts, their findings and the language of the screen after it
+        mutating func add(_ texts: [String], findings: [Finding], screen: ScreenLanguage?) {
+            for (text, finding) in zip(texts, findings) {
+                guard let language = finding.decided, let code = LanguageMatching.code(of: language),
+                      !present.contains(where: { LanguageMatching.sameLanguage($0, language) }),
+                      counted.insert(text).inserted else { continue }
+                letters[code, default: 0] += finding.weight
+                if letters[code, default: 0] >= LanguageMatching.lettersToChangeTheScreensLanguage { note(language) }
+            }
+            if let screen, screen.letters >= LanguageMatching.lettersToChangeTheScreensLanguage { note(screen.language) }
+        }
+
+        private mutating func note(_ language: Locale.Language) {
+            guard !LanguageMatching.isUndetermined(language),
+                  !present.contains(where: { LanguageMatching.sameLanguage($0, language) }) else { return }
+            present.append(language)
+        }
+    }
+
     /// Candidates with a language, the most likely first
     private static func ranked(_ hypotheses: [Hypothesis]) -> [(language: Locale.Language, probability: Double)] {
         hypotheses
@@ -543,20 +582,45 @@ enum LanguageMatching {
 
         /// - `screen`: the language of the screen (`screenLanguage`), which the texts take that
         ///   have none of their own, or one that does not stand apart from it; nil = not known
-        init(findings: [Finding], screen: ScreenLanguage?, target: Locale.Language, supported: [Locale.Language]) {
-            self.init(findings: findings, screen: screen, target: target, lists: [supported])
+        /// - `present`: the languages enough text of the turn was in (`TurnLanguages`), less those
+        ///   the caller cannot translate from without asking (neither the target nor the screen's
+        ///   language, and their pair not on the device): two short labels misread as the same
+        ///   third language make it present, and they would otherwise wait for good
+        init(findings: [Finding], screen: ScreenLanguage?, target: Locale.Language, supported: [Locale.Language],
+             present: [Locale.Language] = []) {
+            self.init(findings: findings, screen: screen, target: target, lists: [supported], present: present)
         }
 
         /// The same for a translator with several lists of languages, the one it prefers first
         /// (see `match(_:inFirstOf:)`)
         ///
         /// A text is translated from its own language (`decided`) when it stands apart, when it
-        /// is in the language of the screen anyway, or when the screen's language is not known;
-        /// otherwise from the language of the screen; without either, from its guess if it has
-        /// `lettersToTrustAGuess` letters in words; otherwise it is postponed. A text that would
-        /// be in the target language only because the screen's language is a guess (0 letters)
-        /// is postponed as well, not left as it is.
-        init(findings: [Finding], screen: ScreenLanguage?, target: Locale.Language, lists: [[Locale.Language]]) {
+        /// is in the language of the screen anyway, when its language is one of `present`, or
+        /// when the screen's language is not known; otherwise from the language of the screen;
+        /// without either, from its guess if it has `lettersToTrustAGuess` letters in words;
+        /// otherwise it is postponed. A text that would be in the target language only because
+        /// the screen's language is a guess (0 letters) is postponed as well, not left as it is.
+        ///
+        /// Why `present` counts: a screen may show two languages, the target among them (an
+        /// Android page with rows of Google's in English among German ones, a German page with
+        /// an English paragraph). Its language is then the one with more text, and a label of
+        /// two or three words in the other one ("Displaysperre einrichten", "Ende der Seite")
+        /// would be taken for that language: into English it came back as it was, and stayed
+        /// untranslated for good. Its own language is decided (at least `wordsToDecide` words,
+        /// `lettersToDecide` letters and `probabilityToDecide`), and a language that so much text
+        /// of the turn was in is no stray guess of the recognizer: the label keeps it. A
+        /// language decided for a short text that no text of the turn showed ("Navigation mode"
+        /// is taken for French) still gives way to the screen's, as before. Single words decide
+        /// no language and still take the screen's ("Keine" among English rows stays as it is):
+        /// a word like "Gift", "Art" or "Handy" is English as well as German. Measured with Apple's
+        /// recognizer (German and English among 23 languages) on 3,878 texts in sequences of
+        /// requests (the screens of Android's Settings and the lab page as Vision read them,
+        /// rows of one language mixed into screens of the other, labels after a paragraph in the
+        /// other language, English labels with German words): texts left as they were although
+        /// in another language 197 → 120, texts sent for translation although in the target
+        /// language 280 → 155, no text worse; of 202 English texts none was decided German.
+        init(findings: [Finding], screen: ScreenLanguage?, target: Locale.Language, lists: [[Locale.Language]],
+             present: [Locale.Language] = []) {
             var positions: [String: Int] = [:]
             var strangers: [(language: Locale.Language, letters: Int)] = []
             let screenSource = screen.flatMap { LanguageMatching.match($0.language, inFirstOf: lists) }
@@ -569,7 +633,8 @@ enum LanguageMatching {
                 var own = finding.decided
                 if let language = own, LanguageMatching.isUndetermined(language) { own = nil }
                 if let language = own, let screen, !finding.standsApart,
-                   !LanguageMatching.sameLanguage(language, screen.language) {
+                   !LanguageMatching.sameLanguage(language, screen.language),
+                   !present.contains(where: { LanguageMatching.sameLanguage($0, language) }) {
                     own = nil
                 }
                 let trusted = finding.weight >= LanguageMatching.lettersToTrustAGuess ? finding.guess : nil
