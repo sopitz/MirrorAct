@@ -163,6 +163,30 @@ final class TextLayoutJoinTests: XCTestCase {
         ])
     }
 
+    // MARK: Titles and summaries
+
+    /// Known limit: the title of a row in iOS settings (17 points) and the summary below it (15
+    /// points) are as close as the lines of a paragraph, their sizes measure within `sameSize` of
+    /// each other and their boxes are about as high, so they are joined. Only their colour tells
+    /// them apart, and the boxes of the lines do not show it. (On Android the summary is clearly
+    /// smaller: `TextLayoutTests.testTitlesAndSummariesOfAndroidSettingsAreSeparate`.) This test
+    /// records the joining so that a change to it is noticed.
+    func testTitleAndSummaryOfAnIOSSettingsRowAreJoined() {
+        let lines = [
+            line("Photos", 207, 691, 178, 41, on: Self.iPhoneIsland),
+            line("Passwords", 223, 817, 247, 41, on: Self.iPhoneIsland),
+            line("Updated just now", 223, 882, 361, 45, on: Self.iPhoneIsland),
+            line("Privacy & Security", 93, 977, 553, 95, on: Self.iPhoneIsland),
+            line("Mobile Data", 211, 2166, 284, 45, on: Self.iPhoneIsland),
+            line("Banners, Sounds, Badges", 223, 2235, 527, 49, on: Self.iPhoneIsland),
+            line("Notifications", 223, 2353, 288, 45, on: Self.iPhoneIsland),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: Self.iPhoneIsland).map(\.text), [
+            "Photos", "Passwords Updated just now", "Privacy & Security", "Mobile Data Banners, Sounds, Badges",
+            "Notifications",
+        ])
+    }
+
     func testListMarkers() throws {
         XCTAssertEqual(try XCTUnwrap(TextLayout.listMarkerUnits("• Brot")), 0.8, accuracy: 1e-9)
         XCTAssertEqual(try XCTUnwrap(TextLayout.listMarkerUnits("•博物馆")), 0.52, accuracy: 1e-9)

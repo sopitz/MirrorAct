@@ -62,9 +62,10 @@ final class TextLayoutTests: XCTestCase {
                        ["駅への行き方", "ホテルを出て右に曲がり、二つ目の信号を左に進んでください。駅は郵便局の向かいにあります。"])
     }
 
-    /// Settings: every entry has a title and a smaller summary right below it, which may take
-    /// two lines; an icon in front
-    func testTitlesAndSummariesOfAListAreSeparate() {
+    /// Android settings: every entry has a title and a smaller summary right below it, which may
+    /// take two lines; an icon in front. (Android's summary is about 1.4 times smaller than the
+    /// title; the closer sizes of iOS stay joined, see `TextLayoutJoinTests`.)
+    func testTitlesAndSummariesOfAndroidSettingsAreSeparate() {
         let lines = [
             line("の", 91, 631, 91, 84),
             line("Netzwerk & Internet", 213, 621, 463, 45),
