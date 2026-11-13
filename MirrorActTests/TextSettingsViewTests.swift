@@ -579,3 +579,18 @@ final class TextSettingsServiceNoticeTests: XCTestCase {
         XCTAssertEqual(notice(.custom, address: "http://192.168.1.25:8080"), .local)
     }
 }
+
+/// What the model field shows while it is empty
+final class TextSettingsModelPromptTests: XCTestCase {
+    /// the model used when none is entered; without one, what has to be entered
+    func testTheModelFieldSaysWhatBelongsThere() {
+        XCTAssertEqual(TextSettingsView.modelPrompt(for: .openAI), .model(LLMProvider.openAI.defaultModel))
+        XCTAssertEqual(TextSettingsView.modelPrompt(for: .azure), .deploymentName)
+        for provider in [LLMProvider.ollama, .lmStudio, .custom] {
+            XCTAssertEqual(TextSettingsView.modelPrompt(for: provider), .modelName, provider.id)
+        }
+        for provider in LLMProvider.all where !provider.defaultModel.isEmpty {
+            XCTAssertEqual(TextSettingsView.modelPrompt(for: provider), .model(provider.defaultModel), provider.id)
+        }
+    }
+}

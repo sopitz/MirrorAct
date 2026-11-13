@@ -153,7 +153,7 @@ struct TextSettingsView: View {
 
             LabeledContent("Model") {
                 HStack {
-                    TextField("Model", text: $page.modelDraft, prompt: Text(verbatim: provider.defaultModel))
+                    TextField("Model", text: $page.modelDraft, prompt: Self.modelPrompt(for: provider).text)
                         .labelsHidden()
                         .focused($focusedField, equals: .model)
                         .onSubmit { page.commitDrafts() }
@@ -255,6 +255,29 @@ struct TextSettingsView: View {
         case serverToEnter
         /// to the service or host named
         case remote(String)
+    }
+
+    /// What the model field shows while it is empty
+    enum ModelPrompt: Equatable {
+        /// the model the service uses when none is entered
+        case model(String)
+        /// Azure takes the name the user gave the deployment of a model
+        case deploymentName
+        /// there is no model to fall back on: one has to be entered
+        case modelName
+
+        var text: Text {
+            switch self {
+            case .model(let model): Text(verbatim: model)
+            case .deploymentName: Text("Deployment name")
+            case .modelName: Text("Model name")
+            }
+        }
+    }
+
+    static func modelPrompt(for provider: LLMProvider) -> ModelPrompt {
+        if !provider.defaultModel.isEmpty { return .model(provider.defaultModel) }
+        return provider.id == LLMProvider.azure.id ? .deploymentName : .modelName
     }
 
     /// Translate sends new text whenever it comes into view, and a service bills each request

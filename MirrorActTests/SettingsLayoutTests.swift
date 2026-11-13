@@ -78,6 +78,21 @@ final class SettingsLayoutTests: XCTestCase {
         }
     }
 
+    /// No field looks empty: with nothing entered, each says what belongs there. For Azure,
+    /// Custom, Ollama and LM Studio the model field showed nothing, as they have no default model.
+    func testEveryEmptyFieldSaysWhatBelongsThere() throws {
+        try forEachTextPage { page, situation in
+            let fields = self.textFields(in: page).filter { !($0 is NSSecureTextField) }
+            // a service has a model field at least
+            XCTAssertEqual(fields.isEmpty, situation.hasSuffix("this Mac"), situation)
+            for field in fields {
+                XCTAssertEqual(field.stringValue, "", situation)
+                XCTAssertFalse(field.placeholderString?.trimmingCharacters(in: .whitespaces).isEmpty ?? true,
+                               "a field without a placeholder, \(situation)")
+            }
+        }
+    }
+
     // MARK: Helpers
 
     /// The Text page as the settings window shows it, in each language of the app (as SwiftUI
@@ -140,6 +155,12 @@ final class SettingsLayoutTests: XCTestCase {
             .filter(\.needsAppleIntelligence)
             .max { ($0.name as NSString).size(withAttributes: [.font: font]).width
                 < ($1.name as NSString).size(withAttributes: [.font: font]).width }!
+    }
+
+    /// the fields the user types into
+    private func textFields(in view: NSView) -> [NSTextField] {
+        if let field = view as? NSTextField, field.isEditable { return [field] }
+        return view.subviews.flatMap(textFields)
     }
 
     private func popUpButtons(in view: NSView) -> [NSPopUpButton] {
