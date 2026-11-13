@@ -231,7 +231,8 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             try? await Task.sleep(nanoseconds: 500_000_000)
             return true
         }
-        let blocks = recognizedBlocks(from: lines, in: frame)
+        let areas = locked { tracker.scrollingAreas }
+        let blocks = Self.recognizedBlocks(from: lines, in: frame, areas: areas)
         let finished: (wake: AsyncStream<Void>.Continuation?, known: [TrackedBlock])? = locked {
             guard isCurrent(turn) else { return nil }
             tracker.finishRecognition(request, blocks: blocks, time: Self.clock)
@@ -247,17 +248,35 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         return true
     }
 
-    /// Paragraphs worth translating, in frame pixels, with the colors to draw them in
-    private func recognizedBlocks(from lines: [RecognizedLine], in frame: CVPixelBuffer) -> [RecognizedBlock] {
+    /// Paragraphs worth translating, in frame pixels, with the colors to draw them in. No
+    /// paragraph reaches across a known edge of a scrolling area: what lies on the other side is
+    /// a bar that stays, or other content.
+    static func recognizedBlocks(from lines: [RecognizedLine], in frame: CVPixelBuffer,
+                                 areas: [ScrollingArea]) -> [RecognizedBlock] {
         let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
-        let paragraphs = TextLayout.blocks(lines, imageSize: size).filter { TextLayout.isTranslatable($0.text) }
+        var edges: [(y: CGFloat, from: CGFloat, to: CGFloat)] = []
+        for area in areas {
+            if area.knownEdges & FrameMotion.top != 0 { edges.append((area.rect.minY, area.rect.minX, area.rect.maxX)) }
+            if area.knownEdges & FrameMotion.bottom != 0 { edges.append((area.rect.maxY, area.rect.minX, area.rect.maxX)) }
+        }
+        // lines with the same known edges above them lie between the same edges
+        var keys: [[Int]] = []
+        var groups: [[Int]: [RecognizedLine]] = [:]
+        for line in lines {
+            let x = line.rect.midX * size.width, y = line.rect.midY * size.height
+            let above = edges.indices.filter { edges[$0].y < y && edges[$0].from <= x && x <= edges[$0].to }
+            if groups[above] == nil { keys.append(above) }
+            groups[above, default: []].append(line)
+        }
+        let paragraphs = keys.flatMap { TextLayout.blocks(groups[$0] ?? [], imageSize: size) }
+            .filter { TextLayout.isTranslatable($0.text) }
         return paragraphs.map { paragraph in
             let rect = CGRect(x: paragraph.rect.minX * size.width, y: paragraph.rect.minY * size.height,
                               width: paragraph.rect.width * size.width, height: paragraph.rect.height * size.height)
             // the frame's own colors, so that a box matches its surroundings exactly
             let colors = FramePixels.blockColors(in: rect, of: frame)
             return RecognizedBlock(text: paragraph.text, rect: rect, lineCount: paragraph.lineCount, colors: colors,
-                                   confidence: paragraph.confidence)
+                                   confidence: paragraph.confidence, cutOffEdges: paragraph.cutOffEdges)
         }
     }
 

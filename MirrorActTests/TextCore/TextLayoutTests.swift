@@ -46,6 +46,7 @@ final class TextLayoutTests: XCTestCase {
         XCTAssertEqual(paragraph.rect.minY * phone.height, 460, accuracy: 0.01)
         XCTAssertEqual(paragraph.rect.maxY * phone.height, 845, accuracy: 0.01)
         XCTAssertEqual(paragraph.rect.minX * phone.width, 45, accuracy: 0.01)
+        XCTAssertTrue(blocks.allSatisfy { $0.cutOffEdges == 0 })
     }
 
     /// A Japanese heading of 23 pixels right above its paragraph of 18: the boxes are about as
@@ -123,6 +124,58 @@ final class TextLayoutTests: XCTestCase {
         XCTAssertNil(TextLayout.textSize(of: "16", width: 45))
     }
 
+    /// Scrolled: the last line on the screen is cut in half by the navigation bar, and Vision read
+    /// its upper half as garbage in a low box. It is no line of the paragraph above it, and the
+    /// paragraph is not complete.
+    func testALineCutOffIsAloneAndTheParagraphGoesOnThere() {
+        let lines = [
+            line("Une recette simple", 52, 2138, 512, 63),
+            line("Faites fondre le beurre dans une poêle, ajoutez", 52, 2250, 975, 52),
+            line("lan dianana aalinán an finan lamallan at", 45, 2316, 829, 28),
+        ]
+        let blocks = TextLayout.blocks(lines, imageSize: phone)
+        XCTAssertEqual(blocks.map(\.text), ["Une recette simple", "Faites fondre le beurre dans une poêle, ajoutez",
+                                            "lan dianana aalinán an finan lamallan at"])
+        XCTAssertEqual(blocks.map(\.cutOffEdges), [0, FrameMotion.bottom, FrameMotion.top | FrameMotion.bottom])
+        XCTAssertTrue(TextLayout.looksCutOff("lan dianana aalinán an finan lamallan at", width: 829, height: 28))
+        XCTAssertFalse(TextLayout.looksCutOff("Faites fondre le beurre dans une poêle, ajoutez", width: 975, height: 52))
+        // x-height letters only make a low box anyway
+        XCTAssertFalse(TextLayout.looksCutOff("une rose acamuse", width: 340, height: 26))
+    }
+
+    /// The tracker is given what `blocks` makes of these lines: it asks to translate the heading,
+    /// but neither the garbage nor the paragraph that goes on below the navigation bar (both are
+    /// read again once all of them can be seen)
+    func testNeitherACutOffLineNorItsParagraphIsTranslatedYet() throws {
+        let lines = [
+            line("Une recette simple", 52, 2138, 512, 63),
+            line("Faites fondre le beurre dans une poêle, ajoutez", 52, 2250, 975, 52),
+            line("lan dianana aalinán an finan lamallan at", 45, 2316, 829, 28),
+        ]
+        // the picture: a light page with a texture where the lines are, reduced by 3
+        let scale = 3
+        var page = LumaImage(width: Int(phone.width) / scale, height: Int(phone.height) / scale, fill: 240)
+        for line in lines {
+            let rect = CGRect(x: line.rect.minX * phone.width / CGFloat(scale), y: line.rect.minY * phone.height / CGFloat(scale),
+                              width: line.rect.width * phone.width / CGFloat(scale),
+                              height: line.rect.height * phone.height / CGFloat(scale))
+            for y in Int(rect.minY)..<Int(rect.maxY) {
+                for x in Int(rect.minX)..<Int(rect.maxX) where (x / 3 + y / 5) % 2 == 0 { page[x, y] = 40 }
+            }
+        }
+        let tracker = OverlayTracker()
+        _ = tracker.advance(page, scale: scale, time: 0)
+        let request = try XCTUnwrap(tracker.beginRecognition(time: 1))
+        let blocks = TextLayout.blocks(lines, imageSize: phone).filter { TextLayout.isTranslatable($0.text) }.map { block in
+            RecognizedBlock(text: block.text, rect: CGRect(x: block.rect.minX * phone.width, y: block.rect.minY * phone.height,
+                                                           width: block.rect.width * phone.width,
+                                                           height: block.rect.height * phone.height),
+                            lineCount: block.lineCount, cutOffEdges: block.cutOffEdges)
+        }
+        tracker.finishRecognition(request, blocks: blocks, time: 1.1)
+        XCTAssertEqual(tracker.textsAwaitingTranslation(limit: 10, time: 1.2), ["Une recette simple"])
+    }
+
     /// Scrolled to the end of the page: the navigation bar hides the lower part of the last line.
     /// Vision read the rest of it, nearly right, in a box two thirds as high as the line above.
     /// The paragraph ends above it; the part is no line of it.
@@ -140,6 +193,7 @@ final class TextLayoutTests: XCTestCase {
                 + "die Übersetzungen auf ihrem Text bleiben und nicht zittern, springen oder",
             "an ainer alten Stalle ctahen hlaihen menn der",
         ])
+        XCTAssertEqual(blocks.map(\.cutOffEdges), [0, 0])
     }
 
     func testPlainTextReadsTopToBottomAndLeftToRight() {

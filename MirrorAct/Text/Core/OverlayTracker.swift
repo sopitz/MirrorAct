@@ -5,6 +5,14 @@ import Foundation
 import CoreGraphics
 #endif
 
+/// A part of the frame whose content moves as one (a page that scrolls between bars that stay)
+struct ScrollingArea: Equatable {
+    /// in frame pixels, origin at the top left
+    var rect: CGRect
+    /// the edges found to the pixel (`FrameMotion.top` …); the others are only known roughly
+    var knownEdges: Int
+}
+
 /// Keeps the translations of a screen on their text from frame to frame and decides which parts
 /// of the picture have to be read (again).
 ///
@@ -266,6 +274,18 @@ final class OverlayTracker {
                                        isStale: shown != nil && shownTranslation(for: block.text) == nil))
         }
         return result
+    }
+
+    /// The scrolling areas found so far, in frame pixels: text on both sides of an edge of one
+    /// belongs to different things (content and a bar that stays), and text that reaches an edge
+    /// that is known to the pixel may be cut off there
+    var scrollingAreas: [ScrollingArea] {
+        let factor = Double(scale)
+        return areas.map { area in
+            ScrollingArea(rect: CGRect(x: Double(area.rect.x) * factor, y: Double(area.rect.y) * factor,
+                                       width: Double(area.rect.width) * factor, height: Double(area.rect.height) * factor),
+                          knownEdges: area.refinedEdges)
+        }
     }
 
     /// How many things the tracker holds that could pile up while it runs: blocks, scrolling
@@ -1139,7 +1159,9 @@ final class OverlayTracker {
             guard !rect.isNull, rect.width > 0, rect.height > 0,
                   rect.intersects(CGRect(x: 0, y: 0, width: current.width, height: current.height)) else { continue }
             guard let shift = pass.probes.displacement(atX: rect.midX, y: rect.midY) else { continue }
-            let cut = cutEdges(of: rect, in: pass.region)
+            // (a line of it read only in part: something hides it there that is not known as an
+            // edge, such as a bar the content shows through)
+            let cut = cutEdges(of: rect, in: pass.region) | found.cutOffEdges
             if cut != 0 {
                 askToReread(rect, cut: cut, lineCount: found.lineCount, shift: (shift.dx, shift.dy), pass: pass,
                             time: time)

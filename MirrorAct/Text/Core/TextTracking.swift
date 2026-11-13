@@ -140,13 +140,18 @@ struct RecognizedBlock: Equatable {
     var colors: BlockColors
     /// 0…1 where the recognizer says how sure it is, nil otherwise
     var confidence: Double?
+    /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph goes on, hidden: a
+    /// line there was read only in part (`TextBlock.cutOffEdges`)
+    var cutOffEdges: Int
 
-    init(text: String, rect: CGRect, lineCount: Int = 1, colors: BlockColors = .blackOnWhite, confidence: Double? = nil) {
+    init(text: String, rect: CGRect, lineCount: Int = 1, colors: BlockColors = .blackOnWhite, confidence: Double? = nil,
+         cutOffEdges: Int = 0) {
         self.text = text
         self.rect = rect
         self.lineCount = lineCount
         self.colors = colors
         self.confidence = confidence
+        self.cutOffEdges = cutOffEdges
     }
 }
 

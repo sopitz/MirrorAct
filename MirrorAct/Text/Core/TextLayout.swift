@@ -26,12 +26,17 @@ struct TextBlock: Equatable {
     var lineCount: Int
     /// that of the least certain line, nil when the recognizer reports none
     var confidence: Double?
+    /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph goes on, hidden: it is
+    /// a line of which only a part shows and that was read as garbage (then both), or such a line
+    /// lies right above or below it (see `TextLayout.blocks`). Such a paragraph is not complete.
+    var cutOffEdges: Int
 
-    init(text: String, rect: CGRect, lineCount: Int, confidence: Double? = nil) {
+    init(text: String, rect: CGRect, lineCount: Int, confidence: Double? = nil, cutOffEdges: Int = 0) {
         self.text = text
         self.rect = rect
         self.lineCount = lineCount
         self.confidence = confidence
+        self.cutOffEdges = cutOffEdges
     }
 }
 
@@ -84,10 +89,14 @@ enum TextLayout {
     /// part that was read) when its box is lower than `partHeight` of its text size and at most
     /// `partOfNeighbour` of the box of a line right above or below it that could be the next
     /// line of its paragraph. (The low box alone does not tell: with letters of unusual widths the
-    /// text size comes out too large.) Such a line is a block of its own.
+    /// text size comes out too large.) Such a line is a block of its own. When its box is even
+    /// lower than `cutOffHeight` of its text size (`looksCutOff`), the recognizer read it mostly
+    /// as garbage: it and the paragraph it would continue or that would continue it are marked as
+    /// going on beyond it (`TextBlock.cutOffEdges`).
     static func blocks(_ lines: [RecognizedLine], imageSize: CGSize) -> [TextBlock] {
         struct Open {
             var block: TextBlock
+            var first: Measured
             var last: Measured
         }
         var open: [Open] = []
@@ -104,8 +113,21 @@ enum TextLayout {
                 }
                 open[match].last = measured
             } else {
+                let cutOff = measured.isPart && measured.isCutOff ? FrameMotion.top | FrameMotion.bottom : 0
                 open.append(Open(block: TextBlock(text: line.text, rect: line.rect, lineCount: 1,
-                                                  confidence: line.confidence), last: measured))
+                                                  confidence: line.confidence, cutOffEdges: cutOff),
+                                 first: measured, last: measured))
+            }
+        }
+        let cutOff = open.map(\.last).filter { $0.isPart && $0.isCutOff }
+        for index in open.indices where !open[index].last.isPart {
+            for line in cutOff {
+                if adjoins(open[index].last, below: line, size: open[index].last.size) {
+                    open[index].block.cutOffEdges |= FrameMotion.bottom
+                }
+                if adjoins(line, below: open[index].first, size: open[index].first.size) {
+                    open[index].block.cutOffEdges |= FrameMotion.top
+                }
             }
         }
         return open.map(\.block)
@@ -118,7 +140,9 @@ enum TextLayout {
                               width: line.rect.width * imageSize.width, height: line.rect.height * imageSize.height)
             let units = widthUnits(of: line.text)
             return (line, Measured(rect: rect, units: units, size: units >= minUnits ? Double(rect.width) / units : nil,
-                                   isLow: isLow(line.text, width: Double(rect.width), height: Double(rect.height)),
+                                   isLow: isLow(line.text, width: Double(rect.width), height: Double(rect.height),
+                                                share: partHeight),
+                                   isCutOff: looksCutOff(line.text, width: Double(rect.width), height: Double(rect.height)),
                                    isPart: false, startsListItem: startsListItem(line.text)))
         }
         for index in all.indices where all[index].1.isLow {
@@ -139,8 +163,10 @@ enum TextLayout {
         var units: Double
         /// nil = too short to tell
         var size: Double?
-        /// the box is lower than `partHeight` of the text size
+        /// the box is lower than `partHeight` of the text size …
         var isLow: Bool
+        /// … or even lower than `cutOffHeight`
+        var isCutOff: Bool
         /// only part of its letters show (see `blocks`)
         var isPart: Bool
         var startsListItem: Bool
@@ -208,9 +234,11 @@ enum TextLayout {
     /// height of a line
     static let alignment = 0.6
     /// a box lower than this share of the size of its text and at most `partOfNeighbour` of the
-    /// box of the line next to it holds only part of its letters
+    /// box of the line next to it holds only part of its letters; one lower than `cutOffHeight`
+    /// of its size was read as garbage
     static let partHeight = 0.78
     static let partOfNeighbour = 0.75
+    static let cutOffHeight = 0.62
 
     /// The size of the text of a line (about the height of its font, in the units of `width`),
     /// measured from its width: `width` divided by `widthUnits`. nil when the text is too short to
@@ -249,12 +277,16 @@ enum TextLayout {
         return 0.52
     }
 
-    /// Whether a line's box (`width` and `height` in pixels) is lower than `partHeight` of its text
-    /// size, as when something hides part of the line. Only said of text with tall letters
-    /// (capitals, digits, ascenders, Chinese, Japanese or Korean): a line of x-height letters alone
-    /// is low anyway.
-    private static func isLow(_ text: String, width: Double, height: Double) -> Bool {
-        guard let size = textSize(of: text, width: width), height < partHeight * size else { return false }
+    /// Whether a line's box (`width` and `height` in pixels) is too low for its text, as when
+    /// something hides part of the line. Only said of text with tall letters (capitals, digits,
+    /// ascenders, Chinese, Japanese or Korean): a line of x-height letters alone is low anyway.
+    static func looksCutOff(_ text: String, width: Double, height: Double) -> Bool {
+        isLow(text, width: width, height: height, share: cutOffHeight)
+    }
+
+    /// Whether the box is lower than `share` of the text size, for text with tall letters
+    private static func isLow(_ text: String, width: Double, height: Double, share: Double) -> Bool {
+        guard let size = textSize(of: text, width: width), height < share * size else { return false }
         return text.unicodeScalars.contains { scalar in
             scalar.properties.isUppercase || (0x30...0x39).contains(scalar.value) || "bdfhklt".unicodeScalars.contains(scalar)
                 || (0x2E80...0xD7AF).contains(scalar.value)

@@ -818,7 +818,8 @@ final class TrackingBench {
                 confidence = min(confidence, line.confidence)
             }
             blocks.append(RecognizedBlock(text: block.text, rect: rect, lineCount: block.lineCount, colors: colors,
-                                          confidence: root.reportsConfidence ? confidence : nil))
+                                          confidence: root.reportsConfidence ? confidence : nil,
+                                          cutOffEdges: block.cutOffEdges))
         }
         return blocks
     }

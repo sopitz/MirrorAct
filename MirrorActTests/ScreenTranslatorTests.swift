@@ -187,6 +187,25 @@ final class ScreenTranslatorTests: XCTestCase {
         XCTAssertTrue(stale.wasCancelled)
     }
 
+    /// No paragraph reaches across a known edge of a scrolling area. Vision's lines of a phone
+    /// screen (1080 × 2400): the title in the bar and, right below the bar, a heading whose centre
+    /// happens to lie below the title's; once the page has scrolled, the tracker knows where the
+    /// bar ends.
+    func testTheTitleOfABarAndTheTextBelowItAreNotOneParagraph() throws {
+        let phone = CGSize(width: 1080, height: 2400)
+        let lines = [("Testlabor", 171.0, 115.0, 247.0, 49.0), ("Hautige Fragen", 52.0, 206.0, 415.0, 52.0)].map { text, x, y, w, h in
+            RecognizedLine(text: text, rect: CGRect(x: x / phone.width, y: y / phone.height, width: w / phone.width,
+                                                    height: h / phone.height))
+        }
+        let frame = try TestFrames.blank(width: 1080, height: 2400, format: kCVPixelFormatType_32BGRA)
+        let area = ScrollingArea(rect: CGRect(x: 24, y: 204, width: 1032, height: 2160),
+                                 knownEdges: FrameMotion.top | FrameMotion.bottom)
+        XCTAssertEqual(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: [area]).map(\.text).sorted(),
+                       ["Hautige Fragen", "Testlabor"])
+        // (without the bar's edge the two would be taken for one paragraph)
+        XCTAssertEqual(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: []).count, 1)
+    }
+
     func testWithoutAFrameTranslateDoesNotStart() {
         var messages: [String] = []
         translator.onMessage = { messages.append($0) }
