@@ -137,6 +137,11 @@ struct GeneralSettingsView: View {
             Section("Window") {
                 Toggle("Show device frame", isOn: $settings.showFrame)
                 Toggle("Keep on top", isOn: $settings.alwaysOnTop)
+                Toggle("Also above full-screen apps", isOn: $settings.onTopEverywhere)
+                    .disabled(!settings.alwaysOnTop)
+                Text("The mirror window then also shows on every desktop and above other apps in full screen. Clicking it no longer brings MirrorAct to the front.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Play sound", isOn: $settings.playAudio)
             }
             Section("iPhone and iPad control") {

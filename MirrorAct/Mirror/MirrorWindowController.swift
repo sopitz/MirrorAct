@@ -9,6 +9,18 @@ final class MirrorWindow: NSWindow {
     override var canBecomeMain: Bool { true }
 }
 
+/// The mirror window as a panel that does not activate the app. Only such a panel is shown in
+/// another app's full-screen Space: measured on macOS 26.5, a window or an activating panel stays
+/// away at every level, with or without a Dock icon, while a panel of this kind shows at the
+/// floating level.
+final class MirrorPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
+    /// a panel with a close button closes on Esc; the mirror window never did
+    override func cancelOperation(_ sender: Any?) {}
+}
+
 /// Mirror window: just the device, with a tool rail to its right that appears when the mouse
 /// hovers over it. Every function is also available via right-click and keyboard shortcuts.
 @MainActor
@@ -33,16 +45,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
 
     init(session: MirrorSession) {
         self.session = session
-        let window = MirrorWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 900),
-                                  styleMask: [.borderless, .closable, .miniaturizable, .resizable],
-                                  backing: .buffered, defer: false)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.hasShadow = true
-        window.isMovableByWindowBackground = false
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
-        window.title = session.deviceName
+        let settings = AppSettings.shared
+        let window = Self.makeWindow(everywhere: settings.alwaysOnTop && settings.onTopEverywhere,
+                                     frame: NSRect(x: 0, y: 0, width: 480, height: 900), title: session.deviceName)
         super.init(window: window)
         window.delegate = self
 
@@ -88,7 +93,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         session.$state.sink { [weak self] state in
             DispatchQueue.main.async { self?.updatePlaceholder(state) }
         }.store(in: &cancellables)
-        session.$deviceName.sink { [weak window] name in window?.title = name }.store(in: &cancellables)
+        session.$deviceName.sink { [weak self] name in self?.window?.title = name }.store(in: &cancellables)
         session.$controlState.removeDuplicates().sink { [weak self] state in
             DispatchQueue.main.async { self?.controlStateChanged(state) }
         }.store(in: &cancellables)
@@ -104,8 +109,8 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         settings.$style.dropFirst().sink { [weak self] _ in
             DispatchQueue.main.async { self?.refreshPresentationBackground() }
         }.store(in: &cancellables)
-        settings.$alwaysOnTop.sink { [weak window] onTop in
-            window?.level = onTop ? .floating : .normal
+        settings.$alwaysOnTop.combineLatest(settings.$onTopEverywhere).sink { [weak self] onTop, everywhere in
+            self?.keepOnTop(onTop, everywhere: onTop && everywhere)
         }.store(in: &cancellables)
         chrome.$styleOpen.dropFirst().sink { [weak self] open in
             if !open { self?.scheduleHide() }
@@ -113,6 +118,57 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: Keep on top
+
+    /// A window for the desktop it is on, or a panel that also shows on every desktop and in
+    /// other apps' full-screen Spaces
+    private static func makeWindow(everywhere: Bool, frame: NSRect, title: String) -> NSWindow {
+        let style: NSWindow.StyleMask = [.borderless, .closable, .miniaturizable, .resizable]
+        let window: NSWindow
+        if everywhere {
+            window = MirrorPanel(contentRect: frame, styleMask: style.union(.nonactivatingPanel),
+                                 backing: .buffered, defer: false)
+            // a panel hides while its app is inactive, which is when this one is needed
+            window.hidesOnDeactivate = false
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .participatesInCycle]
+        } else {
+            window = MirrorWindow(contentRect: frame, styleMask: style, backing: .buffered, defer: false)
+            window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
+        }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.isMovableByWindowBackground = false
+        window.isReleasedWhenClosed = false
+        window.title = title
+        return window
+    }
+
+    private func keepOnTop(_ onTop: Bool, everywhere: Bool) {
+        if (window is MirrorPanel) != everywhere { replaceWindow(everywhere: everywhere) }
+        window?.level = onTop ? .floating : .normal
+    }
+
+    /// Whether a panel activates the app is settled when it is created: build the other kind of
+    /// window and hand it the content, the place and the keyboard
+    private func replaceWindow(everywhere: Bool) {
+        guard let old = window else { return }
+        chrome.styleOpen = false   // the style popover hangs on the old window
+        let new = Self.makeWindow(everywhere: everywhere, frame: old.frame, title: old.title)
+        let wasVisible = old.isVisible, wasKey = old.isKeyWindow
+        old.delegate = nil
+        old.contentView = NSView()
+        new.contentView = container
+        window = new
+        new.delegate = self
+        if wasVisible {
+            if wasKey { new.makeKeyAndOrderFront(nil) } else { new.orderFrontRegardless() }
+            if frameView.acceptsFirstResponder { new.makeFirstResponder(frameView) }
+        }
+        old.orderOut(nil)
+        new.invalidateShadow()
+    }
 
     func present() {
         if !placed {
@@ -199,6 +255,12 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         menu.addItem(ActionMenuItem(String(localized: "Keep on Top"), key: "t", state: settings.alwaysOnTop) { [weak self] in
             self?.settings.alwaysOnTop.toggle()
         })
+        let everywhere = ActionMenuItem(String(localized: "Also Above Full-Screen Apps"), state: settings.onTopEverywhere,
+                                        enabled: settings.alwaysOnTop) { [weak self] in
+            self?.settings.onTopEverywhere.toggle()
+        }
+        everywhere.indentationLevel = 1
+        menu.addItem(everywhere)
         menu.addItem(ActionMenuItem(presentation == nil ? String(localized: "Present")
                                                         : String(localized: "Exit Presentation"), a.present))
         menu.addItem(.separator())
@@ -476,6 +538,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             window.makeFirstResponder(frameView)
         }
         if case let .failed(message) = state {
+            // the alert is an ordinary window: above another app's full screen it would wait
+            // unseen on a desktop, so the app comes to the front with it
+            if window is MirrorPanel { NSApp.activate(ignoringOtherApps: true) }
             let alert = NSAlert()
             alert.messageText = String(localized: "\(session.deviceName) can’t be controlled")
             alert.informativeText = message
@@ -562,11 +627,14 @@ private final class ContainerView: NSView {
 }
 
 /// Menu item with a closure
-final class ActionMenuItem: NSMenuItem {
+final class ActionMenuItem: NSMenuItem, NSMenuItemValidation {
     private let handler: () -> Void
+    private let available: Bool
 
-    init(_ title: String, key: String = "", state on: Bool? = nil, _ handler: @escaping () -> Void) {
+    init(_ title: String, key: String = "", state on: Bool? = nil, enabled: Bool = true,
+         _ handler: @escaping () -> Void) {
         self.handler = handler
+        available = enabled
         super.init(title: title, action: #selector(run), keyEquivalent: key)
         target = self
         if let on { state = on ? .on : .off }
@@ -575,6 +643,8 @@ final class ActionMenuItem: NSMenuItem {
     required init(coder: NSCoder) { fatalError() }
 
     @objc private func run() { handler() }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool { available }
 
     static func submenu(_ title: String, _ menu: NSMenu) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
