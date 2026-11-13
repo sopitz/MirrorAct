@@ -1211,6 +1211,199 @@ final class AppleTranslationEngineTests: XCTestCase {
         client.cancel()
         _ = try await request.value
     }
+
+    // MARK: Short labels together (FakeSession answers in place of the framework)
+
+    /// Rows of Android's Network & internet page as Vision read them, and a paragraph
+    private static let rows = ["Netzwerk & Internet", "Aus", AppleTranslationEngineTests.german, "Datensparmodus", "An", "Abbrechen"]
+    private static let toEnglish = ["Netzwerk & Internet": "Network & internet", "Aus": "Off", "Datensparmodus": "Data Saver",
+                                  "An": "On", "Abbrechen": "Cancel", "Benachrichtigungen": "Notifications",
+                                  AppleTranslationEngineTests.german: "This is a quite ordinary German sentence about today's and tomorrow's weather."]
+
+    /// What a label is: short, one line, no sentence, without the separator
+    func testWhatALabelIs() {
+        let labels = ["Aus", "Passwort vergessen?", "Mittwoch, 13. November", "Suchen …", "Laden...", "An / Clock",
+                      "Mobile Daten, WLAN, Hotspot", "Assistant, kürzlich geöffnete Apps, Standard-Apps",
+                      "eins zwei drei vier fünf sechs", String(repeating: "a", count: 50), "通知設定", "100 %",
+                      "Netzwerktyp, Verschlüsselung"]
+        let others = ["eins zwei drei vier fünf sechs sieben", String(repeating: "a", count: 51),
+                      String(repeating: "設", count: 17), "Your device is up to date.", "Fertig. Weiter",
+                      "Ton | Bild", "Ton ｜ Bild", "Ton\nBild", "", "   ", "設定が完了しました。"]
+        for text in labels { XCTAssertTrue(AppleTranslationJoining.isLabel(text), text) }
+        for text in others { XCTAssertFalse(AppleTranslationJoining.isLabel(text), text) }
+    }
+
+    /// The labels of a job in its order, at most twelve in a text, as even as possible; the rest,
+    /// and a label with nothing to join it to, alone
+    func testHowLabelsAreGrouped() {
+        let long = Self.german
+        func packets(_ texts: [String]) -> [[Int]] { AppleTranslationJoining.packets(for: texts) }
+        XCTAssertEqual(packets([]), [])
+        XCTAssertEqual(packets(["Aus"]), [[0]])
+        XCTAssertEqual(packets(["Aus", long]), [[0], [1]])
+        XCTAssertEqual(packets([long, "Aus", long, "An"]), [[0], [1, 3], [2]])
+        let labels = (1...25).map { "Zeile \($0)" }
+        XCTAssertEqual(packets(Array(labels.prefix(12))), [Array(0..<12)])
+        XCTAssertEqual(packets(Array(labels.prefix(13))), [Array(0..<7), Array(7..<13)])
+        XCTAssertEqual(packets(labels).map(\.count), [9, 8, 8])
+        XCTAssertEqual(AppleTranslationJoining.text(of: [1, 3], in: [long, "Aus", long, "An"]), "Aus | An")
+    }
+
+    /// An answer is split at the separators; it counts only with one part per label, none empty
+    /// and none many times longer than its label
+    func testHowAnAnswerIsSplit() {
+        let labels = ["Aus", "An", "Abbrechen"]
+        func parts(_ answer: String) -> [String]? { AppleTranslationJoining.parts(of: answer, for: labels) }
+        XCTAssertEqual(parts("Off | On | Cancel"), ["Off", "On", "Cancel"])
+        XCTAssertEqual(parts(" Off|On |  Cancel "), ["Off", "On", "Cancel"])
+        XCTAssertEqual(parts("Off ｜ On ｜ Cancel"), ["Off", "On", "Cancel"])
+        XCTAssertNil(parts("Off | On"))
+        XCTAssertNil(parts("Off | On | Cancel | "))
+        XCTAssertNil(parts("Off |  | Cancel"))
+        XCTAssertNil(parts("Off On Cancel"))
+        // "An" weighs 2: up to 18 letters
+        XCTAssertEqual(parts("Off | Switched on now | Cancel"), ["Off", "Switched on now", "Cancel"])
+        XCTAssertNil(parts("Off | Switched on and then cancelled | Cancel"))
+        // what was measured stays believable
+        XCTAssertNotNil(AppleTranslationJoining.parts(of: "Hinzufügen | Rechtliche und regulatorische Informationen",
+                                                      for: ["Add", "Legal & regulatory"]))
+    }
+
+    /// The log line of a call says how many texts it translated
+    func testTheLogLineOfACallTellsTheNumberOfTexts() {
+        XCTAssertEqual(AppleTranslationEngine.callLine("de→en", texts: 18, requests: 7, milliseconds: 343),
+                       "Translation: Apple de→en: 18 texts in 7 requests, 343 ms")
+    }
+
+    /// Sends `texts` through the engine into English, with German installed, on `session`
+    private func translate(_ texts: [String], on session: FakeSession) async throws
+        -> (translations: [String?], client: AppleTranslationClient, served: Task<Void, Never>) {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let request = Task { try await client.translate(texts, into: self.language("en")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let served = Task { await engine.serve(host, prepare: {}, work: { await engine.work(for: host, calling: session.call) }) }
+        return (try await request.value, client, served)
+    }
+
+    /// The short labels of a job go into the framework as one text, in their order, and their
+    /// answer is split again; a paragraph goes alone. Each label gets its own translation.
+    func testTheShortLabelsOfAJobGoAsOneTextAndComeBackApart() async throws {
+        let session = FakeSession(Self.toEnglish)
+        let (translations, client, served) = try await translate(Self.rows, on: session)
+        XCTAssertEqual(translations, Self.rows.map { Self.toEnglish[$0] })
+        XCTAssertEqual(session.calls.count, 1)
+        XCTAssertEqual(session.calls.first.map(Set.init),
+                       ["Netzwerk & Internet | Aus | Datensparmodus | An | Abbrechen", Self.german])
+        client.cancel()
+        try await waitFor(served)
+    }
+
+    /// A text that holds the separator, a long one and a label with nothing to join it to go
+    /// alone, as before
+    func testATextWithTheSeparatorALongOneAndALoneLabelGoAlone() async throws {
+        let long = "Gesamten Inhalt von Benachrichtigungen auf dem Sperrbildschirm anzeigen"
+        let session = FakeSession(["Ton | Bild": "Sound | Picture", long: "Show all notification content on the lock screen",
+                                   "Aus": "Off"])
+        let (translations, client, served) = try await translate(["Aus", "Ton | Bild", long], on: session)
+        XCTAssertEqual(translations, ["Off", "Sound | Picture", "Show all notification content on the lock screen"])
+        XCTAssertEqual(session.calls.map(Set.init), [["Aus", "Ton | Bild", long]])
+        client.cancel()
+        try await waitFor(served)
+    }
+
+    /// An answer that does not split into one part per label, has an empty part, or a part many
+    /// times longer than its label, is not used: the labels of that text are asked for one by one
+    /// in one more call, and none of them gets a part that belongs to another
+    func testAnAnswerThatDoesNotSplitAsksForTheLabelsOneByOne() async throws {
+        let labels = ["Aus", "An", "Abbrechen"]
+        let joined = labels.joined(separator: " | ")
+        for answer in ["Off | On", "Off | On | Cancel | More", "Off |  | Cancel", "Off | | Cancel",
+                       "Off | On, and every other setting there is on this phone | Cancel", "Off On Cancel"] {
+            let session = FakeSession(Self.toEnglish)
+            session.answers[joined] = answer
+            let (translations, client, served) = try await translate(labels + [Self.german], on: session)
+            XCTAssertEqual(translations, ["Off", "On", "Cancel", Self.toEnglish[Self.german]], answer)
+            XCTAssertEqual(session.calls.count, 2, answer)
+            XCTAssertEqual(session.calls.last, labels, answer)
+            client.cancel()
+            try await waitFor(served)
+        }
+    }
+
+    /// Translate goes off while the framework works on a joined text whose answer would not fit:
+    /// the request is answered "not now" at once, and the labels are not asked for again
+    func testTurningTranslatingOffDuringAJoinedTextAsksNothingMore() async throws {
+        let labels = ["Aus", "An", "Abbrechen"]
+        let session = FakeSession(Self.toEnglish)
+        session.answers[labels.joined(separator: " | ")] = "Off | On"
+        session.holdsNextCall = true
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let request = Task { try await client.translate(labels, into: self.language("en")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let served = Task { await engine.serve(host, prepare: {}, work: { await engine.work(for: host, calling: session.call) }) }
+        try await waitUntil { session.isHolding }
+        client.cancel()
+        let translations = try await request.value
+        XCTAssertEqual(translations, [nil, nil, nil])
+        session.release()
+        try await waitFor(served)
+        XCTAssertEqual(session.calls, [[labels.joined(separator: " | ")]])
+        XCTAssertTrue(engine.hosts.isEmpty)
+    }
+}
+
+/// Answers in place of a session of the framework (`TranslationSession.translations(from:)`)
+@MainActor
+private final class FakeSession {
+    /// what a text comes back as; a text not in here, and each part of a joined text that is,
+    /// see `answer`
+    var answers: [String: String]
+    /// the texts of each call, in the order of its requests
+    private(set) var calls: [[String]] = []
+    /// the next call does not answer before `release`
+    var holdsNextCall = false
+    private var held: CheckedContinuation<Void, Never>?
+
+    init(_ answers: [String: String]) {
+        self.answers = answers
+    }
+
+    var isHolding: Bool { held != nil }
+
+    func release() {
+        held?.resume()
+        held = nil
+    }
+
+    var call: AppleTranslationCall {
+        { requests in await self.translations(from: requests) }
+    }
+
+    /// A text of its own, or part by part (" | " between them, as the framework keeps it)
+    private func answer(_ text: String) -> String {
+        answers[text] ?? text.components(separatedBy: " | ").map { answers[$0] ?? $0 }.joined(separator: " | ")
+    }
+
+    private func translations(from requests: [TranslationSession.Request]) async -> [TranslationSession.Response] {
+        calls.append(requests.map(\.sourceText))
+        if holdsNextCall {
+            holdsNextCall = false
+            await withCheckedContinuation { held = $0 }
+        }
+        return requests.map {
+            TranslationSession.Response(sourceLanguage: Locale.Language(identifier: "de"),
+                                        targetLanguage: Locale.Language(identifier: "en"), sourceText: $0.sourceText,
+                                        targetText: answer($0.sourceText), clientIdentifier: $0.clientIdentifier)
+        }
+    }
 }
 
 /// A value the tasks of a test share (they all run on the main actor)

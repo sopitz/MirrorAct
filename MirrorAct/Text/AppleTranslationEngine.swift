@@ -13,6 +13,8 @@ import Translation
 /// sees). The task of each view runs `serve`, which translates the jobs queued for its pair and
 /// does not return before the pair is no longer needed. The texts of a request are sorted by
 /// their language first (`LanguageMatching`), because a session translates from one language only.
+/// The short labels of one language go to the framework together, as one text, so that each has
+/// the others for context (`AppleTranslationJoining`).
 ///
 /// From macOS 26.4 on, Translation has two kinds of models: the on-device ones (`.lowLatency`)
 /// and those that need Apple Intelligence for many of their languages (`.highFidelity`, which
@@ -800,12 +802,10 @@ final class AppleTranslationEngine: ObservableObject {
         }
     }
 
-    /// One call on the session. false = the session may be broken and is not used again.
+    /// One call on the session, and one more where the answer to labels sent together does not
+    /// fit (`AppleTranslationJoining`). false = the session may be broken and is not used again.
     private func run(_ job: AppleTranslationJob, calling call: AppleTranslationCall, for host: AppleTranslationHost) async -> Bool {
-        var requests: [TranslationSession.Request] = []
-        for (index, text) in job.texts.enumerated() {
-            requests.append(TranslationSession.Request(sourceText: text, clientIdentifier: String(index)))
-        }
+        let packets = AppleTranslationJoining.packets(for: job.texts)
         running.append(job)
         let limit = UInt64(answerLimit * 1_000_000_000)
         let watch = Task { [weak self] in
@@ -817,25 +817,37 @@ final class AppleTranslationEngine: ObservableObject {
             watch.cancel()
             running.removeAll { $0 === job }
         }
-        let start = Self.clock
+        var start = Self.clock
+        var count = job.texts.count
         do {
-            let responses = try await call(requests)
-            Log.info("Translation: Apple \(job.pair): \(job.texts.count) texts in \(Self.milliseconds(since: start)) ms")
+            let texts = packets.map { AppleTranslationJoining.text(of: $0, in: job.texts) }
+            let answers = try await Self.answers(to: texts, calling: call)
+            Log.info(Self.callLine(job.pair, texts: count, requests: texts.count, milliseconds: Self.milliseconds(since: start)))
             var translations = [String?](repeating: nil, count: job.texts.count)
-            for (position, response) in responses.enumerated() {
-                // the identifier says which text a response belongs to; without one, the order does
-                var index = response.clientIdentifier.flatMap { Int($0) }
-                if index == nil, responses.count == job.texts.count { index = position }
-                guard let index, translations.indices.contains(index) else { continue }
-                let translation = response.targetText
-                // an empty translation would blank the text on the screen
-                let isEmpty = translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                translations[index] = isEmpty ? job.texts[index] : translation
+            var again: [Int] = []
+            for (packet, answer) in zip(packets, answers) {
+                guard let answer else { continue }
+                if packet.count == 1 {
+                    translations[packet[0]] = answer
+                } else if let parts = AppleTranslationJoining.parts(of: answer, for: packet.map { job.texts[$0] }) {
+                    for (position, part) in zip(packet, parts) { translations[position] = part }
+                } else {
+                    again += packet
+                }
+            }
+            // Translate was turned off, or the call took too long: the job is answered already
+            if !again.isEmpty, running.contains(where: { $0 === job }), !isEnding(host) {
+                start = Self.clock
+                count = again.count
+                let single = try await Self.answers(to: again.map { job.texts[$0] }, calling: call)
+                Log.info(Self.callLine(job.pair, texts: count, requests: count, milliseconds: Self.milliseconds(since: start))
+                         + " (again one by one: the labels sent together did not come back apart)")
+                for (position, answer) in zip(again, single) { translations[position] = answer }
             }
             job.finish(translations)
             return true
         } catch {
-            Log.info("Translation: Apple \(job.pair): \(job.texts.count) texts failed after "
+            Log.info("Translation: Apple \(job.pair): \(count) texts failed after "
                      + "\(Self.milliseconds(since: start)) ms (\(Self.describe(error)))")
             if isEnding(host) {
                 // translating was turned off meanwhile, and the job is answered already
@@ -857,6 +869,32 @@ final class AppleTranslationEngine: ObservableObject {
             }
             return false
         }
+    }
+
+    /// One call for `texts`: the translation of each, in their order; nil where no response
+    /// belongs to it. An empty translation stands for the text itself: it would blank the text
+    /// on the screen.
+    private static func answers(to texts: [String], calling call: AppleTranslationCall) async throws -> [String?] {
+        let requests = texts.enumerated().map {
+            TranslationSession.Request(sourceText: $0.element, clientIdentifier: String($0.offset))
+        }
+        let responses = try await call(requests)
+        var answers = [String?](repeating: nil, count: texts.count)
+        for (position, response) in responses.enumerated() {
+            // the identifier says which text a response belongs to; without one, the order does
+            var index = response.clientIdentifier.flatMap { Int($0) }
+            if index == nil, responses.count == texts.count { index = position }
+            guard let index, answers.indices.contains(index) else { continue }
+            let translation = response.targetText
+            let isEmpty = translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            answers[index] = isEmpty ? texts[index] : translation
+        }
+        return answers
+    }
+
+    /// The log line of a call: "Translation: Apple de→en: 18 texts in 7 requests, 343 ms"
+    static func callLine(_ pair: String, texts: Int, requests: Int, milliseconds: Int) -> String {
+        "Translation: Apple \(pair): \(texts) texts in \(requests) requests, \(milliseconds) ms"
     }
 
     // MARK: Notices
@@ -1140,6 +1178,124 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
 
 /// `translations(from:)` of a session: what `AppleTranslationEngine.work` asks of it
 typealias AppleTranslationCall = @MainActor ([TranslationSession.Request]) async throws -> [TranslationSession.Response]
+
+/// Which texts of a job go into the framework together, as one text, and how its answer is
+/// split again.
+///
+/// The on-device models translate a single word without context badly ("Aus" (off) comes back
+/// as "From", "An" (on) as "To", "Abbrechen" (cancel) as "Break off"), and a phone screen is
+/// mostly short labels. Sent as one text, with `separator` between them, the labels of a screen
+/// give each other the context, and the answer comes back with as many separators. Line breaks
+/// do not do this: the framework translates each line alone.
+///
+/// The rule:
+/// - A label is a text of at most `maximumWords` words (runs between white space) and at most
+///   `maximumWeight` letters and digits, a letter of Chinese, Japanese or Korean counting
+///   `LanguageMatching.denseLetterWeight` times; with no line break, no separator ("|" or its
+///   full-width form "｜") and no sentence in it: it does not end with a full stop after a letter,
+///   and no ".", "!" or "?" after a letter is followed by more text ("13. November" and "Fertig?"
+///   are labels). Everything else goes alone, as before.
+/// - The labels of a job go in its order, up to `groupSize` in one text, in as few texts as
+///   possible and these as even as possible (13 labels are 7 and 6). A label with nothing to join
+///   it to goes alone.
+/// - An answer counts only if it splits at the separators into exactly as many parts as labels
+///   went in, no part is empty, and no part is longer than `longestPart` for its label (4 times
+///   its weight and 10 more: a separator that moved shifts words from one label to another).
+///   Otherwise the labels of that text are sent once more, one by one, in one more call: a failure
+///   costs one call, never a label that shows the translation of another.
+///
+/// Measured with German and English (US) on macOS 26.5, the only pair on the Mac it was made on,
+/// with 141 German and 139 English texts of Android's Settings, a login page and a list of common
+/// labels, through this engine: one by one 26 and 31 were wrong, with this rule 9 and 4. Six in a
+/// text did worse than twelve (13 against 9 wrong into English), twenty no better. Labels of up to
+/// six words gained most; summaries of 7 to 9 words came back as good or a little better joined,
+/// sentences of 12 words and more as good alone, so these go alone, where an answer that does not
+/// split would cost most. Every joined answer split into as many parts as went in. A label may
+/// come back differently next to other labels: in shuffled screens about one in ten turned right
+/// or wrong with its neighbours, and the order of the screen (a row's title next to its summary)
+/// did best; the tracker keeps the translation of a text for the turn. Names, numbers and texts
+/// in the target language inside a joined text came back as they were ("Google", "T-Mobile",
+/// "sdk_gphone64_arm64", "IMEI"); alone, "sdk_gphone64_arm64" came back as "Sdk_gphone64_arm64"
+/// and "Google" into German as "Googeln". Other pairs could not be measured: should one of them
+/// not keep the separators, the labels are translated one by one as before.
+enum AppleTranslationJoining {
+    static let separator = " | "
+    /// what an answer is split at: the separator, and the full-width form a translation into
+    /// Chinese or Japanese may give it
+    private static let marks: Set<Character> = ["|", "｜"]
+    static let groupSize = 12
+    static let maximumWords = 6
+    static let maximumWeight = 50
+
+    /// The positions of `texts` that go into the framework together, one entry per text sent,
+    /// in the order of their first position
+    static func packets(for texts: [String]) -> [[Int]] {
+        let labels = texts.indices.filter { isLabel(texts[$0]) }
+        guard labels.count >= 2 else { return texts.indices.map { [$0] } }
+        var packets = texts.indices.filter { !isLabel(texts[$0]) }.map { [$0] }
+        var start = 0
+        let count = (labels.count + groupSize - 1) / groupSize
+        for made in 0..<count {
+            let left = count - made
+            let size = (labels.count - start + left - 1) / left
+            packets.append(Array(labels[start..<(start + size)]))
+            start += size
+        }
+        return packets.sorted { $0[0] < $1[0] }
+    }
+
+    /// What is sent for a packet
+    static func text(of packet: [Int], in texts: [String]) -> String {
+        packet.map { texts[$0] }.joined(separator: separator)
+    }
+
+    static func isLabel(_ text: String) -> Bool {
+        guard !text.contains(where: { marks.contains($0) || $0.isNewline }) else { return false }
+        let words = text.split(whereSeparator: \.isWhitespace).count
+        return words >= 1 && words <= maximumWords && weight(of: text) <= maximumWeight && !holdsASentence(text)
+    }
+
+    /// Ends with a full stop after a letter, or a sentence after a letter is followed by more text
+    static func holdsASentence(_ text: String) -> Bool {
+        let characters = Array(text.trimmingCharacters(in: .whitespaces))
+        for index in characters.indices.dropFirst() where characters[index - 1].isLetter {
+            let character = characters[index]
+            if index == characters.count - 1 {
+                if character == "." || character == "。" || character == "｡" { return true }
+            } else if ".!?。！？".contains(character), characters[index + 1].isWhitespace {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The translations of `labels`, sent as one text, from its `answer`; nil = the answer is
+    /// not to be trusted
+    static func parts(of answer: String, for labels: [String]) -> [String]? {
+        let parts = answer.split(omittingEmptySubsequences: false, whereSeparator: { marks.contains($0) })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard parts.count == labels.count else { return nil }
+        for (part, label) in zip(parts, labels) where part.isEmpty || weight(of: part) > longestPart(for: label) {
+            return nil
+        }
+        return parts
+    }
+
+    /// The weight of the longest translation of `label` that is believed (measured up to 3.3
+    /// times its weight: "Add" as "Hinzufügen", and 25 more: "Legal & regulatory" as "Rechtliche
+    /// und regulatorische Informationen")
+    static func longestPart(for label: String) -> Int {
+        4 * max(weight(of: label), 1) + 10
+    }
+
+    /// Letters and digits, a letter of Chinese, Japanese or Korean `LanguageMatching.denseLetterWeight` times
+    static func weight(of text: String) -> Int {
+        text.reduce(0) { sum, character in
+            if character.isLetter { return sum + LanguageMatching.letterWeight(character) }
+            return character.isNumber ? sum + 1 : sum
+        }
+    }
+}
 
 /// Apple's kinds of translation models. Before macOS 26.4 there are only the on-device ones,
 /// and nothing is said about the kind.
