@@ -36,6 +36,12 @@ struct TextBlock: Equatable {
 }
 
 /// Puts recognized lines in order: as plain text and as paragraphs for translating.
+///
+/// The height of a line's box says little about the size of its text: Vision's box reaches from
+/// the highest to the lowest ink of the line, so lines of one paragraph differ by half their
+/// height and more depending on ascenders, descenders and accents on capitals. The width does not
+/// depend on that: the size of the text is measured from the width of the line and the letters
+/// it holds (`textSize`).
 enum TextLayout {
     /// Top to bottom; lines at the same height from left to right
     static func readingOrder(_ lines: [RecognizedLine]) -> [[RecognizedLine]] {
@@ -58,24 +64,36 @@ enum TextLayout {
             .joined(separator: "\n")
     }
 
-    /// Joins the lines of a paragraph: same text size, directly below each other, aligned left or
-    /// centered. `imageSize` in pixels, because x and y of the rects have different scales.
+    /// Joins the lines of a paragraph. `imageSize` in pixels, because x and y of the rects have
+    /// different scales. A line continues the paragraph above it when
+    /// - its text has the same size: their sizes (`textSize`) are within `sameSize` (`sameSizeShort`
+    ///   when a line is short). Lines that lie as close as lines of a paragraph do (a gap of less
+    ///   than `closeGap` of the higher box) are split only by a size that is `clearlyLarger` and a
+    ///   box that is higher by more than `sameBoxHeight` as well: the size measured from the width
+    ///   alone is not trusted to split lines that close. When a line is too short to measure, the
+    ///   box heights are compared instead (within `sameHeight`).
+    /// - the gap between the two boxes is less than `paragraphGap` of the height of a line (the
+    ///   larger text size, kept between `sizeUnderBox` and `sizeOverBox` times the higher box: a
+    ///   box is higher than its text with accents on capitals and descenders; a box may also
+    ///   reach into the one above by up to `overlap` of the higher box),
+    /// - their left edges or their centres are within `alignment` of the height of a line,
+    /// - neither shows only part of its letters, and it does not start a list item ("• …").
+    /// Of several paragraphs it could continue, it continues the last one begun.
+    ///
+    /// Part of a line shows (something hides the rest: a bar, the edge of the screen or of the
+    /// part that was read) when its box is lower than `partHeight` of its text size and at most
+    /// `partOfNeighbour` of the box of a line right above or below it that could be the next
+    /// line of its paragraph. (The low box alone does not tell: with letters of unusual widths the
+    /// text size comes out too large.) Such a line is a block of its own.
     static func blocks(_ lines: [RecognizedLine], imageSize: CGSize) -> [TextBlock] {
         struct Open {
             var block: TextBlock
-            var last: CGRect   // last line, in pixels
+            var last: Measured
         }
         var open: [Open] = []
-        for line in readingOrder(lines).flatMap({ $0 }) {
-            let rect = CGRect(x: line.rect.minX * imageSize.width, y: line.rect.minY * imageSize.height,
-                              width: line.rect.width * imageSize.width, height: line.rect.height * imageSize.height)
+        for (line, measured) in measure(lines, imageSize: imageSize) {
             let match = open.lastIndex { candidate in
-                let last = candidate.last
-                let height = max(last.height, rect.height)
-                let gap = rect.minY - last.maxY
-                return abs(last.height - rect.height) < height * 0.25
-                    && gap > -height * 0.3 && gap < height * 0.7
-                    && (abs(last.minX - rect.minX) < height * 0.6 || abs(last.midX - rect.midX) < height * 0.6)
+                continues(candidate.last, with: measured)
             }
             if let match {
                 open[match].block.text += separator(after: open[match].block.text) + line.text
@@ -84,13 +102,170 @@ enum TextLayout {
                 if let confidence = line.confidence {
                     open[match].block.confidence = min(open[match].block.confidence ?? confidence, confidence)
                 }
-                open[match].last = rect
+                open[match].last = measured
             } else {
                 open.append(Open(block: TextBlock(text: line.text, rect: line.rect, lineCount: 1,
-                                                  confidence: line.confidence), last: rect))
+                                                  confidence: line.confidence), last: measured))
             }
         }
         return open.map(\.block)
+    }
+
+    /// The lines in reading order, measured (pixels, text size, whether only part shows)
+    private static func measure(_ lines: [RecognizedLine], imageSize: CGSize) -> [(RecognizedLine, Measured)] {
+        var all = readingOrder(lines).flatMap { $0 }.map { line in
+            let rect = CGRect(x: line.rect.minX * imageSize.width, y: line.rect.minY * imageSize.height,
+                              width: line.rect.width * imageSize.width, height: line.rect.height * imageSize.height)
+            let units = widthUnits(of: line.text)
+            return (line, Measured(rect: rect, units: units, size: units >= minUnits ? Double(rect.width) / units : nil,
+                                   isLow: isLow(line.text, width: Double(rect.width), height: Double(rect.height)),
+                                   isPart: false, startsListItem: startsListItem(line.text)))
+        }
+        for index in all.indices where all[index].1.isLow {
+            let line = all[index].1
+            all[index].1.isPart = all.contains { _, neighbour in
+                Double(line.rect.height) <= partOfNeighbour * Double(neighbour.rect.height)
+                    && (adjoins(neighbour, below: line, size: neighbour.size)
+                        || adjoins(line, below: neighbour, size: neighbour.size))
+            }
+        }
+        return all
+    }
+
+    /// A line as `blocks` compares it with others
+    private struct Measured {
+        /// in pixels
+        var rect: CGRect
+        var units: Double
+        /// nil = too short to tell
+        var size: Double?
+        /// the box is lower than `partHeight` of the text size
+        var isLow: Bool
+        /// only part of its letters show (see `blocks`)
+        var isPart: Bool
+        var startsListItem: Bool
+    }
+
+    /// Whether `line` is the next line of the paragraph whose last line is `last`
+    private static func continues(_ last: Measured, with line: Measured) -> Bool {
+        guard !last.isPart, !line.isPart, !line.startsListItem else { return false }
+        if let lastSize = last.size, let size = line.size {
+            let limit = min(last.units, line.units) >= shortUnits ? sameSize : sameSizeShort
+            let ratio = max(lastSize, size) / min(lastSize, size)
+            if ratio > limit {
+                let gap = Double(line.rect.minY - last.rect.maxY)
+                // the box of the line with the larger text, against the other one
+                let larger = Double(lastSize > size ? last.rect.height : line.rect.height)
+                let smaller = Double(lastSize > size ? line.rect.height : last.rect.height)
+                guard gap < closeGap * max(larger, smaller),
+                      ratio <= clearlyLarger || larger <= sameBoxHeight * smaller else { return false }
+            }
+        } else {
+            let higher = Double(max(last.rect.height, line.rect.height))
+            guard higher <= sameHeight * Double(min(last.rect.height, line.rect.height)) else { return false }
+        }
+        var size: Double?
+        if let lastSize = last.size, let lineSize = line.size { size = max(lastSize, lineSize) }
+        return adjoins(last, below: line, size: size)
+    }
+
+    /// Whether `lower` lies right below `upper` as the next line of a paragraph would: close below
+    /// it and aligned with it. Distances count in the height of a line: the text `size`, kept
+    /// between `sizeUnderBox` and `sizeOverBox` times the higher of the two boxes (a size
+    /// measured from letters of unusual widths may be far off); the box when the size is nil.
+    private static func adjoins(_ upper: Measured, below lower: Measured, size: Double?) -> Bool {
+        let box = Double(max(upper.rect.height, lower.rect.height))
+        let lineHeight = min(max(size ?? box, sizeUnderBox * box), sizeOverBox * box)
+        let gap = Double(lower.rect.minY - upper.rect.maxY)
+        return gap > -overlap * box && gap < paragraphGap * lineHeight
+            && (abs(Double(upper.rect.minX - lower.rect.minX)) < alignment * lineHeight
+                || abs(Double(upper.rect.midX - lower.rect.midX)) < alignment * lineHeight)
+    }
+
+    // MARK: Size of text
+
+    /// Lines of one paragraph measure within this factor of each other …
+    static let sameSize = 1.18
+    /// … or within this one when a line has fewer than `shortUnits` (a few letters)
+    static let sameSizeShort = 1.3
+    static let shortUnits = 4.0
+    /// lines closer than this share of the higher box are of different sizes only when one
+    /// measures larger by this factor and its box is higher by `sameBoxHeight`
+    static let closeGap = 0.4
+    static let clearlyLarger = 1.3
+    static let sameBoxHeight = 1.15
+    /// a line of fewer units is too short to measure; its box height is compared instead, within
+    /// this factor
+    static let minUnits = 2.0
+    static let sameHeight = 1.5
+    /// largest gap between two lines of a paragraph, as a share of the height of a line
+    static let paragraphGap = 0.7
+    static let sizeUnderBox = 0.8
+    static let sizeOverBox = 1.25
+    /// how far a line's box may reach into the box above, as a share of the higher box
+    static let overlap = 0.3
+    /// how far left edges or centres of the lines of a paragraph may lie apart, as a share of the
+    /// height of a line
+    static let alignment = 0.6
+    /// a box lower than this share of the size of its text and at most `partOfNeighbour` of the
+    /// box of the line next to it holds only part of its letters
+    static let partHeight = 0.78
+    static let partOfNeighbour = 0.75
+
+    /// The size of the text of a line (about the height of its font, in the units of `width`),
+    /// measured from its width: `width` divided by `widthUnits`. nil when the text is too short to
+    /// tell (less than `minUnits`).
+    static func textSize(of text: String, width: Double) -> Double? {
+        let units = widthUnits(of: text)
+        return units >= minUnits ? width / units : nil
+    }
+
+    /// How wide a text is in units of the size of its font, as an average sans-serif typeface sets
+    /// it: a space 0.28, i j l f t r I and narrow punctuation 0.3, m w M W 0.85, other capitals
+    /// 0.66, digits 0.55, other letters and signs 0.52, Chinese, Japanese and Korean characters
+    /// and full-width forms 1. A full stop or comma of these scripts at the end of a line counts
+    /// 0.4: its ink sits at the left of its cell, and the box of the line ends there.
+    static func widthUnits(of text: String) -> Double {
+        var units = 0.0
+        var last: Unicode.Scalar?
+        for scalar in text.unicodeScalars {
+            units += widthUnits(of: scalar)
+            last = scalar
+        }
+        if let last, [0x3001, 0x3002, 0xFF0C, 0xFF0E].contains(last.value) { units -= 0.6 }
+        return units
+    }
+
+    private static func widthUnits(of scalar: Unicode.Scalar) -> Double {
+        switch scalar.value {
+        case 0x20: return 0.28
+        case 0x2E80...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF, 0xFF00...0xFF60, 0xFFE0...0xFFE6: return 1
+        default: break
+        }
+        if "ijlI.,:;'!|ftr()[]-/\"\u{201E}\u{201C}\u{201D}\u{2018}\u{2019}".unicodeScalars.contains(scalar) { return 0.3 }
+        if "mwMW".unicodeScalars.contains(scalar) { return 0.85 }
+        if scalar.properties.isUppercase { return 0.66 }
+        if (0x30...0x39).contains(scalar.value) { return 0.55 }
+        return 0.52
+    }
+
+    /// Whether a line's box (`width` and `height` in pixels) is lower than `partHeight` of its text
+    /// size, as when something hides part of the line. Only said of text with tall letters
+    /// (capitals, digits, ascenders, Chinese, Japanese or Korean): a line of x-height letters alone
+    /// is low anyway.
+    private static func isLow(_ text: String, width: Double, height: Double) -> Bool {
+        guard let size = textSize(of: text, width: width), height < partHeight * size else { return false }
+        return text.unicodeScalars.contains { scalar in
+            scalar.properties.isUppercase || (0x30...0x39).contains(scalar.value) || "bdfhklt".unicodeScalars.contains(scalar)
+                || (0x2E80...0xD7AF).contains(scalar.value)
+        }
+    }
+
+    /// A bullet and a space at the start: an item of a list, not the next line of a paragraph
+    private static func startsListItem(_ text: String) -> Bool {
+        let scalars = Array(text.unicodeScalars.prefix(2))
+        guard scalars.count == 2, scalars[1] == " " else { return false }
+        return "•◦▪‣●○■□–—*".unicodeScalars.contains(scalars[0])
     }
 
     /// Space between two lines of a paragraph; none in scripts written without spaces
