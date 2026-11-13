@@ -360,6 +360,13 @@ struct SimLine {
     var isTranslatable: Bool
 }
 
+/// The line of another sprite that a line was copied from (`SimSprite.copy`): the first one,
+/// when that was a copy as well
+struct SimLineOrigin {
+    let sprite: SimSprite
+    let line: Int
+}
+
 /// Lines that the recognition returns as one block when it sees all of them
 struct SimParagraph {
     var lines: [Int]
@@ -407,6 +414,8 @@ final class SimSprite {
     private(set) var pixels: [UInt8]
     private(set) var lines: [SimLine] = []
     private(set) var paragraphs: [SimParagraph] = []
+    /// by line: where a line copied from another sprite comes from
+    private(set) var origins: [Int: SimLineOrigin] = [:]
     /// position in `SimScenario.sprites`
     fileprivate(set) var index = -1
 
@@ -548,7 +557,8 @@ final class SimSprite {
     }
 
     /// Copies a part of another sprite including the paragraphs that reach into it. Their lines
-    /// keep their place relative to the picture, so some may lie outside of this sprite.
+    /// keep their place relative to the picture, so some may lie outside of this sprite; each
+    /// records the line it comes from (`origins`).
     func copy(from source: SimSprite, rect: SimRect, toX: Int, toY: Int) {
         precondition(!isSealed, "SimSprite: already in use")
         let area = rect.intersection(source.bounds)
@@ -570,7 +580,9 @@ final class SimSprite {
             var members: [Int] = []
             for member in paragraph.lines {
                 let line = source.lines[member]
-                members.append(addLine(line.text, alternate: line.alternate, rect: line.rect.offsetBy(dx: dx, dy: dy)))
+                let copied = addLine(line.text, alternate: line.alternate, rect: line.rect.offsetBy(dx: dx, dy: dy))
+                origins[copied] = source.origins[member] ?? SimLineOrigin(sprite: source, line: member)
+                members.append(copied)
             }
             addParagraph(lines: members, background: paragraph.background, foreground: paragraph.foreground)
         }

@@ -344,6 +344,9 @@ final class TrackingBench {
     private var random: SimRandom
     /// by sprite: first word of a text the recognition can return for a line → those texts
     private var readings: [[String: [Reading]]] = []
+    /// by sprite and line: the other lines of the scenario that show the same line – its copies
+    /// (`SimSprite.copy`), the line they were copied from, and the other copies of that one
+    private var twins: [[Int: [(sprite: Int, line: Int)]]] = []
     /// by sprite: the lines a placed text can stand for, once worked out
     private var knownChains: [[String: [[Reading]]]] = []
     /// lines that were returned with their text at least once
@@ -386,6 +389,7 @@ final class TrackingBench {
         readings = []
         knownChains = []
         readBefore = []
+        twins = TrackingBench.twins(in: part.sprites)
         for sprite in part.sprites {
             var index: [String: [Reading]] = [:]
             for (number, line) in sprite.lines.enumerated() {
@@ -399,6 +403,38 @@ final class TrackingBench {
             readings.append(index)
             knownChains.append([:])
         }
+    }
+
+    /// For every line copied from another, and every line others were copied from: the other
+    /// lines among `sprites` that show the same line
+    private static func twins(in sprites: [SimSprite]) -> [[Int: [(sprite: Int, line: Int)]]] {
+        var position: [ObjectIdentifier: Int] = [:]
+        for (index, sprite) in sprites.enumerated() {
+            position[ObjectIdentifier(sprite)] = index
+        }
+        struct Key: Hashable {
+            var sprite: ObjectIdentifier
+            var line: Int
+        }
+        var families: [Key: [(sprite: Int, line: Int)]] = [:]
+        for (index, sprite) in sprites.enumerated() {
+            for (line, origin) in sprite.origins {
+                families[Key(sprite: ObjectIdentifier(origin.sprite), line: origin.line), default: []]
+                    .append((index, line))
+            }
+        }
+        var result = [[Int: [(sprite: Int, line: Int)]]](repeating: [:], count: sprites.count)
+        for (key, copies) in families {
+            var members = copies
+            if let original = position[key.sprite] { members.append((original, key.line)) }
+            guard members.count > 1 else { continue }
+            // (in a fixed order: the readings of a text are tried in the order they were registered)
+            members.sort { ($0.sprite, $0.line) < ($1.sprite, $1.line) }
+            for member in members {
+                result[member.sprite][member.line] = members.filter { $0 != member }
+            }
+        }
+        return result
     }
 
     // MARK: Running a scenario
@@ -769,8 +805,17 @@ final class TrackingBench {
                 let draw = random.below(10)
                 confidence = draw < 4 ? 0.3 : (draw < 7 ? 0.5 : 1.0)
                 let words = text.components(separatedBy: " ")
-                readings[sight.sprite][words[0], default: []]
-                    .append(Reading(line: sight.line, words: words, part: sight.visible.offsetBy(dx: -layer.x, dy: -layer.y)))
+                let part = sight.visible.offsetBy(dx: -layer.x, dy: -layer.y)
+                readings[sight.sprite][words[0], default: []].append(Reading(line: sight.line, words: words, part: part))
+                // (and on every copy of the line: the screen may show it from another sprite by
+                // the time the text is drawn)
+                for twin in twins[sight.sprite][sight.line] ?? [] {
+                    let copy = scenario.sprites[twin.sprite].lines[twin.line].rect
+                    readings[twin.sprite][words[0], default: []]
+                        .append(Reading(line: twin.line, words: words,
+                                        part: part.offsetBy(dx: copy.x - line.rect.x, dy: copy.y - line.rect.y)))
+                    knownChains[twin.sprite] = [:]
+                }
             } else {
                 let key = sight.sprite << 24 | sight.line
                 if readBefore.contains(key), line.alternate != line.text, random.chance(scenario.misreadingPercent) {
