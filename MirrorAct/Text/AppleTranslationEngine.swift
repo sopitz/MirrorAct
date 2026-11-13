@@ -48,6 +48,8 @@ final class AppleTranslationEngine: ObservableObject {
     var retryPause: TimeInterval = 60
     /// seconds to wait for languages that macOS is loading
     var loadingLimit: TimeInterval = 1800
+    /// seconds between two looks at languages that are on their way
+    var loadingCheckInterval: TimeInterval = 2
 
     /// What macOS says about its languages. The tests answer in its place, so that they depend
     /// neither on the languages of this Mac nor on a download.
@@ -224,9 +226,9 @@ final class AppleTranslationEngine: ObservableObject {
         clients.values.compactMap(\.client).filter { !$0.isCancelled }
     }
 
-    /// `AppleTranslationClient.cancel`: its jobs are answered "not now" at once; the sessions stay
-    /// for the other clients, and end once no client is left. A question of macOS about loading
-    /// languages closes as soon as no client wants its pair any more.
+    /// `AppleTranslationClient.cancel`: its jobs are answered "not now" at once. The hosts of the
+    /// pairs no other client wants end, whatever they are doing; the others stay for the other
+    /// clients.
     func cancel(_ client: AppleTranslationClient) {
         clients[ObjectIdentifier(client)] = nil
         // (a client that went away without cancelling counts as gone as well)
@@ -235,24 +237,27 @@ final class AppleTranslationEngine: ObservableObject {
         waiting.removeAll { $0.client === client }
         running.removeAll { $0.client === client }
         for job in jobs { job.finish(job.postponed) }
-        // a question of macOS about languages nobody wants any more goes away with its view
+        // Left alone, a host that waits for its turn, or is about to ask, would bring up the
+        // question of macOS once the one before is answered, for languages nobody wants.
         let wanted = Set(activeClients.flatMap(\.pairs))
-        for host in hosts where questions[host.id] != nil && !wanted.contains(host.pair) {
-            Log.info("Translation: closing the question about the languages for \(host.pair)")
-            remove(host)
+        for host in hosts where !wanted.contains(host.pair) {
+            if questions[host.id] != nil {
+                // the question of macOS goes away with the view
+                Log.info("Translation: closing the question about the languages for \(host.pair)")
+                remove(host)
+            } else if serving.contains(host.id) {
+                // Waiting for its turn, about to ask, waiting for the download or translating:
+                // it ends without asking, and after a call on its session that is under way
+                end(host)
+            } else {
+                // its view has not started, and will not get a session now
+                remove(host)
+            }
         }
         guard clients.isEmpty else { return }
         declined.removeAll()
         pairSupport.removeAll()
         appleIntelligence = nil
-        for host in hosts {
-            if serving.contains(host.id) {
-                // it may be in the middle of a call on its session: it ends by itself after that
-                end(host)
-            } else {
-                remove(host)
-            }
-        }
     }
 
     /// nil = macOS did not answer in time
@@ -492,6 +497,12 @@ final class AppleTranslationEngine: ObservableObject {
     /// hosts that wait for their turn to ask macOS to load their languages (for the tests)
     var hostsWaitingToLoad: Int { waitingForTurn.count }
 
+    /// whether a host whose view has started still takes jobs (for the tests, which serve
+    /// without a session)
+    func takesJobs(_ host: AppleTranslationHost) -> Bool {
+        serving.contains(host.id) && !isEnding(host)
+    }
+
     /// Runs inside the `translationTask` of the host's view, on its session, and returns when the
     /// pair is no longer needed. Only in here the session is valid, and the view has to stay
     /// until this returns; that is why nobody else removes a host that is served.
@@ -568,7 +579,7 @@ final class AppleTranslationEngine: ObservableObject {
                 let start = Self.clock
                 status = await availability.status(host.source, host.target, host.strategy)
                 while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    try? await Task.sleep(nanoseconds: UInt64(loadingCheckInterval * 1_000_000_000))
                     status = await availability.status(host.source, host.target, host.strategy)
                 }
                 if status == .supported, !isEnding(host) {

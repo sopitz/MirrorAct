@@ -554,6 +554,112 @@ final class AppleTranslationEngineTests: XCTestCase {
         macOS.finish(host, installing: false)
     }
 
+    /// What the host of a pair may be doing when the last window that wants the pair turns
+    /// Translate off
+    private enum HostState: CaseIterable {
+        case viewNotStarted, waitingForItsTurn, betweenItsTurnAndAsking, asking, downloading, serving
+    }
+
+    /// The last window that wants a pair turns Translate off while another window still
+    /// translates other languages: whatever the pair's host is doing, it ends, and macOS does not
+    /// ask about the pair afterwards. The other window's host is left alone.
+    func testAHostWhosePairNobodyWantsAnyMoreEndsWhateverItIsDoing() async throws {
+        for state in HostState.allCases {
+            do {
+                try await endHostNobodyWants(in: state)
+            } catch {
+                // `waitUntil` has said what did not happen; the next state is tried all the same
+                XCTFail("while the host is \(state)")
+            }
+        }
+    }
+
+    private func endHostNobodyWants(in state: HostState) async throws {
+        let label = "\(state)"
+        let macOS = FakeMacOS(supported: ["de", "en", "fr"])
+        if state == .serving { macOS.install("fr") }
+        let engine = engine(answeredBy: macOS)
+        engine.loadingCheckInterval = 0.02
+        // the window that goes on translating; macOS asks about its pair
+        let first = AppleTranslationClient(engine: engine)
+        let firstRequest = Task { try await first.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let english = engine.hosts[0]
+        let servedEnglish = Task {
+            await engine.serve(english, prepare: { try await macOS.prepare(english) }, work: {})
+        }
+        _ = try await firstRequest.value
+        try await waitUntil { macOS.preparing == [english.id] }
+
+        // the window that turns Translate off
+        let second = AppleTranslationClient(engine: engine)
+        let statuses = Box<[String?]>([])
+        second.notifyStatus = { status in MainActor.assumeIsolated { statuses.value.append(status) } }
+        let secondRequest = Task { try await second.translate([Self.french], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 2 }
+        let french = try XCTUnwrap(engine.hosts.first { $0.id != english.id }, label)
+        let working = Box(false)
+        func serveFrench() -> Task<Void, Never> {
+            Task {
+                await engine.serve(french, prepare: { try await macOS.prepare(french) }, work: {
+                    working.value = true
+                    while engine.takesJobs(french) { try? await Task.sleep(nanoseconds: 10_000_000) }
+                })
+            }
+        }
+        var servedFrench: Task<Void, Never>?
+        switch state {
+        case .viewNotStarted:
+            break
+        case .waitingForItsTurn:
+            servedFrench = serveFrench()
+            try await waitUntil { engine.hostsWaitingToLoad == 1 }
+        case .betweenItsTurnAndAsking:
+            servedFrench = serveFrench()
+            try await waitUntil { engine.hostsWaitingToLoad == 1 }
+            // its turn comes with the answer to the question before; then it looks at the pair again
+            macOS.holdStatus(of: "fr")
+            macOS.finish(english, installing: false)
+            try await waitUntil { macOS.isHoldingStatus }
+        case .asking, .downloading:
+            servedFrench = serveFrench()
+            try await waitUntil { engine.hostsWaitingToLoad == 1 }
+            macOS.finish(english, installing: false)
+            try await waitUntil { macOS.preparing == [french.id] }
+            if state == .downloading {
+                macOS.finish(french, installing: false)
+                let downloading = AppleTranslationEngine.downloadingNotice(french.source, french.target)
+                try await waitUntil { statuses.value.last == downloading }
+            }
+        case .serving:
+            servedFrench = serveFrench()
+            try await waitUntil { working.value }
+        }
+
+        second.cancel()
+        XCTAssertEqual(engine.hostsWaitingToLoad, 0, label)
+        XCTAssertTrue(engine.hosts.contains { $0.id == english.id }, label)
+        let answer = try await secondRequest.value
+        XCTAssertEqual(answer, [nil], label)
+        // what happens afterwards brings up no question about French: the question before is
+        // answered, macOS says what it has, a view that had not started starts now
+        macOS.finish(english, installing: false)
+        macOS.releaseStatus()
+        if state == .viewNotStarted { servedFrench = serveFrench() }
+        try await waitFor(servedFrench)
+        XCTAssertFalse(engine.hosts.contains { $0.id == french.id }, label)
+        let askedAboutFrench = state == .asking || state == .downloading ? 1 : 0
+        XCTAssertEqual(macOS.asked.filter { $0 == french.id }.count, askedAboutFrench, label)
+        XCTAssertEqual(working.value, state == .serving, label)
+        XCTAssertTrue(engine.hosts.contains { $0.id == english.id }, label)
+
+        first.cancel()
+        try await waitFor(servedEnglish)
+        XCTAssertTrue(engine.hosts.isEmpty, label)
+        XCTAssertEqual(engine.hostsWaitingToLoad, 0, label)
+        for id in macOS.preparing { macOS.finish(id, installing: false) }
+    }
+
     /// For as long as macOS asks, the turn is told so, and that nothing is loaded before the user
     /// answers; once the answer lets the languages come, that they are on their way; once they are
     /// there, nothing. A turn that asks only while the question is up is told the same.
@@ -707,6 +813,9 @@ private final class FakeMacOS {
     private(set) var appleIntelligenceAsked = 0
     private var installed: Set<String> = []
     private var everything = false
+    /// the language whose next status is held back until `releaseStatus`
+    private var holdsStatus: String?
+    private var heldStatus: CheckedContinuation<Void, Never>?
     private var pending: [(id: UUID, source: String, continuation: CheckedContinuation<Void, Error>)] = []
 
     /// macOS 26.4 and later: two kinds of models
@@ -728,6 +837,10 @@ private final class FakeMacOS {
         AppleTranslationAvailability(languages: { AppleTranslationLanguages(onDevice: self.onDevice, all: self.all) },
                                      status: { source, _, strategy in
             self.statusAsked.append((source: source.minimalIdentifier, strategy: strategy))
+            if self.holdsStatus == LanguageMatching.key(source) {
+                self.holdsStatus = nil
+                await withCheckedContinuation { self.heldStatus = $0 }
+            }
             return self.status(of: source)
         }, appleIntelligenceIsOn: {
             self.appleIntelligenceAsked += 1
@@ -748,6 +861,24 @@ private final class FakeMacOS {
 
     func installEverything() {
         everything = true
+    }
+
+    /// The languages are on this Mac already: no question
+    func install(_ language: String) {
+        installed.insert(LanguageMatching.key(Locale.Language(identifier: language)))
+    }
+
+    /// The next answer about `language` does not come before `releaseStatus`
+    func holdStatus(of language: String) {
+        holdsStatus = LanguageMatching.key(Locale.Language(identifier: language))
+    }
+
+    /// an answer about the status of a pair is held back
+    var isHoldingStatus: Bool { heldStatus != nil }
+
+    func releaseStatus() {
+        heldStatus?.resume()
+        heldStatus = nil
     }
 
     /// The user answers the question of a host: prepareTranslation returns
