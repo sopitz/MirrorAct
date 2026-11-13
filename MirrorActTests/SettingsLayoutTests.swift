@@ -57,7 +57,85 @@ final class SettingsLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(chrome, SettingsView.windowChrome)
     }
 
+    // MARK: The Text page in every language
+
+    /// Each menu button shows its whole choice, in every language of the app and for every
+    /// service: in German, "Übersetzen mit" read "Ein Sprachmodell-Dienst, mit eigenem API-…"
+    func testTheTextPageShowsEveryChoiceInFull() throws {
+        try forEachTextPage { page, situation in
+            let popUps = self.popUpButtons(in: page)
+            XCTAssertGreaterThanOrEqual(popUps.count, 2, situation)
+            for popUp in popUps {
+                let cell = try XCTUnwrap(popUp.cell as? NSPopUpButtonCell)
+                let room = cell.titleRect(forBounds: popUp.bounds).width
+                let needed = popUp.attributedTitle.size().width.rounded(.up)
+                XCTAssertGreaterThanOrEqual(room, needed, "“\(popUp.title)” is cut off, \(situation)")
+            }
+        }
+    }
+
     // MARK: Helpers
+
+    /// The Text page as the settings window shows it, in each language of the app (as SwiftUI
+    /// looks its texts up), with “This Mac” and with each service. The page gets a key store of
+    /// its own, so that the keychain is never read.
+    private func forEachTextPage(_ check: (NSView, String) throws -> Void) throws {
+        let settings = AppSettings.shared
+        let saved = (settings.translationEngine, settings.llmProvider, settings.translationLanguage,
+                     settings.llmModels, settings.llmBaseURLs)
+        defer {
+            settings.translationEngine = saved.0
+            settings.llmProvider = saved.1
+            settings.translationLanguage = saved.2
+            settings.llmModels = saved.3
+            settings.llmBaseURLs = saved.4
+        }
+        settings.translationLanguage = "system"
+        settings.llmModels = [:]
+        settings.llmBaseURLs = [:]
+        let keys = TextSettingsView.KeyStore(hasKey: { _ in false }, key: { _ in nil }, set: { _, _ in true })
+        let languages = Bundle.main.localizations.filter { $0 != "Base" }
+        XCTAssertTrue(languages.contains("de") && languages.contains("en"), "\(languages)")
+        let services: [String?] = [nil] + LLMProvider.all.map(\.id)
+        for language in languages {
+            for service in services {
+                settings.translationEngine = service == nil ? "apple" : "llm"
+                if let service { settings.llmProvider = service }
+                let view = TextSettingsView(keys: keys)
+                    .settingsPage(maxHeight: 2000)
+                    .frame(width: SettingsView.width)
+                    .environment(\.locale, Locale(identifier: language))
+                let host = NSHostingView(rootView: view)
+                let window = NSWindow(contentRect: CGRect(x: -20_000, y: -20_000, width: SettingsView.width, height: 800),
+                                      styleMask: [.borderless], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.contentView = host
+                window.orderFrontRegardless()
+                defer {
+                    window.orderOut(nil)
+                    window.contentView = nil
+                }
+                window.setContentSize(host.fittingSize)
+                host.layoutSubtreeIfNeeded()
+                XCTAssertTrue(waitUntil { self.popUpButtons(in: host).count >= (service == nil ? 2 : 4) },
+                              "the menus of the page did not appear")
+                try check(host, "in “\(language)” with \(service ?? "this Mac")")
+            }
+        }
+    }
+
+    private func popUpButtons(in view: NSView) -> [NSPopUpButton] {
+        (view as? NSPopUpButton).map { [$0] } ?? view.subviews.flatMap(popUpButtons)
+    }
+
+    private func waitUntil(_ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition() {
+            if Date() > deadline { return false }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return true
+    }
 
     private func pageHeight<V: View>(_ page: V, visibleHeight: CGFloat) -> CGFloat {
         let maxHeight = SettingsView.maxPageHeight(visibleHeight: visibleHeight)

@@ -71,7 +71,7 @@ struct TextSettingsView: View {
                 }
                 Picker("Translate with", selection: engineSelection) {
                     Text("This Mac (Apple)").tag("apple")
-                    Text("A language model service, with your own API key").tag("llm")
+                    Text("Language model service (own API key)").tag("llm")
                 }
             }
             if settings.translationEngine == "llm" {
