@@ -1382,13 +1382,40 @@ final class AppleTranslationEngineTests: XCTestCase {
     func testWhatALabelIs() {
         let labels = ["Aus", "Passwort vergessen?", "Mittwoch, 13. November", "Suchen …", "Laden...", "An / Clock",
                       "Mobile Daten, WLAN, Hotspot", "Assistant, kürzlich geöffnete Apps, Standard-Apps",
-                      "eins zwei drei vier fünf sechs", String(repeating: "a", count: 50), "通知設定", "100 %",
+                      "eins zwei drei vier fünf", String(repeating: "a", count: 50), "通知設定", "100 %",
                       "Netzwerktyp, Verschlüsselung"]
-        let others = ["eins zwei drei vier fünf sechs sieben", String(repeating: "a", count: 51),
+        let others = ["eins zwei drei vier fünf sechs", "Für andere Geräte als „sdk_gphone64_arm64“ sichtbar",
+                      String(repeating: "a", count: 51),
                       String(repeating: "設", count: 17), "Your device is up to date.", "Fertig. Weiter",
                       "Ton | Bild", "Ton ｜ Bild", "Ton\nBild", "", "   ", "設定が完了しました。"]
         for text in labels { XCTAssertTrue(AppleTranslationJoining.isLabel(text), text) }
         for text in others { XCTAssertFalse(AppleTranslationJoining.isLabel(text), text) }
+    }
+
+    /// Android's Connected devices page, its texts coming in pieces after the screen before: the
+    /// phrase of six words is joined with no other label, so the labels sent before cannot turn
+    /// "visible to other devices as" into "visible to devices other than"
+    func testAPhraseOfSixWordsGoesAlone() async throws {
+        let visible = "Für andere Geräte als „sdk_gphone64_arm64“ sichtbar"
+        let session = FakeSession(["Verbundene Geräte": "Connected devices", "Gespeicherte Geräte": "Saved devices",
+                                   "Alle anzeigen": "Show all", "Verbindungseinstellungen": "Connection settings",
+                                   visible: "Visible to other devices as “sdk_gphone64_arm64”"])
+        // what the framework made of it among the labels before it
+        session.answers["Verbundene Geräte | Gespeicherte Geräte | Alle anzeigen | " + visible]
+            = "Connected devices | Saved devices | Show all | Visible to devices other than “sdk_gphone64_arm64”"
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let served = serveAll(engine, with: session)
+        let client = AppleTranslationClient(engine: engine)
+        _ = try await client.translate(["Verbundene Geräte", "Gespeicherte Geräte"], into: language("en"))
+        let translations = try await client.translate(["Alle anzeigen", visible], into: language("en"))
+        XCTAssertEqual(translations, ["Show all", "Visible to other devices as “sdk_gphone64_arm64”"])
+        XCTAssertTrue(session.calls.last?.contains(visible) == true, "\(session.calls)")
+        XCTAssertFalse(session.calls.joined().contains { $0.contains(" | " + visible) }, "\(session.calls)")
+        client.cancel()
+        served.cancel()
+        try await waitFor(served)
     }
 
     /// The labels of a job in its order, at most twelve in a text, as even as possible; the rest,

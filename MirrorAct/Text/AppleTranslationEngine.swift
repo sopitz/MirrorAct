@@ -1252,30 +1252,38 @@ typealias AppleTranslationCall = @MainActor ([TranslationSession.Request]) async
 /// Measured with German and English (US) on macOS 26.5, the only pair on the Mac it was made on,
 /// with 141 German and 139 English texts of Android's Settings, a login page and a list of common
 /// labels, through this engine: one by one 26 and 31 were wrong, with this rule 9 and 4. Six in a
-/// text did worse than twelve (13 against 9 wrong into English), twenty no better. Labels of up to
-/// six words gained most; summaries of 7 to 9 words came back as good or a little better joined,
-/// sentences of 12 words and more as good alone, so these go alone, where an answer that does not
-/// split would cost most. Of the screens sent whole, every joined answer split into as many parts
-/// as went in; once, with labels sent before as context, the framework left out a misread label
-/// ("Geratename"), which the count of parts caught. A label may come back differently next to
-/// other labels: in shuffled screens about one in ten turned right or wrong with its neighbours,
-/// and the order of the screen (a row's title next to its summary) did best; the tracker keeps
-/// the translation of a text for the turn. Names, numbers and texts
-/// in the target language inside a joined text came back as they were ("Google", "T-Mobile",
-/// "sdk_gphone64_arm64", "IMEI"); alone, "sdk_gphone64_arm64" came back as "Sdk_gphone64_arm64"
-/// and "Google" into German as "Googeln". Other pairs could not be measured: should one of them
-/// not keep the separators, the labels are translated one by one as before. A turn that is on
-/// while the screen changes (the main list, then each other screen one or two texts at a time):
-/// 25 of 123 German and 26 of 118 English texts wrong one by one, 18 and 12 joined without the
-/// labels before, 4 and 7 with them. As context, one label before did less than three (15 and 11
-/// wrong against 10 and 9, measured outside the engine), eleven no better.
+/// text did worse than twelve (13 against 9 wrong into English), twenty no better. Short labels
+/// gained most; summaries of 7 to 9 words came back as good or a little better joined, sentences
+/// of 12 words and more as good alone, so these go alone, where an answer that does not split
+/// would cost most. A phrase of six words is joined no more: next to other labels the framework
+/// reads it across the separators. Android's "Für andere Geräte als „sdk_gphone64_arm64“
+/// sichtbar" (visible to other devices as …) came back with the opposite meaning ("… devices
+/// other than …") in 14 of 30 orders and pieces of its screen sent after the screen before, and
+/// right in all 30 alone; with five words at most, the texts above came out 8 and 4 wrong (9
+/// and 4 with six), and the changing screens 4 and 8 (4 and 7: "Learn more" as "Weitere
+/// Informationen", which is right as well). With four words at most it was 7 and 4, 4 and 8,
+/// with three 7 and 4, 6 and 8: no better on the changing screens, where neighbours help most,
+/// so the limit moved by the one word only. Of the screens sent whole, every joined answer
+/// split into as many parts as went in; once, with labels sent before as context, the framework
+/// left out a misread label ("Geratename"), which the count of parts caught. A label may come back
+/// differently next to other labels: in shuffled screens about one in ten turned right or wrong
+/// with its neighbours, and the order of the screen (a row's title next to its summary) did best;
+/// the tracker keeps the translation of a text for the turn. Names, numbers and texts in the target
+/// language inside a joined text came back as they were ("Google", "T-Mobile",
+/// "sdk_gphone64_arm64", "IMEI"); alone, "sdk_gphone64_arm64" came back as "Sdk_gphone64_arm64" and
+/// "Google" into German as "Googeln". Other pairs could not be measured: should one of them not
+/// keep the separators, the labels are translated one by one as before. A turn that is on while the
+/// screen changes (the main list, then each other screen one or two texts at a time): 25 of 123
+/// German and 26 of 118 English texts wrong one by one, 18 and 12 joined without the labels before,
+/// 4 and 7 with them. As context, one label before did less than three (15 and 11 wrong against 10
+/// and 9, measured outside the engine), eleven no better.
 enum AppleTranslationJoining {
     static let separator = " | "
     /// what an answer is split at: the separator, and the full-width form a translation into
     /// Chinese or Japanese may give it
     private static let marks: Set<Character> = ["|", "｜"]
     static let groupSize = 12
-    static let maximumWords = 6
+    static let maximumWords = 5
     static let maximumWeight = 50
     /// how many labels sent before go in front of a text of few labels
     static let contextSize = 3
