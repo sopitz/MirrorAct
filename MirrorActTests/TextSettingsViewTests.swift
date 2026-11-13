@@ -149,8 +149,8 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertEqual(storedKeys.map(\.provider), [LLMProvider.custom.id])
     }
 
-    /// A stored key is replaced only by Save, Return, or a Test or list that worked with the
-    /// typed one: a key pasted while the wrong service was shown must not overwrite it
+    /// A stored key is replaced only by Save, Return, or a Test that worked with the typed one:
+    /// a key pasted while the wrong service was shown must not overwrite it
     func testATypedKeyDoesNotReplaceAStoredKeyWhenTheServiceChanges() throws {
         settings.llmProvider = LLMProvider.openAI.id
         keysThere = [LLMProvider.openAI.id: "sk-working"]
@@ -203,7 +203,8 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertEqual(page.enteredKey, "")
     }
 
-    func testAKeyThatLoadedTheListIsStored() throws {
+    /// For a service without a key, a typed key the list loaded with is kept at once
+    func testAKeyThatLoadedTheListIsStoredWhenNoneIsStoredYet() throws {
         settings.llmProvider = LLMProvider.openAI.id
         serviceAnswer = (200, [LLMHeader("Content-Type", "application/json")],
                          Data(#"{"object":"list","data":[{"id":"gpt-6-luna"},{"id":"gpt-6.1-sol"}]}"#.utf8))
@@ -213,6 +214,23 @@ final class TextSettingsViewTests: XCTestCase {
         XCTAssertTrue(waitUntil { !self.page.isLoadingModels })
         XCTAssertNil(page.modelsProblem)
         XCTAssertEqual(storedKeys.map(\.key), ["sk-listed"])
+    }
+
+    /// The list proves nothing about a key: OpenRouter lists its models to anyone, so a key
+    /// pasted for another service would get through and overwrite the one that works
+    func testAKeyThatLoadedTheListDoesNotReplaceAStoredKey() throws {
+        settings.llmProvider = LLMProvider.openRouter.id
+        keysThere = [LLMProvider.openRouter.id: "sk-working"]
+        serviceAnswer = (200, [LLMHeader("Content-Type", "application/json")],
+                         Data(#"{"data":[{"id":"openai/gpt-6-luna"}]}"#.utf8))
+        let view = try showPage()
+        type("sk-other", into: try field(at: 1, in: view))
+        page.loadModels()
+        XCTAssertTrue(waitUntil { !self.page.isLoadingModels })
+        XCTAssertNil(page.modelsProblem)
+        XCTAssertTrue(storedKeys.isEmpty, "\(storedKeys)")
+        XCTAssertTrue(page.typedKeyIsPending)
+        XCTAssertEqual(page.enteredKey, "sk-other")
     }
 
     /// A key the service turned down does not take the place of the one that is stored

@@ -8,9 +8,9 @@ import Translation
 ///
 /// The API key goes straight into the keychain (`KeychainStore`); the field is emptied after
 /// saving and the key is never shown again. A typed key is saved with Save, on Return, and as soon
-/// as Test or Load the list worked with it. When the service or the page changes it is saved too,
-/// but only for a service that has no key yet: a key that is stored is never replaced without the
-/// user's doing.
+/// as Test worked with it. When the list of models loaded, the service or the page changes, it is
+/// saved too, but only for a service that has no key yet: a key that is stored is never replaced
+/// without the user's doing.
 struct TextSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
@@ -200,7 +200,7 @@ struct TextSettingsView: View {
                     Text(verbatim: keyProblem)
                         .foregroundStyle(.red)
                 } else if page.typedKeyIsPending {
-                    Text("Not saved yet: Save or Return replaces the stored key.")
+                    Text("Not saved yet: Save, Return or a Test that works replaces the stored key.")
                         .foregroundStyle(.secondary)
                 } else if page.hasStoredKey {
                     Text("A key is stored in the keychain.")
@@ -457,7 +457,8 @@ extension TextSettingsView {
             refreshKeyState()
         }
 
-        /// A key is typed while one is stored: it replaces that one only on Save or Return
+        /// A key is typed while one is stored: it replaces that one only on Save, Return or a
+        /// Test that works
         var typedKeyIsPending: Bool {
             hasStoredKey && !enteredKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
@@ -471,9 +472,9 @@ extension TextSettingsView {
             storeKey(enteredKey)
         }
 
-        /// A typed key that the service just accepted counts at once, in place of a stored one:
-        /// the user would otherwise see Test work and Translate ask for the key. Only while the
-        /// field still holds that key and the service is the same.
+        /// A typed key that the service just accepted counts at once: the user would otherwise
+        /// see Test work and Translate ask for the key. Only while the field still holds that key
+        /// and the service is the same.
         private func keepWorkingKey(_ key: String, for providerID: String) {
             guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   enteredKey == key, provider.id == providerID else { return }
@@ -526,7 +527,12 @@ extension TextSettingsView {
                 do {
                     let models = try await engine.models()
                     guard !Task.isCancelled else { return }
-                    keepWorkingKey(typed, for: connection.provider.id)
+                    // The list proves nothing about the key: some services list their models to
+                    // anyone, so it takes the place of no stored key. For a service without one
+                    // it is kept, as it would be when the page closes.
+                    if !keys.hasKey(connection.provider.id) {
+                        keepWorkingKey(typed, for: connection.provider.id)
+                    }
                     loadedModels = models
                     if models.isEmpty {
                         modelsProblem = String(localized: "The service lists no models for translating.")
