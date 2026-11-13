@@ -24,7 +24,8 @@ protocol TranslationEngine: AnyObject {
     /// - A translation equal to its text means "leave it as it is" (already in the target
     ///   language, a language the engine does not know, nothing to translate).
     /// - nil means "not now": the caller asks again later (a language is still being loaded …).
-    /// Throws `TranslationFailure` when the request as a whole failed.
+    /// Throws `TranslationFailure` when the request as a whole failed, and `TranslationWait`
+    /// when the engine sends nothing yet because it waits for the service.
     func translate(_ texts: [String], into target: Locale.Language) async throws -> [String?]
 
     /// Translating was turned off: drop pending work.
@@ -49,4 +50,12 @@ struct TranslationFailure: LocalizedError, Equatable {
     var retryAfter: TimeInterval? = nil
 
     var errorDescription: String? { message }
+}
+
+/// The engine sent nothing, because it waits for the service: the requests of a moment ago
+/// failed as a whole (the service is down or cannot be reached), or the service asked for a
+/// pause. The texts themselves did not fail: the caller offers them again after `seconds`,
+/// without counting a failure against them, and shows nothing (the failure was shown already).
+struct TranslationWait: Error, Equatable {
+    let seconds: TimeInterval
 }

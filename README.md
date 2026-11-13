@@ -113,7 +113,10 @@ it until you turn it off. Under Settings → Text:
   effect at once. A typed API key is stored in the keychain on Return, Save or a Test that works,
   and then replaces a stored key. If the service has no key yet, a typed one is also stored when
   Load the list works, when you change the service or when you leave the page. With a slow model,
-  MirrorAct says so once and sends fewer texts per request.
+  MirrorAct says so once and sends fewer texts per request. If the service reports errors or cannot
+  be reached, MirrorAct tries again after 5, 10, 20 and 40 seconds and then every minute, and the
+  mirror window says when; once the service answers again, the screen is translated with the next
+  try. A pause the service asks for (too many requests) is kept.
 - **A server of your own** (Ollama, LM Studio or Custom): plain `http://` works for this Mac
   (`localhost`, `127.0.0.1`), for private IP addresses (`192.168.…`, `10.…`, `172.16.…` to
   `172.31.…`), `.local` names and names without a dot; any other address needs `https://`. An

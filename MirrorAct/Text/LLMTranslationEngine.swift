@@ -130,9 +130,18 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     static let retryWait: TimeInterval = 1
     /// Seconds until the next request after a request that failed; doubled with every further
     /// failure in a row up to `longestBackOff`, so that a service that is down or an address
-    /// that leads nowhere is not asked every few seconds for as long as translating is on
-    static let firstBackOff: TimeInterval = 5
-    static let longestBackOff: TimeInterval = 120
+    /// that leads nowhere is not asked every few seconds for as long as translating is on.
+    ///
+    /// The engine owns the wait for the service as a whole: it sees that every text fails
+    /// because the service does, and until the wait is over it sends nothing and says so
+    /// (`TranslationWait`), which is no failure of the texts. The tracker owns the wait of a
+    /// single text that fails while others pass (`OverlayTracker.translationFailed`). Both take
+    /// the same steps (5, 10, 20, 40 s, then every 60 s), so that while they count the same
+    /// failures neither adds to the other: the screen translator waits for the later of the
+    /// two, and a service that answers again is asked within 60 s. Only a wait the service asks
+    /// for itself (Retry-After) may be longer.
+    static let firstBackOff: TimeInterval = OverlayTracker.Configuration().retryDelay
+    static let longestBackOff: TimeInterval = OverlayTracker.Configuration().longestRetryDelay
     /// longest wait a service may ask for (Retry-After); a day's quota is not sat out
     static let longestServiceWait: TimeInterval = 900
     /// Answers that could not be used after which a model that has never given a usable one is
@@ -246,8 +255,10 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
 
     func translate(_ texts: [String], into target: Locale.Language) async throws -> [String?] {
         guard !texts.isEmpty else { return [] }
-        // a failure a moment ago, or the service asked for a pause: "not now", without a request
-        if locked({ now() < notBefore }) { return [String?](repeating: nil, count: texts.count) }
+        // A failure a moment ago, or the service asked for a pause: no request, and no failure of
+        // these texts either (a text that came into view meanwhile has not been tried yet)
+        let wait = locked { notBefore - now() }
+        if wait > 0 { throw TranslationWait(seconds: wait) }
         let system = Self.instruction(for: target)
         var results: [String?] = []
         for batch in TranslationPrompt.batches(texts) {
@@ -288,9 +299,12 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     }
 
     /// What a notice adds about a wait of `seconds` before the next request: nothing for a short
-    /// one. A long one is named, because until then new texts stay untranslated without a word.
+    /// one. A long one is named, because until then new texts stay untranslated without a word:
+    /// in seconds up to two minutes (the steady wait of an outage is 60 s, which "2 min" would
+    /// overstate by half), in minutes rounded up above that.
     private static func words(forWait seconds: TimeInterval) -> String {
         guard seconds >= 60 else { return "" }
+        if seconds < 120 { return " – " + String(localized: "trying again in \(Int(seconds.rounded())) s") }
         return " – " + String(localized: "trying again in \(Int((seconds / 60).rounded(.up))) min")
     }
 

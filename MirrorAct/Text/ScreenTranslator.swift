@@ -39,6 +39,10 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     private var source: CVPixelBuffer?
     private var wakeRecognition: AsyncStream<Void>.Continuation?
     private var wakeTranslation: AsyncStream<Void>.Continuation?
+    /// Before this time (`clock`) the engine sends nothing: it said it waits for its service
+    /// (`TranslationFailure.retryAfter`, `TranslationWait`). No text is offered meanwhile; a
+    /// wake-up is due when the wait is over.
+    private var engineWaitsUntil: TimeInterval = 0
 
     private var tasks: [Task<Void, Never>] = []
     private var engine: TranslationEngine?
@@ -132,6 +136,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             tracker.reset()
             source = nil
             running = true
+            engineWaitsUntil = 0
             self.turn += 1
             self.wakeRecognition = wakeRecognition
             self.wakeTranslation = wakeTranslation
@@ -302,8 +307,10 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         for await _ in wakeups {
             while !Task.isCancelled {
                 if engine.prefersSettledText { await waitForRest(turn: turn) }
+                // (while the engine waits for its service, nothing is offered: it would send nothing)
                 let texts = locked {
-                    isCurrent(turn) ? tracker.textsAwaitingTranslation(limit: Self.batchSize, time: clock()) : []
+                    isCurrent(turn) && clock() >= engineWaitsUntil
+                        ? tracker.textsAwaitingTranslation(limit: Self.batchSize, time: clock()) : []
                 }
                 if texts.isEmpty { break }
                 do {
@@ -328,10 +335,25 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
                     compositor.prepare(locked { tracker.blocks })
                     sink.redisplay()
                     if postponed { wakeTranslationLater(turn: turn, texts: texts) }
+                } catch let wait as TranslationWait {
+                    // Nothing was sent: the texts did not fail, so their wait does not grow, and a
+                    // text that came into view meanwhile goes out with the next request
+                    let stillOn: Bool = locked {
+                        guard isCurrent(turn) else { return false }
+                        for text in texts { tracker.translationPostponed(for: text) }
+                        engineWaitsUntil = max(engineWaitsUntil, clock() + wait.seconds)
+                        return true
+                    }
+                    if Task.isCancelled || !stillOn { return }
+                    wakeTranslationLater(turn: turn, texts: [], after: wait.seconds)
+                    break
                 } catch {
                     let stillOn: Bool = locked {
                         guard isCurrent(turn) else { return false }
                         for text in texts { tracker.translationFailed(for: text, time: clock()) }
+                        if let seconds = (error as? TranslationFailure)?.retryAfter {
+                            engineWaitsUntil = max(engineWaitsUntil, clock() + seconds)
+                        }
                         return true
                     }
                     if Task.isCancelled || !stillOn { return }
@@ -372,11 +394,14 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
 
     /// Texts whose translation failed or was postponed are offered again by the tracker after a
     /// wait that grows with each failure of a text; nothing else would wake the loop on a still
-    /// picture. Wakes it when the first of `texts` may be offered again (`OverlayTracker.nextRetry`).
-    /// - Parameter seconds: a longer wait the engine asked for (it sends nothing before then)
+    /// picture. Wakes it when the first of `texts` may be offered again (`OverlayTracker.nextRetry`)
+    /// and the engine's own wait is over, whichever is later: the two take the same steps
+    /// (`LLMTranslationEngine.firstBackOff`), so the later one is the wait that applies.
+    /// - Parameter seconds: the wait of the engine for its service (it sends nothing before then)
     private func wakeTranslationLater(turn: Int, texts: [String], after seconds: TimeInterval? = nil) {
         let next = locked { tracker.nextRetry(of: texts) }
-        let retry = max(next.map { $0 - clock() } ?? OverlayTracker.Configuration().retryDelay, seconds ?? 0, 0)
+        let own = next.map { $0 - clock() } ?? (seconds == nil ? OverlayTracker.Configuration().retryDelay : 0)
+        let retry = max(own, seconds ?? 0, 0)
         let pause = self.pause
         Task { [weak self] in
             await pause(retry + 0.2)

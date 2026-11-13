@@ -3467,6 +3467,16 @@
         }
       }
     },
+    "trying again in %lld s" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nächster Versuch in %lld s"
+          }
+        }
+      }
+    },
     "the request was rejected" : {
       "localizations" : {
         "de" : {

@@ -532,10 +532,15 @@ final class LLMTranslationEngineTests: XCTestCase {
         // the caller is told when to come back
         XCTAssertEqual(failure?.retryAfter, 60)
 
-        // asked again before then: "not now", and the service hears nothing of it
+        // asked again before then: the engine says how long it still waits, and the service
+        // hears nothing of it; that is no failure of the text
         clock += 30
-        let early = try await engine.translate(["Settings"], into: german)
-        XCTAssertEqual(early, [nil])
+        do {
+            let early = try await engine.translate(["Settings"], into: german)
+            XCTFail("no wait, but \(early)")
+        } catch {
+            XCTAssertEqual(error as? TranslationWait, TranslationWait(seconds: 30))
+        }
         XCTAssertEqual(transport.requests.count, 1)
 
         clock += 31
@@ -552,6 +557,12 @@ final class LLMTranslationEngineTests: XCTestCase {
         // otherwise the texts that come into view meanwhile stay untranslated without a word
         XCTAssertEqual(failure?.message, "Mistral: " + String(localized: "too many requests right now")
                        + " – " + String(localized: "trying again in \(10) min"))
+
+        // up to two minutes in seconds: "2 min" would overstate 70 s by most of a minute
+        let minute = ScriptedTransport { _, _ in reply(429, rateLimited, headers: [LLMHeader("Retry-After", "70")]) }
+        let inSeconds = await self.failure { try await self.makeEngine(transport: minute).translate(["Settings"], into: self.german) }
+        XCTAssertEqual(inSeconds?.message, "Mistral: " + String(localized: "too many requests right now")
+                       + " – " + String(localized: "trying again in \(70) s"))
 
         // a short wait is not worth mentioning
         let brief = ScriptedTransport { _, _ in reply(429, rateLimited, headers: [LLMHeader("Retry-After", "20")]) }
@@ -574,9 +585,18 @@ final class LLMTranslationEngineTests: XCTestCase {
             waits.append(failure?.retryAfter)
             clock += failure?.retryAfter ?? 0
         }
-        XCTAssertEqual(waits, [5, 10, 20, 40, 80, 120, 120])
+        // the steps of the tracker's wait for a text that fails (5, 10, 20, 40 s, then every
+        // 60 s), so that the two do not add up
+        XCTAssertEqual(waits, [5, 10, 20, 40, 60, 60, 60])
+        XCTAssertEqual(LLMTranslationEngine.firstBackOff, OverlayTracker.Configuration().retryDelay)
+        XCTAssertEqual(LLMTranslationEngine.longestBackOff, OverlayTracker.Configuration().longestRetryDelay)
         // each time the one short retry of the engine itself, and nothing in between
         XCTAssertEqual(transport.requests.count, 14)
+        // the notice names the wait that applies
+        let named = await failure { try await engine.translate(["Settings"], into: self.german) }
+        XCTAssertEqual(named?.message, "Mistral: " + String(localized: "the service reported an error (\("500: Internal server error"))")
+                       + " – " + String(localized: "trying again in \(60) s"))
+        clock += named?.retryAfter ?? 0
 
         // an answer ends the series: the next failure waits as briefly as the first
         failing = false

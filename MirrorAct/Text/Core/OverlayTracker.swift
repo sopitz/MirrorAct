@@ -2270,7 +2270,9 @@ final class OverlayTracker {
     /// Offered again by `textsAwaitingTranslation` after `Configuration.retryDelay`, which doubles
     /// with each further failure of the same text (up to `longestRetryDelay`): a text that keeps
     /// failing is not asked for every few seconds for as long as it shows. What is remembered of
-    /// a text whose wait is over and that no block shows any more is forgotten.
+    /// a text whose wait is over and that no block shows any more is forgotten. This is the wait
+    /// of a text that fails while others pass; a translator that waits for its service as a
+    /// whole takes the same steps, so that the two do not add up (`translationPostponed`).
     func translationFailed(for text: String, time: TimeInterval) {
         requested.remove(text)
         let count = (failures[text]?.count ?? 0) + 1
@@ -2280,6 +2282,16 @@ final class OverlayTracker {
             if shown?.contains(other) == false { failures[other] = nil }
         }
         failures[text] = (time, count)
+    }
+
+    /// Not sent after all: the translator waits for the service as a whole (it failed for
+    /// every text a moment ago, or asked for a pause), and the waiting is the translator's.
+    /// The text itself did not fail, so its wait does not grow: it counts as not requested
+    /// and `textsAwaitingTranslation` offers it again (once its own wait, if any, is over).
+    /// Counted as a failure, a text that came into view during an outage would wait longer
+    /// with every turn it was not sent, and after the outage longer than the texts that did fail.
+    func translationPostponed(for text: String) {
+        requested.remove(text)
     }
 
     /// When the first of `texts` whose translation failed may be offered again

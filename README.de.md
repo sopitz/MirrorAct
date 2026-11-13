@@ -116,7 +116,11 @@ Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/Mirr
   Return, «Sichern» oder einem gelungenen «Testen» im Schlüsselbund gesichert und ersetzt dann einen
   gesicherten. Hat der Dienst noch keinen Schlüssel, wird ein eingetippter auch gesichert, wenn
   «Liste laden» gelingt, der Dienst wechselt oder man die Seite verlässt. Bei einem langsamen Modell
-  sagt MirrorAct das einmal und sendet weniger Texte pro Anfrage.
+  sagt MirrorAct das einmal und sendet weniger Texte pro Anfrage. Meldet der Dienst Fehler oder ist
+  er nicht erreichbar, versucht MirrorAct es nach 5, 10, 20 und 40 Sekunden wieder und dann jede
+  Minute, und das Spiegelfenster sagt, wann; sobald der Dienst wieder antwortet, wird der
+  Bildschirm mit dem nächsten Versuch übersetzt. Eine Pause, um die der Dienst bittet (zu viele
+  Anfragen), wird eingehalten.
 - **Ein eigener Server** (Ollama, LM Studio oder Benutzerdefiniert): Einfaches `http://` geht für
   diesen Mac (`localhost`, `127.0.0.1`), für private IP-Adressen (`192.168.…`, `10.…`, `172.16.…`
   bis `172.31.…`), `.local`-Namen und Namen ohne Punkt; jede andere Adresse braucht `https://`.
