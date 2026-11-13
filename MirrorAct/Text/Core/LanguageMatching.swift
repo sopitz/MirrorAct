@@ -67,6 +67,20 @@ enum LanguageMatching {
         return sameCode.first
     }
 
+    /// The entry that stands for `wanted` in the first of `lists` that has its language at all,
+    /// for a translator with several kinds of models that it prefers in this order (Apple's
+    /// on-device models before those that need Apple Intelligence). A region the first list
+    /// lacks gets the closest form of that list ("es" for "es-AR", "pt" for "pt-PT", "en-GB" for
+    /// "en-DE"), even where a later list has the region itself: only a language the first list
+    /// does not have at all ("da") is looked for in the next one.
+    static func match(_ wanted: Locale.Language, inFirstOf lists: [[Locale.Language]]) -> Locale.Language? {
+        for list in lists {
+            // nil only when the list has nothing in that language
+            if let entry = match(wanted, in: list) { return entry }
+        }
+        return nil
+    }
+
     /// The forms a region of a language falls back to, the closest first: "en-150", "en-GB" for
     /// "en-DE"; "es-419", "es-MX", "es-US" for "es-AR". Empty where the language itself is next.
     private static func widerForms(of language: Locale.Language, code: String) -> [Locale.Language] {
@@ -269,6 +283,12 @@ enum LanguageMatching {
         /// - `common`: the language of the texts that have none of their own (most of this or
         ///   of an earlier request was in it); nil = not known
         init(findings: [Finding], common: Locale.Language?, target: Locale.Language, supported: [Locale.Language]) {
+            self.init(findings: findings, common: common, target: target, lists: [supported])
+        }
+
+        /// The same for a translator with several lists of languages, the one it prefers first
+        /// (see `match(_:inFirstOf:)`)
+        init(findings: [Finding], common: Locale.Language?, target: Locale.Language, lists: [[Locale.Language]]) {
             var positions: [String: Int] = [:]
             var strangers: [(language: Locale.Language, letters: Int)] = []
             for (index, finding) in findings.enumerated() {
@@ -283,7 +303,7 @@ enum LanguageMatching {
                 }
                 if LanguageMatching.sameLanguage(language, target) {
                     unchanged.append(index)
-                } else if let source = LanguageMatching.match(language, in: supported) {
+                } else if let source = LanguageMatching.match(language, inFirstOf: lists) {
                     let key = LanguageMatching.key(source)
                     if let position = positions[key] {
                         groups[position].indices.append(index)

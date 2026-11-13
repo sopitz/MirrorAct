@@ -145,6 +145,67 @@ final class LanguageMatchingTests: XCTestCase {
         XCTAssertNil(matchedAsListed("fi-FI"))
     }
 
+    /// The languages of Apple's on-device models on macOS 26.4 and later
+    /// (`LanguageAvailability(preferredStrategy: .lowLatency)`), as macOS lists them; the 38 of
+    /// `listedByMacOS` are those of all its models, many of which need Apple Intelligence
+    private let onDevice: [Locale.Language] = [
+        "vi", "pt", "uk", "it", "zh-TW", "ko", "de", "en-GB", "zh", "ja", "id", "nl", "fr", "th", "es", "tr", "pl",
+        "ar-AE", "ru", "en", "hi",
+    ].map { Locale.Language(identifier: $0) }
+
+    /// The on-device list first: its closest form even where only the longer list has the region,
+    /// the longer list only for a language the first one does not have at all
+    func testTheFirstListThatHasTheLanguageDecides() {
+        let cases: [(wanted: String, expected: String?)] = [
+            // regions the on-device models do not have: their closest form
+            ("es-419", "es"), ("es-AR", "es"), ("es-MX", "es"), ("es-US", "es"), ("es-ES", "es"),
+            ("pt-PT", "pt"), ("pt-AO", "pt"), ("pt-BR", "pt"),
+            ("en-DE", "en-GB"), ("en-150", "en-GB"), ("en-IN", "en-GB"), ("en-AU", "en-GB"), ("en-NZ", "en-GB"),
+            ("en-CA", "en"), ("en-US", "en"), ("en-001", "en"),
+            ("zh-HK", "zh-TW"), ("zh-MO", "zh-TW"), ("zh-Hant", "zh-TW"), ("zh-Hans-HK", "zh"), ("zh-SG", "zh"),
+            ("de-CH", "de"), ("de-AT", "de"), ("fr-CA", "fr"), ("fr-CH", "fr"), ("it-CH", "it"),
+            // what both lists have
+            ("en-GB", "en-GB"), ("de", "de"), ("ar-AE", "ar-AE"), ("ja", "ja"),
+            // only the longer list has these languages
+            ("da", "da"), ("da-DK", "da"), ("sv", "sv"), ("sv-FI", "sv"), ("nb", "nb"),
+            // neither
+            ("fi", nil), ("he", nil), ("und", nil), ("", nil),
+        ]
+        for (wanted, expected) in cases {
+            let match = LanguageMatching.match(language(wanted), inFirstOf: [onDevice, listedByMacOS])
+            XCTAssertEqual(match?.minimalIdentifier, expected, wanted)
+        }
+        // only one kind of models (before macOS 26.4), or one list: as `match(_:in:)`
+        for wanted in ["es-AR", "pt-PT", "en-DE", "en-IN", "zh-HK", "de-CH", "da", "fi"] {
+            XCTAssertEqual(LanguageMatching.match(language(wanted), inFirstOf: [listedByMacOS])?.minimalIdentifier,
+                           matchedAsListed(wanted), wanted)
+            XCTAssertEqual(LanguageMatching.match(language(wanted), inFirstOf: [listedByMacOS, listedByMacOS]),
+                           LanguageMatching.match(language(wanted), in: listedByMacOS), wanted)
+        }
+        // an empty first list leaves it to the next
+        XCTAssertEqual(LanguageMatching.match(language("pt-PT"), inFirstOf: [[], listedByMacOS])?.minimalIdentifier,
+                       "pt-PT")
+        XCTAssertNil(LanguageMatching.match(language("de"), inFirstOf: []))
+    }
+
+    /// The languages of the texts are matched the same way
+    func testAPlanTakesTheSourcesFromTheFirstListThatHasThem() {
+        let findings = [decided("da", letters: 30), decided("pt", letters: 30), decided("en", letters: 30),
+                        decided("fi", letters: 40), decided("de", letters: 30), decided("zh-Hant", letters: 20)]
+        let plan = LanguageMatching.Plan(findings: findings, common: nil, target: language("de"),
+                                         lists: [onDevice, listedByMacOS])
+        XCTAssertEqual(plan.groups.map(\.source.minimalIdentifier), ["da", "pt", "en", "zh-TW"])
+        XCTAssertEqual(plan.groups.map(\.indices), [[0], [1], [2], [5]])
+        XCTAssertEqual(plan.unchanged, [3, 4])
+        XCTAssertEqual(plan.unknown, [language("fi")])
+        // one list: as before
+        let single = LanguageMatching.Plan(findings: findings, common: nil, target: language("de"),
+                                           supported: onDevice)
+        XCTAssertEqual(single.groups.map(\.source.minimalIdentifier), ["pt", "en", "zh-TW"])
+        XCTAssertEqual(single.unchanged, [0, 3, 4])
+        XCTAssertEqual(single.unknown, [language("fi")])
+    }
+
     func testOtherwiseTheSameLanguageIsMatched() {
         XCTAssertEqual(matched("pt-PT"), "pt-BR")
         let simplifiedOnly = [language("de-DE"), language("zh-CN")]
