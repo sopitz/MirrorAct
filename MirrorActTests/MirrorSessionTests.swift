@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import Combine
 import CoreMedia
 import CoreVideo
 import XCTest
@@ -134,8 +135,46 @@ final class MirrorSessionTests: XCTestCase {
         session.sink.recording = nil
     }
 
+    /// The time of a session and what it schedules on it: `advance` runs what falls due, in order
+    @MainActor
     private final class TestClock {
-        var date = Date(timeIntervalSinceReferenceDate: 0)
+        private final class Timer {
+            let due: Date
+            let action: @MainActor () -> Void
+            var cancelled = false
+            init(due: Date, action: @escaping @MainActor () -> Void) {
+                self.due = due
+                self.action = action
+            }
+        }
+
+        private(set) var date = Date(timeIntervalSinceReferenceDate: 0)
+        private var timers: [Timer] = []
+
+        /// Gives the session this clock
+        func drive(_ session: MirrorSession) {
+            session.now = { self.date }
+            session.schedule = { seconds, action in
+                let timer = Timer(due: self.date.addingTimeInterval(seconds), action: action)
+                self.timers.append(timer)
+                return AnyCancellable { timer.cancelled = true }
+            }
+        }
+
+        func advance(_ seconds: TimeInterval) {
+            let end = date.addingTimeInterval(seconds)
+            while let next = timers.filter({ !$0.cancelled && $0.due <= end }).min(by: { $0.due < $1.due }) {
+                timers.removeAll { $0 === next }
+                date = max(date, next.due)
+                next.action()
+            }
+            date = end
+        }
+
+        /// Moves the time on without running what falls due, as when the main thread is busy
+        func jump(_ seconds: TimeInterval) {
+            date = date.addingTimeInterval(seconds)
+        }
     }
 
     /// What AppModel does to a session, as it does it
@@ -237,7 +276,7 @@ final class MirrorSessionTests: XCTestCase {
                 session.state = .live
             }
             let clock = TestClock()
-            session.now = { clock.date }
+            clock.drive(session)
             for step in path.steps {
                 switch step {
                 case let .androidStop(handingOver):
@@ -256,7 +295,7 @@ final class MirrorSessionTests: XCTestCase {
                     session.sink.push(next)
                     if session.state != .live { session.state = .live }
                 case let .wait(seconds):
-                    clock.date += seconds
+                    clock.advance(seconds)
                 case .press:
                     session.toggleTranslation()
                 case let .expect(translating):
@@ -266,6 +305,108 @@ final class MirrorSessionTests: XCTestCase {
             XCTAssertEqual(session.isTranslating, path.translates, path.name)
             XCTAssertEqual(session.sink.processor === session.translator, path.translates, path.name)
             if let toast = path.toast { XCTAssertEqual(session.toast, toast, path.name) }
+            session.translator.stop()
+            session.sink.recording = nil
+        }
+    }
+
+    /// What happens to a session, for the messages in its window
+    private enum Event {
+        /// a passing toast of two seconds
+        case toast(String)
+        /// the engine's lasting notice ("macOS asks whether it may download …"), or nil to withdraw it
+        case engine(String?)
+        /// `connectAndroid`'s onStop: the app moves the window to another connection
+        case handOver
+        /// `connectAndroid`'s onStop: the stream ends otherwise, the device is gone
+        case gone
+        /// the first half of `handOver`, before the state changes
+        case willHandOver
+        case connect
+        case firstFrame
+        /// the Translate button, ⇧⌘T or the Device menu
+        case press
+        case wait(TimeInterval)
+        /// the time moves on while the main thread is busy: nothing scheduled has run yet
+        case busy(TimeInterval)
+        /// what the window says in place of the state (nil: the state)
+        case shows(String?)
+    }
+
+    /// Which of the three kinds of message the window shows, in every combination, and when each
+    /// goes: a passing toast over everything, the notice that Translate goes on again while it
+    /// waits for the stream of a hand-over, the engine's lasting notice under both
+    func testWhichMessageTheWindowShows() async throws {
+        let resume = MirrorSession.translateResumeNotice
+        let staysOff = String(localized: "Translate stays off")
+        let connected = "Connected via Wi-Fi"
+        let rows: [(name: String, events: [Event], translates: Bool)] = [
+            ("a toast, then the state", [.toast("Saved"), .shows("Saved"), .wait(2), .shows(nil)], true),
+            ("the engine's notice under a toast",
+             [.engine("asking"), .shows("asking"), .toast("Saved"), .shows("Saved"), .wait(2), .shows("asking"),
+              .engine(nil), .shows(nil)], true),
+            ("the engine's notice changes under a toast",
+             [.engine("asking"), .toast("Saved"), .engine("downloading"), .shows("Saved"), .wait(2),
+              .shows("downloading")], true),
+            ("Translate turned off withdraws the engine's notice",
+             [.engine("asking"), .press, .shows(nil), .wait(2), .shows(nil)], false),
+            ("a hand-over replaces a toast and the engine's notice",
+             [.engine("asking"), .toast("Saved"), .willHandOver, .shows(resume), .wait(0.5), .shows(resume),
+              .handOver, .shows(resume), .wait(5), .shows(resume)], false),
+            ("Switch to Wi-Fi: its toast goes over the wait, and the wait shows again",
+             [.handOver, .wait(2), .toast(connected), .shows(connected), .wait(2), .shows(resume), .connect,
+              .wait(1), .shows(resume), .firstFrame, .shows(nil)], true),
+            ("the engine's notice of the new stream",
+             [.handOver, .connect, .firstFrame, .engine("asking"), .shows("asking")], true),
+            ("pressed while it waits", [.handOver, .press, .shows(staysOff), .wait(2), .shows(nil), .wait(10),
+                                         .shows(nil), .connect, .firstFrame, .shows(nil)], false),
+            ("pressed under a toast", [.handOver, .toast(connected), .press, .shows(staysOff), .wait(2),
+                                        .shows(nil)], false),
+            ("the device is gone while it waits", [.handOver, .connect, .gone, .shows(nil), .wait(20), .shows(nil)],
+             false),
+            ("the device is gone under a toast", [.handOver, .toast(connected), .gone, .shows(connected), .wait(2),
+                                                   .shows(nil)], false),
+            ("a second hand-over while it waits",
+             [.handOver, .connect, .wait(3), .toast(connected), .handOver, .shows(connected), .wait(2),
+              .shows(resume), .connect, .firstFrame, .shows(nil)], true),
+        ]
+        for row in rows {
+            let session = try await translatingSession(kind: .android).session
+            let clock = TestClock()
+            clock.drive(session)
+            for (index, event) in row.events.enumerated() {
+                switch event {
+                case let .toast(text):
+                    session.showToast(text)
+                case let .engine(text):
+                    session.translator.onStatus?(text)
+                case .handOver, .gone, .willHandOver:
+                    if case .gone = event {
+                        session.streamWillEnd(handingOver: false)
+                    } else {
+                        session.streamWillEnd(handingOver: true)
+                    }
+                    if case .willHandOver = event { break }
+                    session.state = .disconnected(nil)
+                case .connect:
+                    session.state = .connecting
+                    session.sink.clear()
+                case .firstFrame:
+                    let (next, _) = try TestFrames.text(lines, width: 1170, height: 800,
+                                                        format: kCVPixelFormatType_32BGRA)
+                    session.sink.push(next)
+                    if session.state != .live { session.state = .live }
+                case .press:
+                    session.toggleTranslation()
+                case let .wait(seconds):
+                    clock.advance(seconds)
+                case let .busy(seconds):
+                    clock.jump(seconds)
+                case let .shows(text):
+                    XCTAssertEqual(session.toast, text, "\(row.name), step \(index + 1)")
+                }
+            }
+            XCTAssertEqual(session.isTranslating, row.translates, row.name)
             session.translator.stop()
             session.sink.recording = nil
         }

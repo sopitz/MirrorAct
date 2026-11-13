@@ -38,7 +38,7 @@ final class MirrorSession: ObservableObject, Identifiable {
     /// Translate was on when the app moved this window to another connection: it goes on again
     /// if the new stream is live before this time, and otherwise stays off
     private var translateResumeDeadline: Date?
-    private var translateResumeExpiry: Task<Void, Never>?
+    private var translateResumeExpiry: AnyCancellable?
     /// How long the stream of a hand-over may take for Translate to go on again by itself. It
     /// is short on purpose: with a language model service the text on the screen leaves the
     /// Mac, which must not start again long after the user last turned Translate on. Switch to
@@ -49,10 +49,21 @@ final class MirrorSession: ObservableObject, Identifiable {
     }
     /// the time, for the deadline above; the tests move it
     var now: () -> Date = Date.init
+    /// Runs `action` after `seconds` unless the result is cancelled or released first: the end
+    /// of a toast and of the wait above. The tests run it on their own clock.
+    var schedule: (TimeInterval, @escaping @MainActor () -> Void) -> AnyCancellable = { seconds, action in
+        let task = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            action()
+        }
+        return AnyCancellable { task.cancel() }
+    }
     @Published private(set) var frameSize: CGSize = .zero
     @Published private(set) var profile: DeviceProfile
     @Published var muted: Bool { didSet { onMuteChange?(muted) } }
-    @Published var toast: String?
+    /// the message in place of the subtitle (see `showToast` for which one)
+    @Published private(set) var toast: String?
     @Published private(set) var recordingStartedAt: Date?
     /// most recently saved file (screenshot or recording), for dragging out of the tool rail
     @Published private(set) var lastExport: URL?
@@ -85,8 +96,10 @@ final class MirrorSession: ObservableObject, Identifiable {
     /// window was closed: stop the source
     var onClose: (() -> Void)?
 
-    private var toastTask: Task<Void, Never>?
-    /// shown in place of the toast whenever no toast is up, until it is withdrawn
+    /// set while a passing toast is up
+    private var toastExpiry: AnyCancellable?
+    /// the engine's notice, shown whenever no passing toast is up and Translate does not wait
+    /// to go on again, until it is withdrawn
     private var lastingNotice: String?
 
     init(id: String, kind: Kind, deviceName: String, modelIdentifier: String?, muted: Bool) {
@@ -128,11 +141,11 @@ final class MirrorSession: ObservableObject, Identifiable {
         guard translator.isActive else { return }
         let window = Self.translateResumeWindow
         translateResumeDeadline = now().addingTimeInterval(window)
-        showToast(Self.translateResumeNotice, seconds: window)
-        translateResumeExpiry?.cancel()
-        translateResumeExpiry = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(window * 1_000_000_000))
-            guard !Task.isCancelled, let self, let deadline = self.translateResumeDeadline,
+        // the notice replaces a passing toast at once
+        toastExpiry = nil
+        showRestingNotice()
+        translateResumeExpiry = schedule(window) { [weak self] in
+            guard let self, let deadline = self.translateResumeDeadline,
                   self.now() >= deadline else { return }
             self.cancelTranslateResume()
         }
@@ -152,12 +165,8 @@ final class MirrorSession: ObservableObject, Identifiable {
 
     private func cancelTranslateResume() {
         translateResumeDeadline = nil
-        translateResumeExpiry?.cancel()
         translateResumeExpiry = nil
-        if toast == Self.translateResumeNotice {
-            toastTask?.cancel()
-            toast = lastingNotice
-        }
+        showRestingNotice()
     }
 
     private func updateProfile() {
@@ -181,25 +190,38 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
     }
 
+    // The window shows one of three kinds of message in place of the subtitle, the first of:
+    // 1. a passing toast (`showToast`), for its seconds;
+    // 2. while Translate waits to go on again after a hand-over, `translateResumeNotice`;
+    // 3. the engine's lasting notice (`showLastingNotice`, "macOS asks whether it may download …").
+    // Without any of them it shows the state. A passing toast goes when its time is up, when the
+    // next one replaces it, and when a hand-over starts, whose notice replaces it at once. The
+    // notice of the hand-over goes when the new stream is live and Translate goes on, when
+    // Translate is pressed ("Translate stays off"), and when the stream ends without a hand-over.
+    // The engine's notice goes when the engine withdraws it and when Translate turns off, which
+    // it also does when the stream of a hand-over ends.
+
+    /// A passing message, over the others for `seconds`
     func showToast(_ text: String, seconds: TimeInterval = 2) {
         toast = text
-        toastTask?.cancel()
-        toastTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            guard !Task.isCancelled, let self else { return }
-            self.toast = self.lastingNotice
+        toastExpiry = schedule(seconds) { [weak self] in
+            guard let self else { return }
+            self.toastExpiry = nil
+            self.showRestingNotice()
         }
     }
 
     /// A notice that stays until it is replaced or withdrawn with nil ("macOS asks whether it may
-    /// download …"). A toast goes over it for its time.
+    /// download …"). A toast and the wait after a hand-over go over it.
     func showLastingNotice(_ text: String?) {
-        let isShown = toast == nil || toast == lastingNotice
         lastingNotice = text
-        if isShown {
-            toastTask?.cancel()
-            toast = text
-        }
+        showRestingNotice()
+    }
+
+    /// Shows what stays once no passing toast is up, unless one is up
+    private func showRestingNotice() {
+        guard toastExpiry == nil else { return }
+        toast = translateResumeDeadline != nil ? Self.translateResumeNotice : lastingNotice
     }
 
     /// screen size in macOS points at 100 % (oriented like the image)
