@@ -84,6 +84,40 @@ final class TextSettingsLanguageMenuTests: XCTestCase {
         XCTAssertEqual(labels, labels.sorted { $0.compare($1, locale: locale) == .orderedAscending })
     }
 
+    /// "System language" comes to the row the engine translates into: the on-device models' form
+    /// of the language wherever they have it. Where that row needs Apple Intelligence, the line
+    /// under the menu says so as it does for a language chosen.
+    func testTheSystemLanguageComesToTheRowTheEngineTranslatesInto() {
+        let languages = AppleTranslationLanguages(onDevice: onDevice, all: supported)
+        let locale = Locale(identifier: "en")
+        let apple = TextSettingsView.languageRows(for: languages, engine: "apple", in: locale)
+        let service = TextSettingsView.languageRows(for: languages, engine: "llm", in: locale)
+        let cases: [(system: String, row: String?, needsAppleIntelligence: Bool)] = [
+            ("da-DK", "da", true),
+            ("da", "da", true),
+            ("sv-SE", "sv", true),
+            ("nb-NO", "nb", true),
+            ("de-CH", "de", false),
+            ("de-DE", "de", false),
+            ("pt-PT", "pt", false),
+            ("en-DE", "en-GB", false),
+            ("zh-HK", "zh-TW", false),
+            ("fi-FI", nil, false),
+        ]
+        for entry in cases {
+            let system = Locale.Language(identifier: entry.system)
+            let row = TextSettingsView.systemRow(for: system, in: apple, lists: languages.lists)
+            XCTAssertEqual(row?.id, entry.row, entry.system)
+            XCTAssertEqual(row?.needsAppleIntelligence ?? false, entry.needsAppleIntelligence, entry.system)
+            // the engine comes to the same language
+            XCTAssertEqual(row?.id, LanguageMatching.match(system, inFirstOf: languages.lists)?.minimalIdentifier,
+                           entry.system)
+            // a service needs no Apple Intelligence
+            XCTAssertFalse(TextSettingsView.systemRow(for: system, in: service, lists: languages.lists)?
+                .needsAppleIntelligence ?? false, entry.system)
+        }
+    }
+
     /// A language model service needs no Apple Intelligence: with it, no row says so
     func testOnlyThisMacNeedsAppleIntelligence() {
         let languages = AppleTranslationLanguages(onDevice: onDevice, all: supported)

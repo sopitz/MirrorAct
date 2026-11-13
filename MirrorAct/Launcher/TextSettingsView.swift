@@ -42,6 +42,7 @@ struct TextSettingsView: View {
         loadsLanguages = languages == nil
         if let languages {
             _translationLanguages = State(initialValue: Self.languageRows(for: languages))
+            _languageLists = State(initialValue: languages.lists)
         }
     }
 
@@ -50,6 +51,8 @@ struct TextSettingsView: View {
     /// the rows of the languages the Mac can translate into, for this Mac and for a service
     /// (loaded when the page appears)
     @State private var translationLanguages: (apple: [LanguageRow], service: [LanguageRow]) = ([], [])
+    /// the lists the rows come from, by kind of models (`AppleTranslationLanguages.lists`)
+    @State private var languageLists: [[Locale.Language]] = []
 
     /// the rows of “Translate into” for the engine chosen
     private var languageRows: [LanguageRow] {
@@ -70,6 +73,11 @@ struct TextSettingsView: View {
     var body: some View {
         let rows = languageRows
         let chosenRow = rows.first { $0.id == settings.translationLanguage }
+        // the row of the language translated into: the chosen one, or the one "System language"
+        // comes to
+        let targetRow = settings.translationLanguage == "system"
+            ? Self.systemRow(for: settings.translationTarget, in: rows, lists: languageLists)
+            : chosenRow
         Form {
             Section {
                 Picker("Translate into", selection: $settings.translationLanguage) {
@@ -86,8 +94,8 @@ struct TextSettingsView: View {
                         Text(verbatim: row.id == chosenRow?.id ? row.name : row.label).tag(row.id)
                     }
                 }
-                if let chosenRow, chosenRow.needsAppleIntelligence {
-                    Text("Translating into \(chosenRow.name) needs Apple Intelligence.")
+                if let targetRow, targetRow.needsAppleIntelligence {
+                    Text("Translating into \(targetRow.name) needs Apple Intelligence.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -108,7 +116,9 @@ struct TextSettingsView: View {
         .formStyle(.grouped)
         .task {
             guard loadsLanguages else { return }
-            translationLanguages = Self.languageRows(for: await AppleTranslationAvailability.systemLanguages())
+            let languages = await AppleTranslationAvailability.systemLanguages()
+            translationLanguages = Self.languageRows(for: languages)
+            languageLists = languages.lists
         }
         .onAppear { page.appear() }
         .onDisappear { page.disappear() }
@@ -357,6 +367,16 @@ struct TextSettingsView: View {
                                    needsAppleIntelligence: true)
             }
             .sorted { $0.label.compare($1.label, locale: locale) == .orderedAscending }
+    }
+
+    /// The row of the language "System language" translates into, found as the engine finds it
+    /// (`AppleTranslationEngine.translate`): in the first of `lists` that has the language, so
+    /// the form of the on-device models wherever they have it. nil = no row has the language.
+    static func systemRow(for system: Locale.Language, in rows: [LanguageRow],
+                          lists: [[Locale.Language]]) -> LanguageRow? {
+        guard let found = LanguageMatching.match(system, inFirstOf: lists) else { return nil }
+        let key = LanguageMatching.key(found)
+        return rows.first { LanguageMatching.key(Locale.Language(identifier: $0.id)) == key }
     }
 
     /// "German", or with the region "German (Switzerland)"
