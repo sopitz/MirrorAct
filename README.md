@@ -98,24 +98,36 @@ it until you turn it off. Under Settings → Text:
 
 - **Translate into:** the system language or another one from the list. Where a language comes in
   several forms, the region is named, such as "German (Switzerland)" or "English (United Kingdom)".
-  A region macOS does not translate gets the usual form of its language (English for Germany gives
-  US English).
+  A language from the list is used as chosen. The system language gets the closest form macOS
+  translates, on macOS 26.4 and later that of the Mac's fast on-device models where they have the
+  language (English for Germany or India gives British English).
 - **This Mac:** Apple's Translation framework. Before a language pair can be translated, macOS asks
-  whether to download it from Apple, one pair at a time.
-- **A language model service:** the service may charge your account for each request, and the more
+  whether to download it from Apple, one pair at a time; until you answer, the mirror window says
+  so, and turning "Translate" off closes the question. Some languages and regional forms, marked in
+  the list, need Apple Intelligence; MirrorAct says so when it is off or this Mac does not support
+  it.
+- **Language model service:** the service may charge your account for each request, and the more
   new text comes into view while "Translate" is on, the more it costs. Address and Model take
-  effect when you press Return or leave the field, click Test or Load the list, change the service
-  or leave the page, not while you type; a model chosen from Models takes effect at once. A typed
-  API key is stored in the keychain on Return or Save, and also when you change the service or
-  leave the page.
+  effect when you press Return or leave the field, click Test or Load the list, change the service,
+  leave the page or switch to another window, not while you type; a model chosen from Models takes
+  effect at once. A typed API key is stored in the keychain on Return, Save or a Test that works,
+  and then replaces a stored key. If the service has no key yet, a typed one is also stored when
+  Load the list works, when you change the service or when you leave the page. With a slow model,
+  MirrorAct says so once and sends fewer texts per request.
 - **A server of your own** (Ollama, LM Studio or Custom): plain `http://` works for this Mac
   (`localhost`, `127.0.0.1`), for private IP addresses (`192.168.…`, `10.…`, `172.16.…` to
-  `172.31.…`), `.local` names and names without a dot; any other address needs `https://`.
-  MirrorAct does not follow redirects, so enter the address the server answers at. For a server on
-  another computer, allow MirrorAct under System Settings → Privacy & Security → Local Network.
+  `172.31.…`), `.local` names and names without a dot; any other address needs `https://`. An
+  address typed without `http://` or `https://` gets `http://` for these and `https://` for any
+  other name. MirrorAct does not follow redirects, so enter the address the server answers at. For
+  a server on another computer, allow MirrorAct under System Settings → Privacy & Security → Local
+  Network.
 
-Text over a playing video, such as subtitles or captions on a clip, is not translated while the
-video plays. When the device disconnects or reconnects, "Translate" turns off; turn it on again.
+A translation that does not fit its place ends with an ellipsis. Text over a playing video, such
+as subtitles or captions on a clip, is not translated while the video plays. When the device
+disconnects, "Translate" turns off; turn it on again. When MirrorAct itself moves an Android window
+to the other connection (cable unplugged with Wi-Fi still there, or "Use Wi-Fi Instead of Cable"),
+"Translate" goes on again if the new picture arrives within a few seconds; the window says so, and
+pressing "Translate" meanwhile keeps it off.
 
 ## Controlling an Android phone
 

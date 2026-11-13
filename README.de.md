@@ -100,26 +100,38 @@ Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/Mirr
 
 - **Übersetzen nach:** die Systemsprache oder eine andere aus der Liste. Gibt es eine Sprache in
   mehreren Formen, steht die Region dabei, etwa «Deutsch (Schweiz)» oder «Englisch (Vereinigtes
-  Königreich)». Eine Region, die macOS nicht übersetzt, bekommt die übliche Form ihrer Sprache
-  (Englisch für Deutschland ergibt amerikanisches Englisch).
+  Königreich)». Eine Sprache aus der Liste gilt so, wie sie gewählt ist. Die Systemsprache bekommt
+  die nächste Form, die macOS übersetzt, ab macOS 26.4 die der schnellen Modelle auf dem Mac, wo
+  diese die Sprache haben (Englisch für Deutschland oder Indien ergibt britisches Englisch).
 - **Dieser Mac:** Apples Translation-Framework. Bevor ein Sprachpaar übersetzt werden kann, fragt
-  macOS, ob es von Apple geladen werden soll, ein Paar nach dem anderen.
-- **Ein Sprachmodell-Dienst:** Der Dienst kann jede Anfrage in Rechnung stellen, und je mehr neuer
+  macOS, ob es von Apple geladen werden soll, ein Paar nach dem anderen; bis man antwortet, sagt es
+  das Spiegelfenster, und «Übersetzen» auszuschalten schliesst die Frage. Einige Sprachen und
+  regionale Formen, in der Liste markiert, brauchen Apple Intelligence; MirrorAct sagt es, wenn sie
+  aus ist oder dieser Mac sie nicht unterstützt.
+- **Sprachmodell-Dienst:** Der Dienst kann jede Anfrage in Rechnung stellen, und je mehr neuer
   Text ins Bild kommt, solange «Übersetzen» an ist, desto mehr kostet es. Adresse und Modell gelten,
   sobald man Return drückt oder das Feld verlässt, auf «Testen» oder «Liste laden» klickt, den
-  Dienst wechselt oder die Seite verlässt, nicht schon beim Tippen; ein unter «Modelle» gewähltes
-  Modell gilt sofort. Ein eingetippter API-Schlüssel wird mit Return oder «Sichern» im
-  Schlüsselbund gesichert, ebenso beim Wechsel des Dienstes und beim Verlassen der Seite.
+  Dienst wechselt, die Seite verlässt oder in ein anderes Fenster wechselt, nicht schon beim
+  Tippen; ein unter «Modelle» gewähltes Modell gilt sofort. Ein eingetippter API-Schlüssel wird mit
+  Return, «Sichern» oder einem gelungenen «Testen» im Schlüsselbund gesichert und ersetzt dann einen
+  gesicherten. Hat der Dienst noch keinen Schlüssel, wird ein eingetippter auch gesichert, wenn
+  «Liste laden» gelingt, der Dienst wechselt oder man die Seite verlässt. Bei einem langsamen Modell
+  sagt MirrorAct das einmal und sendet weniger Texte pro Anfrage.
 - **Ein eigener Server** (Ollama, LM Studio oder Benutzerdefiniert): Einfaches `http://` geht für
   diesen Mac (`localhost`, `127.0.0.1`), für private IP-Adressen (`192.168.…`, `10.…`, `172.16.…`
   bis `172.31.…`), `.local`-Namen und Namen ohne Punkt; jede andere Adresse braucht `https://`.
-  Weiterleitungen folgt MirrorAct nicht, einzutragen ist also die Adresse, unter der der Server
-  antwortet. Für einen Server auf einem anderen Computer MirrorAct unter Systemeinstellungen →
-  Datenschutz & Sicherheit → Lokales Netzwerk erlauben.
+  Eine Adresse ohne `http://` oder `https://` bekommt für diese `http://` und für jeden anderen
+  Namen `https://`. Weiterleitungen folgt MirrorAct nicht, einzutragen ist also die Adresse, unter
+  der der Server antwortet. Für einen Server auf einem anderen Computer MirrorAct unter
+  Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk erlauben.
 
-Text über einem laufenden Video, etwa Untertitel oder Beschriftungen auf einem Clip, wird nicht
-übersetzt, solange das Video läuft. Trennt sich das Gerät oder verbindet es sich neu, geht
-«Übersetzen» aus und muss wieder eingeschaltet werden.
+Eine Übersetzung, die nicht an ihren Platz passt, endet mit Auslassungspunkten. Text über einem
+laufenden Video, etwa Untertitel oder Beschriftungen auf einem Clip, wird nicht übersetzt, solange
+das Video läuft. Trennt sich das Gerät, geht «Übersetzen» aus und muss wieder eingeschaltet werden.
+Wechselt MirrorAct ein Android-Fenster selbst auf die andere Verbindung (Kabel abgezogen bei
+bestehendem WLAN oder «WLAN statt Kabel verwenden»), geht «Übersetzen» wieder an, wenn das neue Bild
+innert weniger Sekunden kommt; das Fenster sagt es, und ein Klick auf «Übersetzen» in dieser Zeit
+lässt es aus.
 
 ## Android-Telefon bedienen
 
