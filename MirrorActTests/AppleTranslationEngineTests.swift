@@ -244,6 +244,101 @@ final class AppleTranslationEngineTests: XCTestCase {
         }
     }
 
+    /// Without Apple Intelligence a pair that only its models know is not asked for: macOS would
+    /// show "Apple Intelligence Required", and its calls would not return before the user closes
+    /// that. A target that needs it ends the turn with a word; texts in a language that needs it
+    /// stay as they are. Before macOS 26.4 there are no such pairs.
+    func testWithoutAppleIntelligenceItsModelsAreNotAskedFor() async throws {
+        enum Outcome: Equatable {
+            case host(target: String, strategy: AppleTranslationStrategy)
+            case stopped
+            case leftAsTheyAre
+        }
+        let twoKinds = (onDevice: Self.onDevice, all: Self.onDevice + Self.onlyWithAppleIntelligence)
+        let oneKind = (onDevice: twoKinds.all, all: twoKinds.all)
+        let cases: [(lists: (onDevice: [String], all: [String]), wanted: String, chosen: Bool, text: String,
+                     outcome: Outcome)] = [
+            (twoKinds, "da", false, Self.english, .stopped),
+            (twoKinds, "da", true, Self.english, .stopped),
+            (twoKinds, "pt-PT", true, Self.english, .stopped),
+            (twoKinds, "en-IN", true, Self.german, .stopped),
+            (twoKinds, "de-CH", true, Self.english, .stopped),
+            // the language of the system in the form of the on-device models
+            (twoKinds, "pt-PT", false, Self.english, .host(target: "pt", strategy: .lowLatency)),
+            (twoKinds, "en-IN", false, Self.german, .host(target: "en-GB", strategy: .lowLatency)),
+            (twoKinds, "de", true, Self.english, .host(target: "de", strategy: .lowLatency)),
+            // Danish on the screen
+            (twoKinds, "de", false, Self.danish, .leftAsTheyAre),
+            // one kind of models
+            (oneKind, "da", false, Self.english, .host(target: "da", strategy: .lowLatency)),
+            (oneKind, "pt-PT", true, Self.english, .host(target: "pt-PT", strategy: .lowLatency)),
+            (oneKind, "de", false, Self.danish, .host(target: "de", strategy: .lowLatency)),
+        ]
+        for entry in cases {
+            let label = "\(entry.wanted) chosen: \(entry.chosen), \(entry.lists.onDevice.count) on the device"
+            let macOS = FakeMacOS(onDevice: entry.lists.onDevice, all: entry.lists.all)
+            macOS.appleIntelligenceIsOn = false
+            let engine = engine(answeredBy: macOS)
+            let client = AppleTranslationClient(engine: engine, targetIsChosen: entry.chosen)
+            let notices = Box<[String]>([])
+            client.notify = { message in MainActor.assumeIsolated { notices.value.append(message) } }
+            let request = Task { try await client.translate([entry.text], into: self.language(entry.wanted)) }
+            switch entry.outcome {
+            case .host(let target, let strategy):
+                try await waitUntil { engine.hosts.count == 1 }
+                XCTAssertEqual(engine.hosts[0].target.minimalIdentifier, target, label)
+                XCTAssertEqual(engine.hosts[0].strategy, strategy, label)
+                client.cancel()
+                _ = try await request.value
+            case .stopped:
+                do {
+                    _ = try await request.value
+                    XCTFail("translated: \(label)")
+                } catch let failure as TranslationFailure {
+                    XCTAssertTrue(failure.isPermanent, label)
+                    XCTAssertFalse(failure.message.isEmpty, label)
+                }
+                XCTAssertTrue(macOS.statusAsked.isEmpty, label)
+                client.cancel()
+            case .leftAsTheyAre:
+                let translations = try await request.value
+                XCTAssertEqual(translations, [entry.text], label)
+                XCTAssertEqual(notices.value.count, 1, label)
+                XCTAssertTrue(macOS.statusAsked.isEmpty, label)
+                // once per turn: neither asked nor told again
+                let again = try await client.translate([entry.text], into: language(entry.wanted))
+                XCTAssertEqual(again, [entry.text], label)
+                XCTAssertEqual(notices.value.count, 1, label)
+                XCTAssertEqual(macOS.appleIntelligenceAsked, 1, label)
+                client.cancel()
+            }
+            XCTAssertTrue(engine.hosts.isEmpty, label)
+            XCTAssertTrue(macOS.asked.isEmpty, label)
+            // only a pair that needs it asks whether Apple Intelligence is on
+            XCTAssertEqual(macOS.appleIntelligenceAsked > 0, entry.outcome == .stopped || entry.outcome == .leftAsTheyAre,
+                           label)
+        }
+    }
+
+    /// Turned on in the meantime: the next turn of translating asks again
+    func testANewTurnAsksAgainWhetherAppleIntelligenceIsOn() async throws {
+        let macOS = FakeMacOS(onDevice: Self.onDevice, all: Self.onDevice + Self.onlyWithAppleIntelligence)
+        macOS.appleIntelligenceIsOn = false
+        let engine = engine(answeredBy: macOS)
+        let first = AppleTranslationClient(engine: engine)
+        let unchanged = try await first.translate([Self.danish], into: language("de"))
+        XCTAssertEqual(unchanged, [Self.danish])
+        first.cancel()
+        macOS.appleIntelligenceIsOn = true
+        let second = AppleTranslationClient(engine: engine)
+        let request = Task { try await second.translate([Self.danish], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        XCTAssertEqual(engine.hosts[0].strategy, .highFidelity)
+        XCTAssertEqual(macOS.appleIntelligenceAsked, 2)
+        second.cancel()
+        _ = try await request.value
+    }
+
     /// Whether the language was chosen in the settings reaches the client
     func testTheClientKnowsWhetherTheLanguageWasChosen() throws {
         let settings = AppSettings.shared
@@ -498,6 +593,8 @@ private final class FakeMacOS {
     private(set) var asked: [UUID] = []
     /// what the status of a pair was asked for
     private(set) var statusAsked: [(source: String, strategy: AppleTranslationStrategy)] = []
+    var appleIntelligenceIsOn = true
+    private(set) var appleIntelligenceAsked = 0
     private var installed: Set<String> = []
     private var everything = false
     private var pending: [(id: UUID, source: String, continuation: CheckedContinuation<Void, Error>)] = []
@@ -522,6 +619,9 @@ private final class FakeMacOS {
                                      status: { source, _, strategy in
             self.statusAsked.append((source: source.minimalIdentifier, strategy: strategy))
             return self.status(of: source)
+        }, appleIntelligenceIsOn: {
+            self.appleIntelligenceAsked += 1
+            return self.appleIntelligenceIsOn
         })
     }
 

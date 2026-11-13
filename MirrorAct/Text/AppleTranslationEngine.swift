@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
+import FoundationModels
 import NaturalLanguage
 import SwiftUI
 import Translation
@@ -18,7 +19,9 @@ import Translation
 /// macOS takes when nothing is said). A screen translated live wants the fast ones, and without
 /// Apple Intelligence the others translate nothing. So the engine takes the on-device models for
 /// every pair they know, and the others only for a language only they have (Danish, or a region
-/// the user chose such as Portuguese (Portugal)).
+/// the user chose such as Portuguese (Portugal)). Without Apple Intelligence such a pair is not
+/// asked for: macOS would show its question "Apple Intelligence Required", and prepareTranslation
+/// and translations(from:) would not return before the user closes it.
 ///
 /// All mirror windows share the engine. Each turn of translating of a window talks to it
 /// through an `AppleTranslationClient` of its own, which gets the notices of its requests and
@@ -85,6 +88,8 @@ final class AppleTranslationEngine: ObservableObject {
     private var declined: Set<String> = []
     /// whether macOS can translate a pair at all
     private var pairSupport: [String: Bool] = [:]
+    /// whether Apple Intelligence is on; nil = not asked yet
+    private var appleIntelligence: Bool?
 
     /// pairs whose languages failed to load, and when they may be tried again
     private var blockedUntil: [String: TimeInterval] = [:]
@@ -122,6 +127,11 @@ final class AppleTranslationEngine: ObservableObject {
             throw TranslationFailure(message: String(localized: "Translation into \(language) isn’t available on this Mac"),
                                      isPermanent: true)
         }
+        if !languages.isOnDevice(target), !isAppleIntelligenceOn() {
+            let language = Self.fullName(of: target)
+            throw TranslationFailure(message: String(localized: "Translating into \(language) needs Apple Intelligence – turn it on in System Settings, or choose another language"),
+                                     isPermanent: true)
+        }
         // telling the languages apart takes a moment: not on the main thread
         let all = languages.all
         let tags = LanguageMatching.recognizerTags(for: all)
@@ -142,6 +152,13 @@ final class AppleTranslationEngine: ObservableObject {
             let strategy = languages.strategy(from: group.source, to: target)
             client.pairs.insert(pair)
             let groupTexts = group.indices.map { texts[$0] }
+            if strategy == .highFidelity, !isAppleIntelligenceOn() {
+                // the language of these texts only the models that need Apple Intelligence know:
+                // they stay as they are
+                group.place(groupTexts.map { Optional($0) }, in: &results)
+                noteNeedsAppleIntelligence(group.source, target, to: [client])
+                continue
+            }
             guard let translatable = await isSupported(pair, from: group.source, to: target, with: strategy) else {
                 noteNoAnswer(to: client)
                 continue
@@ -191,6 +208,7 @@ final class AppleTranslationEngine: ObservableObject {
             // translating was turned on again: ask macOS again what was declined or unknown
             declined.removeAll()
             pairSupport.removeAll()
+            appleIntelligence = nil
             clients[key] = AppleTranslationClient.Reference(client: client)
         }
         return true
@@ -214,6 +232,7 @@ final class AppleTranslationEngine: ObservableObject {
         guard clients.isEmpty else { return }
         declined.removeAll()
         pairSupport.removeAll()
+        appleIntelligence = nil
         for host in hosts {
             if serving.contains(host.id) {
                 // it may be in the middle of a call on its session: it ends by itself after that
@@ -253,6 +272,15 @@ final class AppleTranslationEngine: ObservableObject {
         }
         pairSupport[pair] = status != .unsupported
         return status != .unsupported
+    }
+
+    /// Asked once per turn of translating: the user may turn Apple Intelligence on meanwhile
+    private func isAppleIntelligenceOn() -> Bool {
+        if let known = appleIntelligence { return known }
+        let isOn = availability.appleIntelligenceIsOn()
+        appleIntelligence = isOn
+        if !isOn { Log.info("Translation: Apple Intelligence is off; languages only its models know are left alone") }
+        return isOn
     }
 
     /// The answer to a question to macOS, or nil when it takes longer than `questionLimit`: a
@@ -660,6 +688,23 @@ final class AppleTranslationEngine: ObservableObject {
         note("loading " + pair, String(localized: "Loading \(language) for translating …"), to: receivers)
     }
 
+    private func noteNeedsAppleIntelligence(_ source: Locale.Language, _ target: Locale.Language,
+                                            to receivers: [AppleTranslationClient]) {
+        let sourceName = Self.fullName(of: source), targetName = Self.fullName(of: target)
+        note("needs Apple Intelligence " + Self.pair(source, target),
+             String(localized: "Translating from \(sourceName) into \(targetName) needs Apple Intelligence – turn it on in System Settings"),
+             to: receivers)
+    }
+
+    /// "Danish", "English (India)": the region where the identifier names one, as macOS does in
+    /// its question about Apple Intelligence
+    private static func fullName(of language: Locale.Language) -> String {
+        let name = LanguageMatching.name(of: language, in: noticeLocale)
+        guard language.minimalIdentifier.contains("-"), let region = language.region?.identifier,
+              let place = noticeLocale.localizedString(forRegionCode: region) else { return name }
+        return "\(name) (\(place))"
+    }
+
     private func noteUntranslatable(_ language: Locale.Language, to receivers: [AppleTranslationClient]) {
         let languageName = LanguageMatching.name(of: language, in: Self.noticeLocale)
         note("untranslatable " + LanguageMatching.key(language),
@@ -850,6 +895,8 @@ struct AppleTranslationAvailability {
     var languages: () async -> AppleTranslationLanguages
     var status: (_ source: Locale.Language, _ target: Locale.Language,
                  _ strategy: AppleTranslationStrategy) async -> LanguageAvailability.Status
+    /// whether Apple Intelligence is on, which the models of `.highFidelity` need for many languages
+    var appleIntelligenceIsOn: () -> Bool
 
     /// the answers of macOS
     static var system: AppleTranslationAvailability {
@@ -859,7 +906,19 @@ struct AppleTranslationAvailability {
                 return await LanguageAvailability(preferredStrategy: strategy.framework).status(from: source, to: target)
             }
             return await LanguageAvailability().status(from: source, to: target)
-        })
+        }, appleIntelligenceIsOn: { systemAppleIntelligenceIsOn() })
+    }
+
+    /// Translation says nothing about it: what Foundation Models says about the language model
+    /// of Apple Intelligence stands in. Its models still on their way count as on, macOS says
+    /// then what is missing.
+    static func systemAppleIntelligenceIsOn() -> Bool {
+        guard #available(macOS 26.4, *) else { return false }
+        if case .unavailable(let reason) = SystemLanguageModel.default.availability,
+           reason == .appleIntelligenceNotEnabled || reason == .deviceNotEligible {
+            return false
+        }
+        return true
     }
 
     /// From macOS 26.4 on, a LanguageAvailability without a strategy answers for `.highFidelity`:
