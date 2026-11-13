@@ -1227,15 +1227,19 @@ final class OverlayTracker {
             guard let shift = pass.probes.displacement(atX: rect.midX, y: rect.midY) else { continue }
             // (a line of it read only in part: something hides it there that is not known as an
             // edge, such as a bar the content shows through)
-            let cut = cutEdges(of: rect, in: pass.region) | found.cutOffEdges
-            if cut != 0 {
+            let edges = cutEdges(of: rect, in: pass.region)
+            let cut = edges | found.cutOffEdges
+            // (but a bar may stay: read again at rest, a paragraph is taken as far as it shows,
+            // and so is a line that may be cut off – not one that is garbage beyond doubt)
+            let settles = edges == 0 && !found.isGarbled
+            if cut != 0, !(settles && atRest && pass.rereadAttempts != nil) {
                 // (the blocks it lies over stay until their place is read completely)
                 let now = rect.offsetBy(dx: shift.dx, dy: shift.dy)
                 for block in tracked where block.seen != nil && thumbnailRect(of: block).intersects(now) {
                     taken.insert(block.id)
                 }
                 askToReread(found.text, rect, cut: cut, lineCount: found.lineCount, shift: (shift.dx, shift.dy), pass: pass,
-                            time: time)
+                            settles: settles, isGarbled: found.isGarbled, time: time)
                 continue
             }
             var made = makeBlock(found, rect: rect, picture: pass.picture, shift: (shift.dx, shift.dy), in: current,
@@ -1435,12 +1439,31 @@ final class OverlayTracker {
 
     /// A block that may be cut off is read again once all of it can be seen, or once the picture
     /// rests – unless it is a part of a paragraph that is known, or that paragraph once more (it
-    /// was complete when it was taken), or the place was read often enough
+    /// was complete when it was taken), or the place was read often enough. A bar that stays never
+    /// lets all of it be seen: a block that `settles` (held back only for what `TextLayout` saw,
+    /// not garbage beyond doubt) is taken as it shows when it is read again at rest
+    /// (`finishRecognition`). So such a place read at rest is read again at once, as far as it can
+    /// be seen, and one read often enough while the picture moved is read again once it rests.
+    /// Garbage beyond doubt (`RecognizedBlock.isGarbled`) read at rest is not read again: it
+    /// stays what it is.
     private func askToReread(_ text: String, _ rect: CGRect, cut: Int, lineCount: Int,
-                             shift: (dx: Double, dy: Double), pass: Pass, time: TimeInterval) {
+                             shift: (dx: Double, dy: Double), pass: Pass, settles: Bool, isGarbled: Bool,
+                             time: TimeInterval) {
+        guard let previous else { return }
+        let atRest = pass.startedAtRest && lastMotion < pass.startTime
+        if isGarbled, atRest { return }
         let attempts = (pass.rereadAttempts ?? -1) + 1
-        guard attempts < configuration.maxRereads else { return }
         let now = rect.offsetBy(dx: shift.dx, dy: shift.dy)
+        guard attempts < configuration.maxRereads else {
+            if settles, !atRest {
+                let place = now.insetBy(dx: -configuration.rereadAir, dy: -configuration.rereadAir)
+                    .intersection(CGRect(x: 0, y: 0, width: previous.width, height: previous.height))
+                if !place.isNull, place.width >= 1, place.height >= 1 {
+                    plan.add(UnreadArea(rect: place, kind: .rest, since: time))
+                }
+            }
+            return
+        }
         if knownBlock(at: now, text: text) != nil { return }
         let lineHeight = rect.height / Double(max(1, lineCount))
         let air = configuration.rereadAir, reach = lineHeight * configuration.rereadReach + air
@@ -1455,6 +1478,18 @@ final class OverlayTracker {
                                           / Double(max(1, block.lineCount))) {
                 place = place.union(other.insetBy(dx: -air, dy: -air))
             }
+        }
+        if settles, atRest {
+            // (what can be seen of it: a reread that cannot be seen completely waits for the next
+            // movement)
+            let edge = configuration.cutEdge
+            var view = CGRect(x: 0, y: 0, width: previous.width, height: previous.height).insetBy(dx: edge, dy: edge)
+            for area in areas where area.rect.contains(x: now.midX, y: now.midY) {
+                view = view.intersection(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
+                                                height: area.rect.height).insetBy(dx: edge, dy: edge))
+            }
+            place = place.intersection(view)
+            guard !place.isNull, place.width >= 1, place.height >= 1 else { return }
         }
         plan.add(UnreadArea(rect: place, kind: .reread, since: time, attempts: attempts))
     }

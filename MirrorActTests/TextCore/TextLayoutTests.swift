@@ -164,8 +164,9 @@ final class TextLayoutTests: XCTestCase {
     }
 
     /// The tracker is given what `blocks` makes of these lines: it asks to translate the heading,
-    /// but neither the garbage nor the paragraph that goes on below the navigation bar (both are
-    /// read again once all of them can be seen)
+    /// but neither the garbage nor the paragraph that goes on below the navigation bar yet (the
+    /// paragraph is taken once the picture rests and its place was read again, see
+    /// `OverlayTrackerCutOffTests`)
     func testNeitherACutOffLineNorItsParagraphIsTranslatedYet() throws {
         let lines = [
             line("Une recette simple", 52, 2138, 512, 63),
@@ -198,7 +199,8 @@ final class TextLayoutTests: XCTestCase {
 
     /// Scrolled to the end of the page: the navigation bar hides the lower part of the last line.
     /// Vision read the rest of it, nearly right, in a box two thirds as high as the line above.
-    /// The paragraph ends above it; the part is no line of it, and it is not pasted.
+    /// The paragraph ends above it; the part is no line of it and may be cut off (held back until
+    /// the picture rests). From its box alone it cannot be told that it is garbage: it is pasted.
     func testAPartOfALineIsNoLineOfTheParagraph() {
         let lines = [
             line("Zum Schluss noch ein langer Absatz, damit", 49, 2037, 909, 53),
@@ -213,8 +215,9 @@ final class TextLayoutTests: XCTestCase {
                 + "die Übersetzungen auf ihrem Text bleiben und nicht zittern, springen oder",
             "an ainer alten Stalle ctahen hlaihen menn der",
         ])
-        XCTAssertEqual(blocks.map(\.cutOffEdges), [0, 0])
-        XCTAssertEqual(TextLayout.plainText(lines, imageSize: phone), blocks[0].text)
+        XCTAssertEqual(blocks.map(\.cutOffEdges), [0, FrameMotion.top | FrameMotion.bottom])
+        XCTAssertEqual(blocks.map(\.isGarbled), [false, false])
+        XCTAssertEqual(TextLayout.plainText(lines, imageSize: phone), blocks.map(\.text).joined(separator: "\n"))
     }
 
     /// Pasted text: one paragraph per line, without the status bar and without a line cut off at

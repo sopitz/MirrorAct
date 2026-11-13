@@ -14,14 +14,22 @@ final class ScreenTranslatorCutOffTests: XCTestCase {
                        confidence: confidence)
     }
 
-    /// The status bar (the clock, icons read as letters) is left out, as it is of what Text copies
-    func testTheStatusBarIsLeftOut() throws {
+    /// The status bar (the clock, icons read as letters) is left out, as it is of what Text
+    /// copies; a line cut off by the navigation bar is passed on as garbage, the paragraph above
+    /// it as possibly going on below
+    func testTheStatusBarIsLeftOutAndGarbageIsMarked() throws {
         let lines = [
             line("7:22 kg", 40, 16, 150, 34, confidence: 0.5),
             line("VAD", 894, 16, 114, 34, confidence: 0.3),
             line("< Testlabor", 41, 103, 377, 66, confidence: 1),
+            line("Faites fondre le beurre dans une poêle, ajoutez", 52, 2250, 975, 52, confidence: 1),
+            line("lan dianana aalinán an finan lamallan at", 45, 2316, 829, 28, confidence: 1),
         ]
         let frame = try TestFrames.blank(width: 1080, height: 2400, format: kCVPixelFormatType_32BGRA)
-        XCTAssertEqual(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: []).map(\.text), ["< Testlabor"])
+        let blocks = ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: [])
+        XCTAssertEqual(blocks.map(\.text), ["< Testlabor", "Faites fondre le beurre dans une poêle, ajoutez",
+                                            "lan dianana aalinán an finan lamallan at"])
+        XCTAssertEqual(blocks.map(\.isGarbled), [false, false, true])
+        XCTAssertEqual(blocks.map(\.cutOffEdges), [0, FrameMotion.bottom, FrameMotion.top | FrameMotion.bottom])
     }
 }

@@ -276,7 +276,8 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             // the frame's own colors, so that a box matches its surroundings exactly
             let colors = FramePixels.blockColors(in: rect, of: frame)
             return RecognizedBlock(text: paragraph.text, rect: rect, lineCount: paragraph.lineCount, colors: colors,
-                                   confidence: paragraph.confidence, cutOffEdges: paragraph.cutOffEdges)
+                                   confidence: paragraph.confidence, cutOffEdges: paragraph.cutOffEdges,
+                                   isGarbled: paragraph.isGarbled)
         }
     }
 

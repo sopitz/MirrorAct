@@ -26,17 +26,22 @@ struct TextBlock: Equatable {
     var lineCount: Int
     /// that of the least certain line, nil when the recognizer reports none
     var confidence: Double?
-    /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph goes on, hidden: it is
-    /// a line of which only a part shows and that was read as garbage (then both), or such a line
-    /// lies right above or below it (see `TextLayout.blocks`). Such a paragraph is not complete.
+    /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph may go on, hidden: it
+    /// is a line of which perhaps only a part shows (then both), or a line that looks cut off lies
+    /// right above or below it (see `TextLayout.blocks`). It may not be complete.
     var cutOffEdges: Int
+    /// It is a line of which only a part shows, read as garbage, beyond doubt: it is never
+    /// complete, and never worth translating (`cutOffEdges` holds both edges)
+    var isGarbled: Bool
 
-    init(text: String, rect: CGRect, lineCount: Int, confidence: Double? = nil, cutOffEdges: Int = 0) {
+    init(text: String, rect: CGRect, lineCount: Int, confidence: Double? = nil, cutOffEdges: Int = 0,
+         isGarbled: Bool = false) {
         self.text = text
         self.rect = rect
         self.lineCount = lineCount
         self.confidence = confidence
         self.cutOffEdges = cutOffEdges
+        self.isGarbled = isGarbled
     }
 }
 
@@ -63,16 +68,16 @@ enum TextLayout {
     }
 
     /// All text the way it reads when pasted somewhere: one paragraph per line (its lines on the
-    /// screen joined), in reading order. Left out: the status bar (`content`), and lines cut off at
-    /// the top or bottom edge of the picture or by something in front of them (of which only part
-    /// shows, see `blocks`).
+    /// screen joined), in reading order. Left out: the status bar (`content`), lines cut off at
+    /// the top or bottom edge of the picture (within `screenEdgeShare` of it), and lines read as
+    /// garbage because only a part of them shows (`TextBlock.isGarbled`).
     static func plainText(_ lines: [RecognizedLine], imageSize: CGSize) -> String {
         let edge = Double(imageSize.height) * screenEdgeShare
         let kept = content(lines, imageSize: imageSize).filter { line in
             let top = Double(line.rect.minY * imageSize.height), bottom = Double(line.rect.maxY * imageSize.height)
             return top > edge && bottom < Double(imageSize.height) - edge
         }
-        let whole = measure(kept, imageSize: imageSize).filter { !$0.1.isPart }.map(\.0)
+        let whole = measure(kept, imageSize: imageSize).filter { !$0.1.isGarbled }.map(\.0)
         return blocks(whole, imageSize: imageSize).map(\.text).joined(separator: "\n")
     }
 
@@ -102,16 +107,20 @@ enum TextLayout {
     ///   the text of the item begins, behind the marker.
     /// Of several paragraphs it could continue, it continues the last one begun.
     ///
-    /// Part of a line shows (something hides the rest: a bar, the edge of the screen or of the
-    /// part that was read) when its box is lower than `partHeight` of its text size and at most
-    /// `partOfNeighbour` of the box of a line right above or below it that could be the next
-    /// line of its paragraph. (The low box alone does not tell: with letters of unusual widths the
-    /// text size comes out too large.) A line whose box is even lower than `cutOffHeight` of its
-    /// text size (`looksCutOff`) was read mostly as garbage; near the top or bottom edge of the
-    /// picture (within `edgeReach` times its text size), where bars lie, it needs no line next to
-    /// it to tell. A part of a line is a block of its own; one read as garbage and the paragraph
-    /// it would continue or that would continue it are marked as going on beyond it
-    /// (`TextBlock.cutOffEdges`).
+    /// Part of a line may show (something hides the rest: a bar, the edge of the screen or of the
+    /// part that was read) when its box is low for its text size (`isLow`, see `measure`). The low
+    /// box alone does not tell: with letters of unusual widths (a monospaced or letter-spaced
+    /// typeface) the size comes out too large. So a line counts as a part when its box is lower
+    /// than `partHeight` of its size and at most `partOfNeighbour` of the box of a line right
+    /// above or below it that could be the next line of its paragraph, or lower than
+    /// `cutOffHeight` of its size (`looksCutOff`) where bars lie: within `barReach` of the longer
+    /// side of the picture from its top or bottom edge. A part is a block of its own, marked as
+    /// going on beyond both edges (`TextBlock.cutOffEdges`); so is the paragraph it would continue
+    /// or that would continue it, on that side, when the part looks cut off. A part is garbage
+    /// beyond doubt (`TextBlock.isGarbled`) only where bars lie, and only when its box is lower
+    /// than `garbledHeight` of its size; or lower than `cutOffHeight` and the recognizer is not
+    /// sure of it (a confidence below `sureConfidence`) or a line next to it is clearly higher;
+    /// or lower than `unsurePartHeight`, not sure, and a line next to it is clearly higher.
     static func blocks(_ lines: [RecognizedLine], imageSize: CGSize) -> [TextBlock] {
         struct Open {
             var block: TextBlock
@@ -132,13 +141,14 @@ enum TextLayout {
                 }
                 open[match].last = measured
             } else {
-                let cutOff = measured.isPart && measured.isCutOff ? FrameMotion.top | FrameMotion.bottom : 0
+                let cutOff = measured.isPart ? FrameMotion.top | FrameMotion.bottom : 0
                 open.append(Open(block: TextBlock(text: line.text, rect: line.rect, lineCount: 1,
-                                                  confidence: line.confidence, cutOffEdges: cutOff),
+                                                  confidence: line.confidence, cutOffEdges: cutOff,
+                                                  isGarbled: measured.isGarbled),
                                  first: measured, last: measured))
             }
         }
-        let cutOff = open.map(\.last).filter { $0.isPart && $0.isCutOff }
+        let cutOff = open.map(\.last).filter { $0.isPart && ($0.isCutOff || $0.isGarbled) }
         for index in open.indices where !open[index].last.isPart {
             for line in cutOff {
                 if adjoins(open[index].last, below: line, size: open[index].last.size) {
@@ -152,33 +162,45 @@ enum TextLayout {
         return open.map(\.block)
     }
 
-    /// The lines in reading order, measured (pixels, text size, whether only part shows)
+    /// The lines in reading order, measured (pixels, text size, whether only part shows). For a
+    /// line whose box is lower than `partHeight` of its size, in this order: whether it lies where
+    /// bars lie, whether a line right above or below it is clearly higher, whether it is a part,
+    /// and whether it is garbage beyond doubt (see `blocks`; a line of fewer than `shortUnits`
+    /// that is not mostly full-width characters only by its box, lower than `shortGarbledHeight`).
     private static func measure(_ lines: [RecognizedLine], imageSize: CGSize) -> [(RecognizedLine, Measured)] {
         var all = readingOrder(lines).flatMap { $0 }.map { line in
             let rect = CGRect(x: line.rect.minX * imageSize.width, y: line.rect.minY * imageSize.height,
                               width: line.rect.width * imageSize.width, height: line.rect.height * imageSize.height)
             let units = widthUnits(of: line.text)
-            let size = units >= minUnits ? Double(rect.width) / units : nil
+            let width = Double(rect.width), height = Double(rect.height)
+            let size = units >= minUnits ? width / units : nil
             return (line, Measured(rect: rect, units: units, size: size,
-                                   isLow: isLow(line.text, width: Double(rect.width), height: Double(rect.height),
-                                                share: partHeight),
-                                   isCutOff: looksCutOff(line.text, width: Double(rect.width), height: Double(rect.height)),
-                                   isPart: false,
-                                   marker: listMarkerUnits(line.text).map { $0 * (size ?? Double(rect.height)) },
+                                   isLow: isLow(line.text, width: width, height: height, share: partHeight),
+                                   isCutOff: looksCutOff(line.text, width: width, height: height),
+                                   isGarbled: false, isPart: false,
+                                   marker: listMarkerUnits(line.text).map { $0 * (size ?? height) },
                                    isRightToLeft: isRightToLeft(line.text)))
         }
+        let reach = barReach * Double(max(imageSize.width, imageSize.height))
         for index in all.indices where all[index].1.isLow {
-            let line = all[index].1
-            // (near the top or bottom of the picture, where bars lie, a box low enough for garbage
-            // is cut off without a line next to it to compare)
-            let nearEdge = line.size.map { size in
-                Double(line.rect.minY) < edgeReach * size || Double(imageSize.height - line.rect.maxY) < edgeReach * size
-            } ?? false
-            all[index].1.isPart = (line.isCutOff && nearEdge) || all.contains { _, neighbour in
+            let (recognized, line) = all[index]
+            let nearBar = Double(line.rect.minY) < reach || Double(imageSize.height - line.rect.maxY) < reach
+            let belowNeighbour = all.contains { _, neighbour in
                 Double(line.rect.height) <= partOfNeighbour * Double(neighbour.rect.height)
                     && (adjoins(neighbour, below: line, size: neighbour.size)
                         || adjoins(line, below: neighbour, size: neighbour.size))
             }
+            let unsure = recognized.confidence.map { $0 < sureConfidence } ?? false
+            // (the size of a few letters of a script set in varying widths is not trusted much)
+            let trusted = line.units >= shortUnits || isFullWidth(recognized.text)
+            all[index].1.isPart = belowNeighbour || (line.isCutOff && nearBar)
+            let width = Double(line.rect.width), height = Double(line.rect.height)
+            all[index].1.isGarbled = nearBar
+                && (isLow(recognized.text, width: width, height: height,
+                          share: trusted ? garbledHeight : shortGarbledHeight)
+                    || (trusted && line.isCutOff && (unsure || belowNeighbour))
+                    || (trusted && unsure && belowNeighbour
+                        && isLow(recognized.text, width: width, height: height, share: unsurePartHeight)))
         }
         return all
     }
@@ -194,7 +216,9 @@ enum TextLayout {
         var isLow: Bool
         /// … or even lower than `cutOffHeight`
         var isCutOff: Bool
-        /// only part of its letters show (see `blocks`)
+        /// only part of its letters show, read as garbage, beyond doubt (`TextBlock.isGarbled`)
+        var isGarbled: Bool
+        /// only part of its letters may show (see `blocks`); always when `isGarbled`
         var isPart: Bool
         /// the width of the marker in front of the text when the line starts an item of a list
         /// (`listMarkerUnits`)
@@ -280,7 +304,17 @@ enum TextLayout {
     static let partHeight = 0.78
     static let partOfNeighbour = 0.75
     static let cutOffHeight = 0.62
-    static let edgeReach = 2.0
+    /// bars lie within this share of the longer side of the picture from its top or bottom edge
+    /// (the bars of iOS reach 249 to 294 pixels into a picture of 2532 to 2796)
+    static let barReach = 0.12
+    /// where bars lie, a box lower than this share of its text size is garbage beyond doubt; one
+    /// lower than `cutOffHeight` is when the recognizer's confidence is below `sureConfidence`
+    /// (Vision reports 1, 0.5 or 0.3) or a line next to it is clearly higher
+    static let garbledHeight = 0.58
+    static let sureConfidence = 0.75
+    static let unsurePartHeight = 0.7
+    /// … and a line of fewer than `shortUnits` (not mostly full-width) only by a box lower than this
+    static let shortGarbledHeight = 0.5
     /// `plainText`: the status bar lies in this top share of the picture; a line within this share
     /// of the top or bottom edge is cut off there
     static let statusBarShare = 0.04
@@ -325,7 +359,8 @@ enum TextLayout {
 
     /// Whether a line's box (`width` and `height` in pixels) is too low for its text, as when
     /// something hides part of the line. Only said of text with tall letters (capitals, digits,
-    /// ascenders, Chinese, Japanese or Korean): a line of x-height letters alone is low anyway.
+    /// ascenders, Chinese, Japanese, Korean, Arabic or Thai): a line of x-height letters alone is
+    /// low anyway.
     static func looksCutOff(_ text: String, width: Double, height: Double) -> Bool {
         isLow(text, width: width, height: height, share: cutOffHeight)
     }
@@ -335,8 +370,28 @@ enum TextLayout {
         guard let size = textSize(of: text, width: width), height < share * size else { return false }
         return text.unicodeScalars.contains { scalar in
             scalar.properties.isUppercase || (0x30...0x39).contains(scalar.value) || "bdfhklt".unicodeScalars.contains(scalar)
-                || (0x2E80...0xD7AF).contains(scalar.value)
+                || (0x2E80...0xD7AF).contains(scalar.value) || hasTallForms(scalar)
         }
+    }
+
+    /// Arabic (letters with tall strokes and dots above and below the line) and Thai (vowel and
+    /// tone marks above and below)
+    private static func hasTallForms(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0600...0x06FF, 0x0750...0x077F, 0xFB50...0xFDFF, 0xFE70...0xFEFF, 0x0E00...0x0E7F: return true
+        default: return false
+        }
+    }
+
+    /// At least half of the characters besides spaces are full-width (Chinese, Japanese, Korean):
+    /// the width of a few of them tells their size well
+    private static func isFullWidth(_ text: String) -> Bool {
+        var count = 0, wide = 0
+        for scalar in text.unicodeScalars where scalar != " " {
+            count += 1
+            if widthUnits(of: scalar) == 1 { wide += 1 }
+        }
+        return count > 0 && 2 * wide >= count
     }
 
     /// How wide the marker is that starts `text` as an item of a list (not the next line of a

@@ -140,18 +140,23 @@ struct RecognizedBlock: Equatable {
     var colors: BlockColors
     /// 0…1 where the recognizer says how sure it is, nil otherwise
     var confidence: Double?
-    /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph goes on, hidden: a
-    /// line there was read only in part (`TextBlock.cutOffEdges`)
+    /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph may go on, hidden: a
+    /// line there may have been read only in part (`TextBlock.cutOffEdges`). It is taken once the
+    /// picture rests and the place was read again.
     var cutOffEdges: Int
+    /// A line of which only a part shows, read as garbage beyond doubt (`TextBlock.isGarbled`):
+    /// it is never taken
+    var isGarbled: Bool
 
     init(text: String, rect: CGRect, lineCount: Int = 1, colors: BlockColors = .blackOnWhite, confidence: Double? = nil,
-         cutOffEdges: Int = 0) {
+         cutOffEdges: Int = 0, isGarbled: Bool = false) {
         self.text = text
         self.rect = rect
         self.lineCount = lineCount
         self.colors = colors
         self.confidence = confidence
         self.cutOffEdges = cutOffEdges
+        self.isGarbled = isGarbled
     }
 }
 
