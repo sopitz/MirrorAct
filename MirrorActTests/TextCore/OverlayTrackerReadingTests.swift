@@ -88,4 +88,114 @@ final class OverlayTrackerReadingTests: XCTestCase {
         let placed = tracker.advance(screen.thumbnail(offset: 0, noiseSeed: 7), scale: scale, time: 4).placed
         XCTAssertEqual(placed.map(\.text), ["T Something new"])
     }
+
+    /// A paragraph of which only its first line was taken (the rest was not in view then) is
+    /// read whole once a reading finds more of it, also when that reading is cut off itself:
+    /// the line alone must not keep the paragraph from being read
+    func testAParagraphKnownOnlyInPartIsReadWhole() throws {
+        let screen = SyntheticScreen(seed: 23)
+        let tracker = OverlayTracker()
+        try readAtRest(tracker, screen, offset: 0, blocks: [SyntheticScreen.block(4, offset: 0, text: "alpha beta")],
+                       time: 0)
+        _ = tracker.advance(changed(screen, offset: 0, below: 5, mark: 1), scale: scale, time: 3)
+        let first = try XCTUnwrap(tracker.beginRecognition(time: 3.5))
+        // more lines of it, the last of them read only in part (something hides it)
+        var more = Self.paragraph(4, 5, offset: 0, text: "alpha beta gamma delta")
+        more.cutOffEdges = FrameMotion.bottom
+        tracker.finishRecognition(first, blocks: [more], time: 3.6)
+
+        let again = try XCTUnwrap(tracker.beginRecognition(time: 3.7), "the paragraph is read again")
+        let whole = Self.paragraph(4, 6, offset: 0, text: "alpha beta gamma delta epsilon zeta")
+        tracker.finishRecognition(again, blocks: [whole], time: 3.8)
+        XCTAssertEqual(tracker.blocks.map(\.text), [whole.text])
+        XCTAssertEqual(tracker.textsAwaitingTranslation(limit: 10, time: 3.8), [whole.text])
+    }
+
+    /// Runs the passes that are due at `time`, each with those of `lines` that lie in the region
+    /// it reads and above `bottom` (frame pixels), as a recognizer would find them
+    private func readDue(_ tracker: OverlayTracker, at time: TimeInterval, lines: [RecognizedBlock],
+                         bottom: Double) {
+        for _ in 0..<8 {
+            guard let due = tracker.recognitionDue, due <= time + 1e-9,
+                  let request = tracker.beginRecognition(time: time) else { return }
+            let found = lines.filter { request.region.contains($0.rect) && $0.rect.maxY <= bottom }
+            tracker.finishRecognition(request, blocks: found, time: time)
+        }
+    }
+
+    /// While the page moves, a paragraph that ends right at the edge of the view may go on
+    /// beyond it: it is not sent then. Once the band below it has come into view without a
+    /// line that continues it, it is; and so it is once the page rests.
+    func testAParagraphAtTheEdgeOfTheViewIsSentOnceItCannotGoOn() throws {
+        let screen = SyntheticScreen(seed: 24)
+        let bar = Double(SyntheticScreen.bottomBar)
+        // line 11 ends 10 px above the bottom bar at this offset
+        let line = 11
+        let start = SyntheticScreen.firstLine + SyntheticScreen.linePitch * line + SyntheticScreen.lineHeight + 10
+            - SyntheticScreen.bottomBar
+        func frame(_ offset: Int) -> LumaImage { screen.thumbnail(offset: offset, noiseSeed: 7) }
+        func lines(_ offset: Int) -> [RecognizedBlock] {
+            [SyntheticScreen.block(line, offset: offset, text: "Eleven"),
+             SyntheticScreen.block(line + 1, offset: offset, text: "Twelve")]
+        }
+        func run(restAfterwards: Bool) throws {
+            let tracker = OverlayTracker()
+            var offset = start - 60, time = 0.0
+            _ = tracker.advance(frame(offset), scale: scale, time: time)
+            readDue(tracker, at: 1, lines: lines(offset), bottom: bar)
+            // the page moves up, 4 px a frame, until the line ends right above the bar
+            time = 2
+            while offset < start {
+                offset += 4
+                time += 1.0 / 60
+                _ = tracker.advance(frame(offset), scale: scale, time: time)
+                readDue(tracker, at: time, lines: lines(offset), bottom: bar)
+            }
+            // what came in last is read, while the page has only just stopped
+            time += 0.05
+            readDue(tracker, at: time, lines: lines(offset), bottom: bar)
+            XCTAssertEqual(tracker.blocks.map(\.text).filter { $0 == "Eleven" }, ["Eleven"])
+            XCTAssertFalse(tracker.textsAwaitingTranslation(limit: 10, time: time).contains("Eleven"),
+                           "its next line may be about to come in")
+            if restAfterwards {
+                // a moment later the page rests: a pass is due, and the translator is asked after it
+                let rest = time + tracker.configuration.restDelay
+                let due = try XCTUnwrap(tracker.recognitionDue, "a pass is due once it rests")
+                XCTAssertLessThanOrEqual(due, rest)
+                readDue(tracker, at: rest, lines: lines(offset), bottom: bar)
+                XCTAssertTrue(tracker.textsAwaitingTranslation(limit: 10, time: rest).contains("Eleven"))
+                return
+            }
+            // on: the band below it comes into view (nothing in it continues the line)
+            var sent: [String] = []
+            for _ in 0..<20 where !sent.contains("Eleven") {
+                offset += 4
+                time += 1.0 / 60
+                _ = tracker.advance(frame(offset), scale: scale, time: time)
+                readDue(tracker, at: time, lines: lines(offset), bottom: bar)
+                sent += tracker.textsAwaitingTranslation(limit: 10, time: time)
+            }
+            XCTAssertTrue(sent.contains("Eleven"), "the band below it came into view while the page moved")
+        }
+        try run(restAfterwards: true)
+        try run(restAfterwards: false)
+    }
+}
+
+extension ReadingPlanTests {
+    /// A place that cannot be seen completely while the picture moves (it lies at a bar) is read
+    /// once the picture rests, once for each time it comes to rest
+    func testAPlaceThatCannotBeSeenIsReadOnceThePictureRests() {
+        let configuration = OverlayTracker.Configuration()
+        let plan = ReadingPlan(configuration: configuration)
+        plan.add(UnreadArea(rect: CGRect(x: 0, y: 360, width: 200, height: 30), kind: .reread, since: 5))
+        let due = plan.due(lastMotion: 5.2, isFullyVisible: { _ in false })
+        XCTAssertEqual(due ?? 0, 5.2 + configuration.restDelay, accuracy: 1e-9)
+        // asked for while it rests: it waits for the next movement
+        let later = ReadingPlan(configuration: configuration)
+        later.add(UnreadArea(rect: CGRect(x: 0, y: 360, width: 200, height: 30), kind: .reread, since: 9))
+        XCTAssertNil(later.due(lastMotion: 5.2, isFullyVisible: { _ in false }))
+        XCTAssertEqual(later.due(lastMotion: 9.5, isFullyVisible: { _ in false }) ?? 0, 9.5 + configuration.restDelay,
+                       accuracy: 1e-9)
+    }
 }

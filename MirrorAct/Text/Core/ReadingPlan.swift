@@ -14,10 +14,12 @@ struct UnreadArea: Equatable {
         /// came into view while content scrolled: read at once when it can hold a line
         case strip
         /// a block was cut off at an edge, or two blocks may be one paragraph: read once all of
-        /// it can be seen
+        /// it can be seen, or once the picture rests
         case reread
         /// was read while it moved fast (the link loses detail then): read again once it rests
         case confirm
+        /// where a paragraph may go on: read once the picture rests, if nothing read it before
+        case rest
     }
 
     var rect: CGRect
@@ -87,8 +89,10 @@ final class ReadingPlan {
     private static func merging(_ first: UnreadArea, _ second: UnreadArea) -> UnreadArea {
         var result = first
         result.rect = first.rect.union(second.rect)
-        // a change counts from its last step; a strip from when it came in
-        result.since = first.kind == .strip ? min(first.since, second.since) : max(first.since, second.since)
+        // a change counts from its last step; a strip from when it came in, a place to read
+        // again from when it was first asked for (it may be due once the picture rests)
+        result.since = first.kind == .strip || first.kind == .reread || first.kind == .rest
+            ? min(first.since, second.since) : max(first.since, second.since)
         result.attempts = max(first.attempts, second.attempts)
         return result
     }
@@ -214,10 +218,21 @@ final class ReadingPlan {
             return thickness >= configuration.minStripThickness ? area.since
                 : max(area.since, lastMotion + configuration.thinStripDelay)
         case .reread:
-            return isFullyVisible(area.rect) ? area.since : nil
+            if isFullyVisible(area.rect) { return area.since }
+            // what cannot be seen completely (it lies at a bar) is read once the picture rests
+            return dueAtRest(area, lastMotion: lastMotion)
         case .confirm:
             return max(area.since, lastMotion + configuration.confirmDelay)
+        case .rest:
+            return dueAtRest(area, lastMotion: lastMotion)
         }
+    }
+
+    /// Once the picture has rested for `restDelay`; once for each time it comes to rest: an area
+    /// that was asked for while it rested waits for the next movement
+    private func dueAtRest(_ area: UnreadArea, lastMotion: TimeInterval) -> TimeInterval? {
+        let rest = lastMotion + configuration.restDelay
+        return area.since <= rest ? max(area.since, rest) : nil
     }
 
     /// The earliest time something is due
@@ -301,13 +316,13 @@ final class ReadingPlan {
         }
     }
 
-    /// The areas in flight were all rereads: the highest number of attempts among them, else nil
+    /// The areas in flight were all rereads (besides places read at rest): the highest number of
+    /// attempts among them, else nil
     var rereadAttemptsInFlight: Int? {
-        guard !inFlight.isEmpty else { return nil }
-        var most = 0
-        for area in inFlight {
+        var most: Int?
+        for area in inFlight where area.kind != .rest {
             guard area.kind == .reread else { return nil }
-            most = max(most, area.attempts)
+            most = max(most ?? 0, area.attempts)
         }
         return most
     }

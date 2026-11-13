@@ -220,6 +220,10 @@ final class OverlayTracker {
         var thinStripDelay: TimeInterval = 0.04
         /// what was read while moving fast is read again this long after it stopped
         var confirmDelay: TimeInterval = 0.25
+        /// the picture rests this long after it last moved: what is read then stays as it is.
+        /// Places that could not be seen completely while it moved are read once it rests, and
+        /// text at an edge of the view is taken as far as it shows.
+        var restDelay: TimeInterval = 0.3
         /// moving fast: more than this share of the scrolling area per frame (the link starts
         /// losing detail then)
         var fastMotionShare = 0.005
@@ -237,6 +241,15 @@ final class OverlayTracker {
         var cutEdge = 2.0
         /// a place is read again at most this many times for being cut off
         var maxRereads = 2
+        /// A paragraph read while the picture moves may go on beyond the edge of the view (the
+        /// frame, its scrolling area) when that edge lies above or below it within this many of
+        /// its lines (the gap before a line and most of that line, enough to read it): its next
+        /// line may be about to come in. Its text is translated once that band has come into view
+        /// without a line that continues it, …
+        var continuationReach = 1.3
+        /// … or the frame shows nothing in the rows from a quarter of a line to this many lines
+        /// beyond it, where such a line would show its letters, or once the picture rests
+        var inkReach = 1.0
         /// points that carry a pass over to the current frame lie this far apart
         var probeSpacing = 16
         /// a pass started within this many seconds after a fast movement may lack lines
@@ -328,6 +341,9 @@ final class OverlayTracker {
         var earlier: String?
         /// when its text was read (last confirmed by a reading of its place)
         var readAt: TimeInterval
+        /// the edges (`FrameMotion.top`, `.bottom`) beyond which it may go on unseen: its text is
+        /// not final yet (`Configuration.continuationReach`) …
+        var openEdges: Int
         /// mean difference to its patch where it was found last
         var fit: Double
         /// the mean step between neighbouring pixels of its patch inside the block
@@ -436,6 +452,9 @@ final class OverlayTracker {
         var whileMovingFast: Bool
         /// it reads only places that were cut off before: how often they have been read already
         var rereadAttempts: Int?
+        /// when it started, and whether the picture rested then (`Configuration.restDelay`)
+        var startTime: TimeInterval
+        var startedAtRest: Bool
         /// the frames have a new size since: nothing of it fits
         var isObsolete = false
     }
@@ -1085,7 +1104,8 @@ final class OverlayTracker {
         }
         running = Pass(request: request, region: pixels, picture: previous,
                        probes: probes, startRects: startRects,
-                       whileMovingFast: isFast, rereadAttempts: plan.rereadAttemptsInFlight)
+                       whileMovingFast: isFast, rereadAttempts: plan.rereadAttemptsInFlight, startTime: time,
+                       startedAtRest: time - lastMotion >= configuration.restDelay)
         return request
     }
 
@@ -1154,6 +1174,10 @@ final class OverlayTracker {
         plan.finishPass(succeeded: true)
         let factor = Double(scale)
         var taken: Set<Int> = []
+        // the blocks that took a reading of this pass (their edges are as that reading says)
+        var readNow: Set<Int> = []
+        // (the picture rested all the while: what is cut off by an edge of the view stays so)
+        let atRest = pass.startedAtRest && lastMotion < pass.startTime
         // (what reaches beyond the frame by more than its size is no paragraph of it)
         let reach = CGRect(x: -Double(current.width), y: -Double(current.height), width: 3 * Double(current.width),
                            height: 3 * Double(current.height))
@@ -1170,7 +1194,12 @@ final class OverlayTracker {
             // edge, such as a bar the content shows through)
             let cut = cutEdges(of: rect, in: pass.region) | found.cutOffEdges
             if cut != 0 {
-                askToReread(rect, cut: cut, lineCount: found.lineCount, shift: (shift.dx, shift.dy), pass: pass,
+                // (the blocks it lies over stay until their place is read completely)
+                let now = rect.offsetBy(dx: shift.dx, dy: shift.dy)
+                for block in tracked where block.seen != nil && thumbnailRect(of: block).intersects(now) {
+                    taken.insert(block.id)
+                }
+                askToReread(found.text, rect, cut: cut, lineCount: found.lineCount, shift: (shift.dx, shift.dy), pass: pass,
                             time: time)
                 continue
             }
@@ -1189,20 +1218,36 @@ final class OverlayTracker {
                                  mustShowWhole: false, keepsUnseen: true, time: time)
             }
             guard var block = made else { continue }
-            if let index = absorb(&block) {
-                taken.insert(tracked[index].id)
+            closeEdgesInView(&block, rect: rect, atRest: atRest)
+            let index: Int
+            if let known = absorb(&block) {
+                index = known
             } else {
                 tracked.append(block)
-                taken.insert(block.id)
+                index = tracked.count - 1
             }
+            taken.insert(tracked[index].id)
+            readNow.insert(tracked[index].id)
+        }
+        closeEdges(read: pass, found: recognized, atRest: atRest, except: readNow, time: time)
+        for index in tracked.indices where tracked[index].openEdges != 0 {
+            closeBlankEdges(&tracked[index])
+            askToReadBeyond(tracked[index], time: time)
         }
         // what was read and not found again is gone
         let inner = CGRect(x: pass.region.x, y: pass.region.y, width: pass.region.width, height: pass.region.height)
             .insetBy(dx: configuration.cutEdge, dy: configuration.cutEdge)
+        let bounds = CGRect(x: 0, y: 0, width: current.width, height: current.height)
         tracked.removeAll { block in
             guard !taken.contains(block.id), let start = pass.startRects[block.id] else { return false }
-            return start.minX >= inner.minX && start.minY >= inner.minY && start.maxX <= inner.maxX
+            let gone = start.minX >= inner.minX && start.minY >= inner.minY && start.maxX <= inner.maxX
                 && start.maxY <= inner.maxY
+            if gone, !atRest {
+                // (read while the picture moved, a line may have been missed: its place is read
+                // again once it rests)
+                plan.add(UnreadArea(rect: thumbnailRect(of: block).intersection(bounds), kind: .confirm, since: time))
+            }
+            return gone
         }
         dropOverlaps()
         askToReadParagraphsTogether(taken, time: time)
@@ -1238,16 +1283,130 @@ final class OverlayTracker {
         return cut
     }
 
-    /// A block that may be cut off is read again once all of it can be seen – unless it runs into
-    /// a block that is known (then it is a line of that one), or the place was read often enough
-    private func askToReread(_ rect: CGRect, cut: Int, lineCount: Int, shift: (dx: Double, dy: Double), pass: Pass,
-                             time: TimeInterval) {
+    /// The band beyond the top or bottom edge of a paragraph (thumbnail pixels) in which a line
+    /// that continues it would begin, and enough of that line to read it
+    private func band(beyond edge: Int, of rect: CGRect, lineCount: Int) -> CGRect {
+        let reach = configuration.continuationReach * rect.height / Double(max(1, lineCount))
+        let y = edge == FrameMotion.top ? rect.minY - reach : rect.maxY
+        return CGRect(x: rect.minX, y: y, width: rect.width, height: reach)
+    }
+
+    /// What can be seen around a place (thumbnail pixels): the frame and the scrolling areas
+    /// it lies in
+    private func view(around rect: CGRect) -> CGRect {
+        guard let previous else { return .null }
+        var view = CGRect(x: 0, y: 0, width: previous.width, height: previous.height)
+        for area in areas where area.rect.contains(x: rect.midX, y: rect.midY) {
+            view = view.intersection(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
+                                            height: area.rect.height))
+        }
+        return view
+    }
+
+    /// Closes the open edges of a block (its place in the frame a pass read: `rect`) whose band
+    /// lies in view, or all of them once the picture rests: a line that continues it would have
+    /// come into view there, and been read with what came in
+    private func closeEdgesInView(_ block: inout Block, rect: CGRect, atRest: Bool) {
+        guard block.openEdges != 0 else { return }
+        if atRest {
+            block.openEdges = 0
+            return
+        }
+        let view = self.view(around: rect)
+        guard !view.isNull else { return }
+        for edge in [FrameMotion.top, FrameMotion.bottom] where block.openEdges & edge != 0 {
+            let band = self.band(beyond: edge, of: rect, lineCount: block.lineCount)
+            if edge == FrameMotion.top ? band.minY >= view.minY : band.maxY <= view.maxY { block.openEdges &= ~edge }
+        }
+    }
+
+    /// The bands beyond the open edges of a block are read once the picture rests (a pass then
+    /// takes what it shows as it is, and the translation is asked for after it)
+    private func askToReadBeyond(_ block: Block, time: TimeInterval) {
+        guard let previous, block.openEdges != 0, block.seen != nil else { return }
+        let rect = thumbnailRect(of: block)
+        let bounds = CGRect(x: 0, y: 0, width: previous.width, height: previous.height)
+        for edge in [FrameMotion.top, FrameMotion.bottom] where block.openEdges & edge != 0 {
+            // (in the frame: a pass reads the block with what it shows of the band)
+            let place = band(beyond: edge, of: rect, lineCount: block.lineCount).union(rect).intersection(bounds)
+            guard !place.isNull, place.width >= 1, place.height >= 1 else { continue }
+            plan.add(UnreadArea(rect: place, kind: .rest, since: time))
+        }
+    }
+
+    /// Edges of a block beyond which the current frame shows nothing where a line that continues
+    /// it would show its letters: rows from a quarter of a line to `inkReach` lines beyond it are
+    /// plain, in view
+    private func closeBlankEdges(_ block: inout Block) {
+        guard let previous, block.seen != nil, block.lostSince == nil else { return }
+        let rect = thumbnailRect(of: block)
+        let view = self.view(around: rect)
+        guard !view.isNull else { return }
+        let lineHeight = rect.height / Double(max(1, block.lineCount))
+        let left = max(0, Int(floor(rect.minX))), right = min(previous.width, Int(ceil(rect.maxX)))
+        guard right > left else { return }
+        for edge in [FrameMotion.top, FrameMotion.bottom] where block.openEdges & edge != 0 {
+            let near = 0.25 * lineHeight, far = configuration.inkReach * lineHeight
+            let from = edge == FrameMotion.top ? rect.minY - far : rect.maxY + near
+            let to = edge == FrameMotion.top ? rect.minY - near : rect.maxY + far
+            guard from >= view.minY, to <= view.maxY else { continue }
+            var blank = true
+            rows: for y in Int(floor(from))...Int(ceil(to)) where y >= 0 && y < previous.height {
+                var low = UInt8.max, high = UInt8.min
+                for x in left..<right {
+                    let value = previous[x, y]
+                    low = min(low, value)
+                    high = max(high, value)
+                }
+                if Int(high) - Int(low) > configuration.plainRange {
+                    blank = false
+                    break rows
+                }
+            }
+            if blank { block.openEdges &= ~edge }
+        }
+    }
+
+    /// Open edges of the known blocks a pass did not read themselves close when their band is in
+    /// view now and the pass found no line that continues them; a block with such a line is
+    /// read again together with it (one paragraph, read in two parts)
+    private func closeEdges(read pass: Pass, found: [RecognizedBlock], atRest: Bool, except taken: Set<Int>,
+                            time: TimeInterval) {
+        let factor = Double(scale)
+        let readings = found.map { CGRect(x: $0.rect.minX / factor, y: $0.rect.minY / factor, width: $0.rect.width / factor,
+                                          height: $0.rect.height / factor) }
+        let lineCounts = found.map(\.lineCount)
+        for index in tracked.indices where tracked[index].openEdges != 0 && !taken.contains(tracked[index].id) {
+            guard let start = pass.startRects[tracked[index].id] else { continue }
+            let lineHeight = start.height / Double(max(1, tracked[index].lineCount))
+            let goesOn = readings.indices.first { other in
+                let reading = readings[other]
+                guard !(start.contains(reading) || reading.contains(start)) else { return false }
+                return mayContinue(start, lineHeight: lineHeight, reading,
+                                   otherLineHeight: reading.height / Double(max(1, lineCounts[other])))
+            }
+            if let other = goesOn {
+                let reading = readings[other]
+                if let shift = pass.probes.displacement(atX: reading.midX, y: reading.midY) {
+                    let air = configuration.rereadAir
+                    let both = thumbnailRect(of: tracked[index]).union(reading.offsetBy(dx: shift.dx, dy: shift.dy))
+                    plan.add(UnreadArea(rect: both.insetBy(dx: -air, dy: -air), kind: .reread, since: time))
+                }
+                continue
+            }
+            closeEdgesInView(&tracked[index], rect: start, atRest: atRest)
+        }
+    }
+
+    /// A block that may be cut off is read again once all of it can be seen, or once the picture
+    /// rests – unless it is a part of a paragraph that is known, or that paragraph once more (it
+    /// was complete when it was taken), or the place was read often enough
+    private func askToReread(_ text: String, _ rect: CGRect, cut: Int, lineCount: Int,
+                             shift: (dx: Double, dy: Double), pass: Pass, time: TimeInterval) {
         let attempts = (pass.rereadAttempts ?? -1) + 1
         guard attempts < configuration.maxRereads else { return }
         let now = rect.offsetBy(dx: shift.dx, dy: shift.dy)
-        for block in tracked where block.seen != nil && thumbnailRect(of: block).intersects(now) {
-            return
-        }
+        if knownBlock(at: now, text: text) != nil { return }
         let lineHeight = rect.height / Double(max(1, lineCount))
         let air = configuration.rereadAir, reach = lineHeight * configuration.rereadReach + air
         let left = cut & FrameMotion.left != 0 ? reach : air, right = cut & FrameMotion.right != 0 ? reach : air
@@ -1277,6 +1436,20 @@ final class OverlayTracker {
             guard !common.isNull, common.width * common.height >= configuration.containedShare * area,
                   known.width * known.height > area, TextSimilarity.isRelated(block.text, text) else { continue }
             return index
+        }
+        return nil
+    }
+
+    /// … or the paragraph known at its place read once more (nearly the same text): it was
+    /// complete when it was taken
+    private func knownBlock(at rect: CGRect, text: String) -> Int? {
+        if let whole = knownWhole(of: rect, text: text) { return whole }
+        for (index, block) in tracked.enumerated() where block.seen != nil && block.lostSince == nil {
+            let known = thumbnailRect(of: block)
+            let common = known.intersection(rect)
+            guard !common.isNull else { continue }
+            let overlap = common.width * common.height / max(known.width * known.height, rect.width * rect.height)
+            if overlap >= configuration.sameBlockOverlap, TextSimilarity.isNearlySame(block.text, text) { return index }
         }
         return nil
     }
@@ -1389,7 +1562,8 @@ final class OverlayTracker {
                           width: Double(rect.width) * Double(scale), height: Double(rect.height) * Double(scale),
                           patch: patch, x: x, y: y,
                           insetX: rect.minX - Double(patchRect.x), insetY: rect.minY - Double(patchRect.y), inner: inner,
-                          seen: nil, areaID: -1, lostSince: nil, earlier: nil, readAt: time, fit: 0,
+                          seen: nil, areaID: -1, lostSince: nil, earlier: nil, readAt: time,
+                          openEdges: FrameMotion.top | FrameMotion.bottom, fit: 0,
                           texture: OverlayTracker.meanTexture(of: patch, inner: inner))
         if keepsUnseen {
             block.lostSince = time
@@ -1516,6 +1690,8 @@ final class OverlayTracker {
             if old.areaID < 0 { old.areaID = block.areaID }
             old.colors = block.colors
             old.readAt = block.readAt
+            // (read once without anything that may continue it, it is complete)
+            old.openEdges &= block.openEdges
             tracked[index] = old
             return index
         }
@@ -1593,7 +1769,8 @@ final class OverlayTracker {
 
     /// Distinct texts of the blocks on the screen that have no translation yet, in reading order,
     /// at most `limit`. They count as requested until `setTranslation` or `translationFailed` is
-    /// called for them.
+    /// called for them. A paragraph that may go on beyond what was seen of it is left out while
+    /// the picture moves (`Configuration.continuationReach`, `restDelay`).
     func textsAwaitingTranslation(limit: Int, time: TimeInterval) -> [String] {
         var texts: [String] = []
         // what can be seen first, top to bottom
@@ -1606,6 +1783,8 @@ final class OverlayTracker {
         for block in ordered where texts.count < limit {
             let text = block.text
             if translations[text] != nil || requested.contains(text) || texts.contains(text) { continue }
+            // (it may go on beyond what was seen of it: its text is not final while the picture moves)
+            if block.openEdges != 0, time - lastMotion < configuration.restDelay { continue }
             if let failed = failedAt[text], time - failed < configuration.retryDelay { continue }
             requested.insert(text)
             texts.append(text)
