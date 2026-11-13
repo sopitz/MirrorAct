@@ -211,7 +211,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         for batch in TranslationPrompt.batches(texts) {
             do {
                 var portion = Portion(budget: Self.requestBudget(for: batch.count))
-                results += try await translate(batch, system: system, portion: &portion)
+                results += try await translate(batch, system: system, portion: &portion, isWhole: true)
                 locked { failuresInARow = 0 }
             } catch {
                 // translating was turned off meanwhile: "not now" for what is left
@@ -300,10 +300,11 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         return 2 * halvings + 2
     }
 
-    /// Requests in a row that time out, with no answer between them in the same portion, after
-    /// which the server is taken for one that does not answer at all: the whole portion, a half
-    /// and a quarter
-    static let timeoutsBeforeGivingUp = 3
+    /// Requests a portion takes at most before anything of it was answered, when they time out:
+    /// the whole portion, its two halves and its shortest text (`probe`). After that the server
+    /// is taken for one that does not answer at all. With the timeout of a local server (300 s)
+    /// these are 20 minutes before the back-off; the user is told at the first time-out.
+    static let requestsWithoutAnswer = 4
 
     /// What the requests for one portion of texts have shown so far
     private struct Portion {
@@ -313,8 +314,6 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         var answered = false
         /// a request of this portion timed out
         var timedOut = false
-        /// requests in a row that timed out
-        var timeoutsInARow = 0
     }
 
     /// The translations of one portion of texts, in their order; nil = not now, ask again later.
@@ -325,9 +324,13 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
     /// are left when the portion has used up its `budget` of requests.
     ///
     /// A request that times out is asked for in two halves as well. Once the server has answered
-    /// a request of the portion, a text that still times out on its own is put off; before that,
-    /// `timeoutsBeforeGivingUp` time-outs in a row fail the portion.
-    private func translate(_ texts: [String], system: String, portion: inout Portion) async throws -> [String?] {
+    /// a request of the portion, a text that still times out on its own is put off, and so are
+    /// the texts the budget does not reach. Before that, `probe` looks for an answer; a part of
+    /// the portion that times out then (`isWhole` false) throws, so that `probe` decides.
+    ///
+    /// The budget is the upper limit for one portion in every case: 14 requests for 40 texts.
+    private func translate(_ texts: [String], system: String, portion: inout Portion,
+                           isWhole: Bool = false) async throws -> [String?] {
         guard portion.budget > 0 else {
             // after a time-out the model may be quicker the next time: not left as they are
             let later = portion.timedOut
@@ -339,7 +342,6 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         do {
             let answer = try await ask(texts, system: system)
             portion.answered = true
-            portion.timeoutsInARow = 0
             let translations = try TranslationPrompt.parse(answer, count: texts.count)
             locked {
                 hadUsableAnswer = true
@@ -348,7 +350,6 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             return TranslationPrompt.usable(translations, for: texts)
         } catch let error as LLMError where Self.isAboutTheAnswer(error) {
             portion.answered = true
-            portion.timeoutsInARow = 0
             let isHopeless: Bool = locked {
                 unusableAnswers += 1
                 return !hadUsableAnswer && unusableAnswers >= Self.patience
@@ -371,37 +372,71 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             // time either; half as many texts take about half as long. Says nothing about
             // whether the model can be used, so it does not count against its patience.
             portion.timedOut = true
-            portion.timeoutsInARow += 1
             note(name + ": " + String(localized: "the model takes longer than \(Int(Self.timeout(for: connection))) s to answer – MirrorAct asks for fewer texts at a time"))
-            if portion.answered {
-                // the server answers, only not this text in time
-                guard texts.count > 1 else {
-                    Log.info("Translation: \(name): one text is asked for later (timed out)")
-                    return [nil]
-                }
-            } else if texts.count == 1 || portion.timeoutsInARow >= Self.timeoutsBeforeGivingUp {
-                // Nothing has come back: a server that does not answer at all is not asked on
-                // and on. The caller tells the user and waits before the next request.
-                throw error
-            }
-            Log.info("Translation: \(name): asking again for \(texts.count) texts in two halves (timed out)")
-            return try await halves(of: texts, system: system, portion: &portion)
+            // the server answers, only not these texts in time
+            if portion.answered { return try await putOff(texts, system: system, portion: &portion) }
+            guard isWhole, texts.count > 1 else { throw error }
+            return try await probe(texts, system: system, portion: &portion, timeout: error)
         }
     }
 
-    /// The translations of `texts` asked for in two halves. A half that times out before any
-    /// request of the portion was answered does not cost the other half: when that one is
-    /// answered, the first is put off.
+    /// The translations of texts whose request timed out although the server answers other
+    /// requests of the portion: asked for in halves, down to a single text, which is put off.
+    private func putOff(_ texts: [String], system: String, portion: inout Portion) async throws -> [String?] {
+        guard texts.count > 1 else {
+            Log.info("Translation: \(name): one text is asked for later (timed out)")
+            return [nil]
+        }
+        Log.info("Translation: \(name): asking again for \(texts.count) texts in two halves (timed out)")
+        return try await halves(of: texts, system: system, portion: &portion)
+    }
+
+    /// The translations of a portion whose request timed out before the server answered any of
+    /// it: a server that does not answer at all, or a model that cannot finish some of the texts
+    /// in time, wherever they are in the portion. Both halves are asked for, and when neither
+    /// comes back, the shortest text on its own, the one the model finishes soonest. Once one of
+    /// them is answered, the server is there: the halves that timed out are halved on, and only
+    /// what keeps timing out is put off. When none is, the portion fails after
+    /// `requestsWithoutAnswer` requests, and the caller waits before the next one.
+    private func probe(_ texts: [String], system: String, portion: inout Portion,
+                       timeout: URLError) async throws -> [String?] {
+        let half = (texts.count + 1) / 2
+        let parts = [Array(texts[..<half]), Array(texts[half...])]
+        var answers: [[String?]?] = []
+        for part in parts {
+            do {
+                answers.append(try await translate(part, system: system, portion: &portion))
+            } catch let error as URLError where error.code == .timedOut && !isCancellation(error) {
+                answers.append(nil)
+            }
+        }
+        var shortest: (index: Int, translation: String?)?
+        if !portion.answered {
+            // a text that was asked for on its own already would say nothing new
+            let candidates = texts.indices.filter { parts[$0 < half ? 0 : 1].count > 1 }
+            guard let index = candidates.min(by: { texts[$0].count < texts[$1].count }) else { throw timeout }
+            Log.info("Translation: \(name): asking for the shortest text alone (timed out)")
+            // times out as well: the caller tells the user and waits
+            shortest = (index, try await translate([texts[index]], system: system, portion: &portion)[0])
+        }
+        var translations: [String?] = []
+        for (part, answer) in zip(parts, answers) {
+            if let answer {
+                translations += answer
+            } else {
+                translations += try await putOff(part, system: system, portion: &portion)
+            }
+        }
+        // the shortest text keeps its answer where the halves did not bring one again
+        if let shortest, translations[shortest.index] == nil { translations[shortest.index] = shortest.translation }
+        return translations
+    }
+
+    /// The translations of `texts` asked for in two halves, once the server has answered a
+    /// request of the portion
     private func halves(of texts: [String], system: String, portion: inout Portion) async throws -> [String?] {
         let half = (texts.count + 1) / 2
-        let first: [String?]
-        do {
-            first = try await translate(Array(texts[..<half]), system: system, portion: &portion)
-        } catch let error as URLError where error.code == .timedOut && !isCancellation(error) {
-            guard portion.timeoutsInARow < Self.timeoutsBeforeGivingUp else { throw error }
-            let second = try await translate(Array(texts[half...]), system: system, portion: &portion)
-            return [String?](repeating: nil, count: half) + second
-        }
+        let first = try await translate(Array(texts[..<half]), system: system, portion: &portion)
         return first + (try await translate(Array(texts[half...]), system: system, portion: &portion))
     }
 

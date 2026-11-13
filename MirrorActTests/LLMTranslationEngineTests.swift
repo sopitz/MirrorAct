@@ -230,23 +230,73 @@ final class LLMTranslationEngineTests: XCTestCase {
         engine.notify = { notices.add($0) }
         let translations = try await engine.translate(texts, into: german)
         XCTAssertEqual(translations, texts.map { Optional("de:" + $0) })
-        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [25, 13, 7, 6, 12, 6, 6])
+        // neither half comes back: the shortest text alone shows that the server is there
+        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [25, 13, 12, 1, 7, 6, 6, 6])
         // the user learns at the first time-out that the model is slow, and only once
         XCTAssertEqual(notices.all, ["Mistral: " + String(localized: "the model takes longer than \(60) s to answer – MirrorAct asks for fewer texts at a time")])
     }
 
-    func testATextThatKeepsTimingOutIsAskedForLaterAndTheOthersAreKept() async throws {
-        let texts = (1...40).map { "Text \($0)" }
-        // one long paragraph the model cannot finish in time, wherever it travels
-        let transport = ScriptedTransport { request, _ in
-            if sentTexts(request).contains("Text 30") { throw URLError(.timedOut) }
-            return openAIReply(translated(request))
+    /// How a portion of 40 texts goes when some of them make every request they are in time out:
+    /// the requests in their order (by the number of texts), and which texts come back as "not
+    /// now". A portion fails only when nothing of it was answered, after at most
+    /// `requestsWithoutAnswer` requests; otherwise it takes at most `requestBudget(for: 40)`.
+    func testTimeOutsWhereverTheSlowTextsAreInAPortion() async throws {
+        struct Case {
+            let name: String
+            /// texts by their number from 1; "OK" stands at `short`, the shortest text
+            var short: Int? = nil
+            /// the texts that no request containing them gets an answer for in time
+            let slow: Set<Int>
+            let requests: [Int]
+            /// the texts that come back as nil; nil = the portion fails
+            let later: Set<Int>?
         }
-        let engine = makeEngine(transport: transport)
-        let translations = try await engine.translate(texts, into: german)
-        // "not now" for that text alone: the next time the model may be quicker
-        XCTAssertEqual(translations, texts.map { $0 == "Text 30" ? nil : "de:" + $0 })
-        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [40, 20, 20, 10, 5, 5, 3, 2, 1, 1, 10])
+        let all = Set(1...40)
+        let cases = [
+            Case(name: "a server that answers nothing", slow: all, requests: [40, 20, 20, 1], later: nil),
+            // one slow text: the halves find the server there, and only that text is put off
+            Case(name: "slow text 1", slow: [1], requests: [40, 20, 20, 10, 5, 3, 2, 1, 1, 1, 2, 5, 10], later: [1]),
+            Case(name: "slow text 3", slow: [3], requests: [40, 20, 20, 10, 5, 3, 2, 1, 2, 5, 10], later: [3]),
+            Case(name: "slow text 10", slow: [10], requests: [40, 20, 20, 10, 5, 5, 3, 2, 1, 1, 10], later: [10]),
+            Case(name: "slow text 20", slow: [20], requests: [40, 20, 20, 10, 10, 5, 5, 3, 2, 1, 1], later: [20]),
+            Case(name: "slow text 30", slow: [30], requests: [40, 20, 20, 10, 5, 5, 3, 2, 1, 1, 10], later: [30]),
+            Case(name: "slow text 40", slow: [40], requests: [40, 20, 20, 10, 10, 5, 5, 3, 2, 1, 1], later: [40]),
+            // two slow texts: the budget reaches one of them; what it does not reach comes later
+            Case(name: "slow texts 3 and 15", slow: [3, 15],
+                 requests: [40, 20, 20, 10, 5, 3, 2, 1, 2, 5, 10, 5, 3, 2], later: Set([3]).union(14...20)),
+            // in both halves: the shortest text alone shows that the server is there
+            Case(name: "slow texts 3 and 25", slow: [3, 25],
+                 requests: [40, 20, 20, 1, 10, 5, 3, 2, 1, 2, 5, 10, 10, 5], later: Set([3]).union(21...40)),
+            Case(name: "a slow first half", slow: Set(1...20),
+                 requests: [40, 20, 20, 10, 5, 3, 2, 1, 1, 1, 2, 1, 1, 5], later: Set(1...20)),
+            Case(name: "every text slow but the shortest", short: 25, slow: all.subtracting([25]),
+                 requests: [40, 20, 20, 1, 10, 5, 3, 2, 1, 1, 1, 2, 1, 1], later: all.subtracting([25])),
+            Case(name: "every text slow but one that is not the shortest", slow: all.subtracting([25]),
+                 requests: [40, 20, 20, 1], later: nil),
+        ]
+        for test in cases {
+            let texts = (1...40).map { $0 == test.short ? "OK" : "Text \($0)" }
+            let slow = Set(test.slow.map { texts[$0 - 1] })
+            let transport = ScriptedTransport { request, _ in
+                if !slow.isDisjoint(with: sentTexts(request)) { throw URLError(.timedOut) }
+                return openAIReply(translated(request))
+            }
+            let engine = makeEngine(transport: transport)
+            do {
+                let translations = try await engine.translate(texts, into: german)
+                XCTAssertNotNil(test.later, "\(test.name): no failure")
+                let later = test.later ?? []
+                XCTAssertEqual(translations, texts.indices.map { later.contains($0 + 1) ? nil : "de:" + texts[$0] }, test.name)
+            } catch {
+                XCTAssertNil(test.later, "\(test.name): \(error)")
+                // not given up for good: the next time the model may be quicker
+                XCTAssertEqual((error as? TranslationFailure)?.isPermanent, false, test.name)
+            }
+            let sizes = transport.requests.map { sentTexts($0).count }
+            XCTAssertEqual(sizes, test.requests, test.name)
+            XCTAssertLessThanOrEqual(sizes.count, test.later == nil ? LLMTranslationEngine.requestsWithoutAnswer
+                                     : LLMTranslationEngine.requestBudget(for: 40), test.name)
+        }
     }
 
     func testAHalfThatTimesOutDoesNotCostTheOtherHalf() async throws {
@@ -272,8 +322,8 @@ final class LLMTranslationEngineTests: XCTestCase {
         // not given up for good: the next time the model may be loaded
         XCTAssertEqual(failure?.isPermanent, false)
         XCTAssertNotNil(failure?.retryAfter)
-        // the whole portion, a half and a quarter; told at the first time-out
-        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [40, 20, 10])
+        // the whole portion, both halves and the shortest text; told at the first time-out
+        XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [40, 20, 20, 1])
         XCTAssertEqual(notices.all, ["Ollama: " + String(localized: "the model takes longer than \(300) s to answer – MirrorAct asks for fewer texts at a time")])
     }
 
