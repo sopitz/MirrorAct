@@ -461,6 +461,99 @@ final class OverlayTrackerReadingTests: XCTestCase {
         try run(restAfterwards: false)
     }
 
+    /// A strip of cards that glides sideways without a pause (a ticker, a carousel that turns by
+    /// itself) above the page: its frame with the page scrolled by `offset` and the strip by
+    /// `shift` thumbnail pixels
+    private static func withTicker(_ frame: LumaImage, shift: Int, pattern: [UInt8]) -> LumaImage {
+        var frame = frame
+        let width = frame.width, rows = pattern.count / 256
+        for row in 0..<rows {
+            for x in 0..<width {
+                frame[x, Self.tickerTop + row] = pattern[row * 256 + (x + shift) % 256]
+            }
+        }
+        return frame
+    }
+
+    private static let tickerTop = 40
+
+    private static func tickerPattern(seed: UInt64) -> [UInt8] {
+        var random = SyntheticPage.Random(state: seed)
+        var pattern = [UInt8](repeating: 0, count: 256 * 24)
+        // (columns of a few pixels, each of its own grey, with a little texture inside)
+        var x = 0
+        while x < 256 {
+            let width = 2 + random.below(5), level = 40 + random.below(170)
+            for column in x..<min(256, x + width) {
+                for row in 0..<24 {
+                    pattern[row * 256 + column] = UInt8(min(255, level + random.below(24)))
+                }
+            }
+            x += width
+        }
+        return pattern
+    }
+
+    /// Rest is decided for each scrolling area: a strip that keeps gliding sideways beside the
+    /// page does not keep a paragraph at the bottom bar from being sent once the page rests,
+    /// and reading the page comes to rest with it
+    func testAParagraphAtTheBarIsSentWhileATickerKeepsMoving() throws {
+        let screen = SyntheticScreen(seed: 31)
+        let pattern = Self.tickerPattern(seed: 5)
+        let bar = Double(SyntheticScreen.bottomBar)
+        let line = 11
+        let start = SyntheticScreen.firstLine + SyntheticScreen.linePitch * line + SyntheticScreen.lineHeight + 10
+            - SyntheticScreen.bottomBar
+        func lines(_ offset: Int) -> [RecognizedBlock] {
+            [SyntheticScreen.block(line, offset: offset, text: "Eleven"),
+             SyntheticScreen.block(line + 1, offset: offset, text: "Twelve")]
+        }
+        for moving in [false, true] {
+            let tracker = OverlayTracker()
+            var offset = start - 60, time = 0.0, shift = 0
+            func step() {
+                time += 1.0 / 60
+                if moving { shift += 2 }
+                let frame = Self.withTicker(screen.thumbnail(offset: offset, noiseSeed: 7), shift: shift,
+                                            pattern: pattern)
+                _ = tracker.advance(frame, scale: scale, time: time)
+            }
+            for _ in 0..<60 {
+                step()
+                readDue(tracker, at: time, lines: lines(offset), bottom: bar)
+            }
+            // the page moves up, 4 px a frame, until the line ends right above the bar
+            while offset < start {
+                offset += 4
+                step()
+                readDue(tracker, at: time, lines: lines(offset), bottom: bar)
+            }
+            // then it rests for two seconds, while the strip goes on
+            var sent: [String] = [], passes = 0, sentAt: TimeInterval?
+            let stop = time
+            while time < stop + 2 {
+                step()
+                for _ in 0..<8 {
+                    guard let due = tracker.recognitionDue, due <= time + 1e-9,
+                          let request = tracker.beginRecognition(time: time) else { break }
+                    // (what enters the strip is read as it comes in: only passes over the page count)
+                    if request.region.maxY > Double((Self.tickerTop + 24 + 24) * scale) { passes += 1 }
+                    let found = lines(offset).filter { request.region.contains($0.rect) && $0.rect.maxY <= bar }
+                    tracker.finishRecognition(request, blocks: found, time: time)
+                }
+                for text in tracker.textsAwaitingTranslation(limit: 10, time: time) {
+                    sent.append(text)
+                    if text == "Eleven" { sentAt = time }
+                    tracker.setTranslation("T " + text, for: text)
+                }
+            }
+            let at = try XCTUnwrap(sentAt, "moving \(moving): sent once the page rests")
+            XCTAssertLessThanOrEqual(at - stop, 1, "moving \(moving)")
+            XCTAssertEqual(sent.filter { $0 == "Eleven" }, ["Eleven"], "moving \(moving)")
+            XCTAssertLessThanOrEqual(passes, 4, "moving \(moving): reading the page comes to rest")
+        }
+    }
+
     /// The end of a page whose ground below its last line shows no movement (it stops there
     /// while it springs back) is not taken for a bar: a translation there is not cut off
     func testTheEndOfAPageIsNoBar() {

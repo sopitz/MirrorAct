@@ -28,6 +28,9 @@ struct UnreadArea: Equatable {
     var since: TimeInterval
     /// how often a reread was asked for at this place already
     var attempts = 0
+    /// the scrolling area it lies in, -1 = none or not known: a place read at rest waits for
+    /// that area to rest, else for the picture as a whole
+    var areaID = -1
 }
 
 /// What has to be read, and when: areas of the picture that move with the content they belong
@@ -94,6 +97,13 @@ final class ReadingPlan {
         result.since = first.kind == .strip || first.kind == .reread || first.kind == .rest
             ? min(first.since, second.since) : max(first.since, second.since)
         result.attempts = max(first.attempts, second.attempts)
+        // (a place outside of every area joined with one in an area waits for that area; one in
+        // two areas waits for the picture as a whole)
+        if first.areaID < 0 {
+            result.areaID = second.areaID
+        } else if second.areaID >= 0, second.areaID != first.areaID {
+            result.areaID = -1
+        }
         return result
     }
 
@@ -208,24 +218,41 @@ final class ReadingPlan {
 
     // MARK: When and what
 
-    /// When `area` may be read; nil = not yet (a reread that cannot be seen completely)
-    func due(of area: UnreadArea, lastMotion: TimeInterval, isFullyVisible: (CGRect) -> Bool) -> TimeInterval? {
+    /// When `area` may be read; nil = not yet (a reread that cannot be seen completely).
+    /// `areaMotion` says when the content of a scrolling area last moved (at all, or up or
+    /// down): a place that waits for movement to end (a thin strip, a confirm, a place read at
+    /// rest) and lies in a known area waits for that area, not for the whole picture; where a
+    /// paragraph may go on (`.rest`, beyond its top or bottom) it waits only for movement up
+    /// or down.
+    func due(of area: UnreadArea, lastMotion: TimeInterval, isFullyVisible: (CGRect) -> Bool,
+             areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)? = nil) -> TimeInterval? {
         switch area.kind {
         case .changed:
             return area.since + configuration.settleTime
         case .strip:
             let thickness = min(area.rect.width, area.rect.height)
             return thickness >= configuration.minStripThickness ? area.since
-                : max(area.since, lastMotion + configuration.thinStripDelay)
+                : max(area.since, restingSince(area, vertically: false, lastMotion: lastMotion, areaMotion: areaMotion)
+                    + configuration.thinStripDelay)
         case .reread:
             if isFullyVisible(area.rect) { return area.since }
             // what cannot be seen completely (it lies at a bar) is read once the picture rests
-            return dueAtRest(area, lastMotion: lastMotion)
+            return dueAtRest(area, lastMotion: restingSince(area, vertically: false, lastMotion: lastMotion,
+                                                            areaMotion: areaMotion))
         case .confirm:
-            return max(area.since, lastMotion + configuration.confirmDelay)
+            return max(area.since, restingSince(area, vertically: false, lastMotion: lastMotion, areaMotion: areaMotion)
+                + configuration.confirmDelay)
         case .rest:
-            return dueAtRest(area, lastMotion: lastMotion)
+            return dueAtRest(area, lastMotion: restingSince(area, vertically: true, lastMotion: lastMotion,
+                                                            areaMotion: areaMotion))
         }
+    }
+
+    /// When what `area` lies in last moved: its scrolling area, or the picture
+    private func restingSince(_ area: UnreadArea, vertically: Bool, lastMotion: TimeInterval,
+                              areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)?) -> TimeInterval {
+        guard area.areaID >= 0, let areaMotion else { return lastMotion }
+        return areaMotion(area.areaID, vertically)
     }
 
     /// Once the picture has rested for `restDelay`; once for each time it comes to rest: an area
@@ -236,10 +263,12 @@ final class ReadingPlan {
     }
 
     /// The earliest time something is due
-    func due(lastMotion: TimeInterval, isFullyVisible: (CGRect) -> Bool) -> TimeInterval? {
+    func due(lastMotion: TimeInterval, isFullyVisible: (CGRect) -> Bool,
+             areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)? = nil) -> TimeInterval? {
         var earliest: TimeInterval?
         for area in areas {
-            guard let due = due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible) else { continue }
+            guard let due = due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible,
+                                areaMotion: areaMotion) else { continue }
             earliest = min(earliest ?? due, due)
         }
         return earliest
@@ -250,10 +279,11 @@ final class ReadingPlan {
     /// that text at its edges can be read completely. The areas it covers are in flight then.
     /// nil when nothing is due.
     func takeRegion(at time: TimeInterval, lastMotion: TimeInterval, bounds: CGRect,
-                    isFullyVisible: (CGRect) -> Bool) -> CGRect? {
+                    isFullyVisible: (CGRect) -> Bool, areaMotion: ((_ areaID: Int, _ vertically: Bool) -> TimeInterval)? = nil) -> CGRect? {
         var dueAreas: [UnreadArea] = []
         for area in areas {
-            if let due = due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible), due <= time + 1e-9 {
+            if let due = due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible, areaMotion: areaMotion),
+               due <= time + 1e-9 {
                 dueAreas.append(area)
             }
         }

@@ -71,6 +71,8 @@ final class TrackingBenchTests: XCTestCase {
         "stickyHeader": Threshold(score: 70, misplaced: 2),  // seed 1: 82.3, 0; seeds 1-3: 82.8
         "pager": Threshold(score: 80, misplaced: 2),  // seed 1: 91.7, 0; seeds 1-3: 84.8
         "carousel": Threshold(score: 70, misplaced: 2),  // seed 1: 80.7, 0; seeds 1-3: 79.3
+        "ticker": Threshold(score: 65, misplaced: 2),  // seed 1: 73.9, 0; seeds 1-3: 70.3
+        "tickerStill": Threshold(score: 70, misplaced: 2),  // seed 1: 81.0, 0; seeds 1-3: 88.3
         "diagonalPan": Threshold(score: 60, misplaced: 2),  // seed 1: 71.5, 0; seeds 1-3: 80.0
         // changes that are not scrolling
         "alert": Threshold(score: 85, misplaced: 2),  // seed 1: 94.2, 0; seeds 1-3: 97.9
@@ -969,6 +971,8 @@ final class TrackingBenchTests: XCTestCase {
     func testStickyHeader() throws { try check("stickyHeader") }
     func testPager() throws { try check("pager") }
     func testCarousel() throws { try check("carousel") }
+    func testTicker() throws { try check("ticker") }
+    func testTickerStill() throws { try check("tickerStill") }
     func testDiagonalPan() throws { try check("diagonalPan") }
     func testAlert() throws { try check("alert") }
     func testBanner() throws { try check("banner") }

@@ -569,6 +569,10 @@ enum TrackingScenarios {
                              summary: "section headers that stick to the top while their section scrolls"),
         TrackingScenarioSpec(name: "pager", make: pager,
                              summary: "screens swiped sideways, snapping into place"),
+        TrackingScenarioSpec(name: "ticker", make: { ticker(seed: $0, moving: true) },
+                             summary: "a row of cards glides sideways all the time; the page scrolls once, then rests"),
+        TrackingScenarioSpec(name: "tickerStill", make: { ticker(seed: $0, moving: false) },
+                             summary: "as ticker, but the cards stay"),
         TrackingScenarioSpec(name: "carousel", make: carousel,
                              summary: "a row of cards scrolls sideways inside a page, then the page scrolls"),
         TrackingScenarioSpec(name: "diagonalPan", make: diagonalPan,
@@ -977,6 +981,45 @@ enum TrackingScenarios {
         track.rest(40)
         for offset in track.positions {
             stage.scenario.scenes.append(stage.scene(page, offset: offset))
+        }
+        return stage.finish()
+    }
+
+    /// A row of cards with captions that glides sideways without a pause (a news ticker, a
+    /// carousel that turns by itself) on a page that is dragged once and then rests: the page
+    /// rests although the cards move, and its paragraphs at the bottom bar are translated
+    private static func ticker(seed: UInt64, moving: Bool) -> SimScenario {
+        var box = SimRect()
+        var scroller = makeScroller(moving ? "ticker" : "tickerStill", seed: seed, tenths: 30, startPercent: 0, build: { builder in
+            builder.heading(points: 22)
+            box = builder.reserve(points: 190)
+        })
+        let stage = scroller.stage
+        let unit = stage.unit
+        var random = stage.random
+        let cards = 8, cardWidth = stage.viewport.width * 62 / 100, gap = 12 * unit, pad = stage.viewport.width / 2
+        let strip = SimSprite(width: pad + cards * (cardWidth + gap) + pad, height: box.height,
+                              level: stage.theme.background)
+        for card in 0..<cards {
+            let x = pad + card * (cardWidth + gap)
+            strip.fillTexture(SimRect(x: x, y: 8 * unit, width: cardWidth, height: 130 * unit), base: random.int(80, 180),
+                              spread: random.int(25, 60), random: &random)
+            let caption = stage.words.word(minLength: 5, maxLength: 9, capitalized: true) + " " + stage.words.word()
+            strip.addText(caption, alternate: stage.words.misreading(of: caption), x: x + 4 * unit, y: 148 * unit,
+                          size: 15 * unit, level: stage.theme.text, background: stage.theme.background)
+        }
+        let stripSprite = stage.scenario.add(strip)
+        scroller.track.rest(45)
+        scroller.track.drag(by: scroller.view * random.int(15, 30) / 100, ticks: random.int(40, 60))
+        scroller.track.rest(300)
+        var side = SimTrack(start: 0, lower: 0, upper: strip.width)
+        if moving { side.glide(speed: 2048, ticks: scroller.track.positions.count) } else { side.rest(scroller.track.positions.count) }
+        for (tick, offset) in scroller.track.positions.enumerated() {
+            var scene = stage.scene(scroller.page, offset: offset)
+            let shift = pad - 16 * unit + side.positions[min(tick, side.positions.count - 1)]
+            stage.put(stage.inset(stripSprite, box: box, in: scroller.page, offset: offset, shiftX: shift, degrades: true),
+                      into: &scene)
+            stage.scenario.scenes.append(scene)
         }
         return stage.finish()
     }
