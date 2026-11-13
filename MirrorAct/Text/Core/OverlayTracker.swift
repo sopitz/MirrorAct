@@ -259,6 +259,9 @@ final class OverlayTracker {
         /// a block a pass found found within this many thumbnail pixels of where the probes say
         /// it went
         var carryRadius = 2
+        /// two blocks whose visible parts share more than this share of the smaller one are
+        /// readings of the same text: only one of them is kept
+        var overlapLimit = 0.2
     }
 
     let configuration: Configuration
@@ -323,6 +326,8 @@ final class OverlayTracker {
         var lostSince: TimeInterval?
         /// the translation of an earlier reading of this place, shown until this one's is there
         var earlier: String?
+        /// when its text was read (last confirmed by a reading of its place)
+        var readAt: TimeInterval
         /// mean difference to its patch where it was found last
         var fit: Double
         /// the mean step between neighbouring pixels of its patch inside the block
@@ -869,6 +874,8 @@ final class OverlayTracker {
             guard let lost = block.lostSince else { return false }
             return time - lost > configuration.lostLifetime
         }
+        // (a block found again where a later reading lies)
+        dropOverlaps()
     }
 
     /// Where a block may have gone, the likeliest first: with the scrolling area it moves with,
@@ -1197,6 +1204,7 @@ final class OverlayTracker {
             return start.minX >= inner.minX && start.minY >= inner.minY && start.maxX <= inner.maxX
                 && start.maxY <= inner.maxY
         }
+        dropOverlaps()
         askToReadParagraphsTogether(taken, time: time)
         if pass.whileMovingFast, let bounds = pass.probes.currentBounds {
             plan.add(UnreadArea(rect: bounds.intersection(CGRect(x: 0, y: 0, width: current.width, height: current.height)),
@@ -1257,6 +1265,78 @@ final class OverlayTracker {
         plan.add(UnreadArea(rect: place, kind: .reread, since: time, attempts: attempts))
     }
 
+    /// A reading at `rect` (thumbnail pixels of the current frame) is a part of a paragraph that
+    /// is known and can be seen: it lies inside it and its words are the paragraph's (a line or a
+    /// word of it read alone). The index of that paragraph, nil if there is none.
+    private func knownWhole(of rect: CGRect, text: String) -> Int? {
+        let area = rect.width * rect.height
+        guard area > 0 else { return nil }
+        for (index, block) in tracked.enumerated() where block.seen != nil && block.lostSince == nil {
+            let known = thumbnailRect(of: block)
+            let common = known.intersection(rect)
+            guard !common.isNull, common.width * common.height >= configuration.containedShare * area,
+                  known.width * known.height > area, TextSimilarity.isRelated(block.text, text) else { continue }
+            return index
+        }
+        return nil
+    }
+
+    /// What of a block can be seen in the current frame (thumbnail pixels): inside its patch's
+    /// visible part, its scrolling area and the frame; nil when nothing
+    private func visibleRect(of block: Block) -> CGRect? {
+        guard let previous, let seen = block.seen else { return nil }
+        let rect = thumbnailRect(of: block)
+        var visible = rect
+        if seen != block.inner {
+            visible = visible.intersection(CGRect(x: block.x + Double(seen.x), y: block.y + Double(seen.y),
+                                                  width: Double(seen.width), height: Double(seen.height)))
+        }
+        if let area = scrollArea(id: block.areaID) {
+            visible = visible.intersection(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
+                                                  height: area.rect.height))
+        }
+        visible = visible.intersection(CGRect(x: 0, y: 0, width: previous.width, height: previous.height))
+        guard !visible.isNull, visible.width > 0, visible.height > 0 else { return nil }
+        return visible
+    }
+
+    /// One block per text: of two blocks that can be seen and lie over each other, a part of a
+    /// paragraph read alone gives way to the paragraph, otherwise the earlier reading gives way
+    /// to the later one (the place shows something else now). The one that stays shows the
+    /// translation of the other until it has its own, when their texts are related.
+    private func dropOverlaps() {
+        var visible: [CGRect?] = tracked.map { $0.lostSince == nil ? visibleRect(of: $0) : nil }
+        var dropped = Set<Int>()
+        for first in tracked.indices {
+            for second in tracked.indices where second > first {
+                guard !dropped.contains(first), !dropped.contains(second),
+                      let a = visible[first], let b = visible[second] else { continue }
+                let common = a.intersection(b)
+                guard !common.isNull else { continue }
+                let shared = common.width * common.height
+                let smaller = min(a.width * a.height, b.width * b.height)
+                guard smaller > 0, shared > configuration.overlapLimit * smaller else { continue }
+                let related = TextSimilarity.isRelated(tracked[first].text, tracked[second].text)
+                let loser: Int
+                if related, shared >= configuration.containedShare * smaller {
+                    // (a part read alone inside its paragraph)
+                    let firstRect = thumbnailRect(of: tracked[first]), secondRect = thumbnailRect(of: tracked[second])
+                    loser = firstRect.width * firstRect.height < secondRect.width * secondRect.height ? first : second
+                } else {
+                    loser = tracked[first].readAt <= tracked[second].readAt ? first : second
+                }
+                let winner = loser == first ? second : first
+                if related, shownTranslation(of: tracked[winner]) == nil {
+                    tracked[winner].earlier = shownTranslation(of: tracked[loser])
+                }
+                dropped.insert(loser)
+                visible[loser] = nil
+            }
+        }
+        guard !dropped.isEmpty else { return }
+        tracked = tracked.indices.filter { !dropped.contains($0) }.map { tracked[$0] }
+    }
+
     /// Two pieces of text may be lines of one paragraph: right above each other, with lines of
     /// about the same height and a gap of less than most of a line (as `TextLayout.blocks` joins them)
     private func mayContinue(_ rect: CGRect, lineHeight: Double, _ other: CGRect, otherLineHeight: Double) -> Bool {
@@ -1309,7 +1389,7 @@ final class OverlayTracker {
                           width: Double(rect.width) * Double(scale), height: Double(rect.height) * Double(scale),
                           patch: patch, x: x, y: y,
                           insetX: rect.minX - Double(patchRect.x), insetY: rect.minY - Double(patchRect.y), inner: inner,
-                          seen: nil, areaID: -1, lostSince: nil, earlier: nil, fit: 0,
+                          seen: nil, areaID: -1, lostSince: nil, earlier: nil, readAt: time, fit: 0,
                           texture: OverlayTracker.meanTexture(of: patch, inner: inner))
         if keepsUnseen {
             block.lostSince = time
@@ -1349,8 +1429,9 @@ final class OverlayTracker {
 
     /// Takes a new reading into the block known at its place, if there is one: same text (or
     /// nearly) keeps the block and its translation; related text keeps the translation shown
-    /// as stale until the new one is there; other text replaces it. Returns the index of the
-    /// block that took it, nil when it is a new block (then it has got an id).
+    /// as stale until the new one is there; other text replaces it. A part of a known paragraph
+    /// read alone is left out (the paragraph took it). Returns the index of the block that took
+    /// it, nil when it is a new block (then it has got an id).
     private func absorb(_ block: inout Block) -> Int? {
         let rect = thumbnailRect(of: block)
         var match: Int?
@@ -1367,6 +1448,8 @@ final class OverlayTracker {
             }
         }
         guard let index = match else {
+            // A part of a paragraph that is known, read alone (a line, a word): the paragraph stays.
+            if let whole = knownWhole(of: rect, text: block.text) { return whole }
             // A reading that holds blocks known before (lines of the paragraph read earlier) takes
             // their place, and shows the translation of the largest of them until its own is there.
             var largest: Block?
@@ -1432,6 +1515,7 @@ final class OverlayTracker {
             }
             if old.areaID < 0 { old.areaID = block.areaID }
             old.colors = block.colors
+            old.readAt = block.readAt
             tracked[index] = old
             return index
         }
