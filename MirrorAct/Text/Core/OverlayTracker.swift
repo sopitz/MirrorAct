@@ -1771,6 +1771,20 @@ final class OverlayTracker {
         let top = cut & FrameMotion.top != 0 ? reach : air, bottom = cut & FrameMotion.bottom != 0 ? reach : air
         var place = CGRect(x: now.minX - left, y: now.minY - top, width: now.width + left + right,
                            height: now.height + top + bottom)
+        // At rest, a reading of one line that lies for the most part over a known block of one
+        // line is a part of the text that is there now (a change in the middle of a title or a
+        // summary, a digit or a letter, has only its own place read first): the block's place is
+        // read with it, also when the block can no longer be found where it is (its text
+        // changed) and when it is taller than the box of the part. Read again only a little
+        // beyond the cut each time, a long title was never read whole. (Over a paragraph, a
+        // line may as well be something that slid over it, such as a banner.)
+        if atRest, lineCount == 1 {
+            for block in tracked where block.lineCount == 1 {
+                let known = thumbnailRect(of: block), common = known.intersection(now)
+                guard !common.isNull, common.width * common.height * 2 >= now.width * now.height else { continue }
+                place = place.union(known.insetBy(dx: -air, dy: -air))
+            }
+        }
         // the lines of the same paragraph that are known already are read with it
         for block in tracked where block.seen != nil {
             let other = thumbnailRect(of: block)
