@@ -533,3 +533,184 @@ final class OverlayTrackerFollowingTests: XCTestCase {
         XCTAssertGreaterThan(strip.region.maxY, Double(SyntheticScreen.bottomBar) - 40, "at the edge where content enters")
     }
 }
+
+extension OverlayTrackerFollowingTests {
+    /// The title in the top bar of `SyntheticScreen`, frame pixels
+    private static let titleRect = CGRect(x: 120, y: 12, width: 160, height: 36)
+
+    /// Strokes like the lines of `SyntheticScreen`, on the bar's grey, in a band of frame pixels
+    private static func titleStrokes(seed: UInt64, width: Int, height: Int) -> [UInt8] {
+        var pixels = [UInt8](repeating: 225, count: width * height)
+        var random = SyntheticPage.Random(state: seed)
+        var x = 4
+        while x < width - 8 {
+            let strokeWidth = 2 + random.below(4)
+            let strokeTop = 4 + random.below(8), strokeBottom = height - 4 - random.below(8)
+            let level = UInt8(20 + random.below(30))
+            for y in strokeTop..<strokeBottom {
+                for dx in 0..<strokeWidth where x + dx < width - 4 {
+                    pixels[y * width + x + dx] = level
+                }
+            }
+            x += strokeWidth + 2 + random.below(6)
+        }
+        return pixels
+    }
+
+    /// The screen, its page scrolled by `offset` frame pixels, with a title of its own written over
+    /// the top bar: the strokes of `seed`, from `split` (frame pixels into the title) on those of
+    /// `other`; with `badge`, a small mark on either side of the title; noise is added once, to the
+    /// whole frame
+    private static func screenWithTitle(_ screen: SyntheticScreen, offset: Int = 0, seed: UInt64, other: UInt64,
+                                        split: Int, badge: Bool = false, noise: UInt64) -> LumaImage {
+        var image = screen.thumbnail(offset: offset)
+        let width = Int(titleRect.width), height = Int(titleRect.height)
+        let first = titleStrokes(seed: seed, width: width, height: height)
+        let second = titleStrokes(seed: other, width: width, height: height)
+        // (the bar without the title of `SyntheticScreen`)
+        for y in 0..<(SyntheticScreen.topBar - 2) / 2 {
+            for x in 0..<SyntheticScreen.width / 2 {
+                image[x, y] = 225
+            }
+        }
+        for y in 0..<height / 2 {
+            for x in 0..<width / 2 {
+                var sum = 0
+                for dy in 0..<2 {
+                    for dx in 0..<2 {
+                        let column = 2 * x + dx, index = (2 * y + dy) * width + column
+                        sum += Int(column < split ? first[index] : second[index])
+                    }
+                }
+                image[Int(titleRect.minX) / 2 + x, Int(titleRect.minY) / 2 + y] = UInt8(sum / 4)
+            }
+        }
+        if badge {
+            for y in 9..<20 {
+                for x in 146..<152 { image[x, y] = 40 }
+                for x in 52..<58 { image[x, y] = 40 }
+            }
+        }
+        return SyntheticPage.noisy(image, amount: 2, seed: noise)
+    }
+
+    /// The title of a bar (it lies in no scrolling area) is replaced in place by another one
+    /// that looks alike, as when another screen comes. Its patch fits the new title a fraction
+    /// of a pixel away about as well as the check of a block allows, but much worse than when it
+    /// was read: its translation is no longer drawn. The same title, only noisier, keeps it.
+    func testATitleReplacedInPlaceLosesItsTranslation() throws {
+        let screen = SyntheticScreen(seed: 9)
+        let title = RecognizedBlock(text: "Title", rect: Self.titleRect)
+        for replaced in [false, true] {
+            let tracker = OverlayTracker()
+            _ = tracker.advance(Self.screenWithTitle(screen, seed: 40, other: 40, split: 0, noise: 7), scale: scale,
+                                time: 0)
+            let request = try XCTUnwrap(tracker.beginRecognition(time: 1))
+            tracker.finishRecognition(request, blocks: [title], time: 1.2)
+            for text in tracker.textsAwaitingTranslation(limit: 50, time: 1.2) {
+                tracker.setTranslation("T " + text, for: text)
+            }
+            let before = tracker.advance(Self.screenWithTitle(screen, seed: 40, other: 40, split: 0, noise: 8),
+                                         scale: scale, time: 1.3)
+            XCTAssertTrue(before.placed.contains { $0.text == "T Title" })
+            // (the last third of its letters are others)
+            let frame = Self.screenWithTitle(screen, seed: 40, other: replaced ? 43 : 40, split: 100, noise: 9)
+            for time in [1.35, 1.4] {
+                let drawn = tracker.advance(frame, scale: scale, time: time).placed.contains { $0.text == "T Title" }
+                XCTAssertEqual(drawn, !replaced, "replaced \(replaced), at \(time)")
+            }
+        }
+    }
+
+    /// The same while the page below the bar scrolls (3 frame pixels per frame, then it rests).
+    /// The first changed frame makes the title doubtful; the next ones carry it, and that does
+    /// not end the doubt while it fits as badly: the old translation does not come back over the
+    /// new title. The same title, unchanged, stays drawn over the moving page.
+    func testATitleReplacedWhileThePageBelowScrollsLosesItsTranslation() throws {
+        let screen = SyntheticScreen(seed: 9)
+        let title = RecognizedBlock(text: "Title", rect: Self.titleRect)
+        // (read where the page is already scrolled: its lines lie under the whole bar)
+        let start = 120
+        for replaced in [false, true] {
+            let tracker = OverlayTracker()
+            _ = tracker.advance(Self.screenWithTitle(screen, offset: start, seed: 40, other: 40, split: 0, noise: 7),
+                                scale: scale, time: 0)
+            let request = try XCTUnwrap(tracker.beginRecognition(time: 1))
+            tracker.finishRecognition(request, blocks: [title], time: 1.2)
+            for text in tracker.textsAwaitingTranslation(limit: 50, time: 1.2) {
+                tracker.setTranslation("T " + text, for: text)
+            }
+            let before = tracker.advance(Self.screenWithTitle(screen, offset: start, seed: 40, other: 40, split: 0,
+                                                              noise: 8), scale: scale, time: 1.3)
+            XCTAssertTrue(before.placed.contains { $0.text == "T Title" }, "replaced \(replaced)")
+            // (four frames that scroll, two at rest)
+            for step in 0..<6 {
+                let time = 1.35 + 0.05 * Double(step)
+                let frame = Self.screenWithTitle(screen, offset: start + 3 * min(step + 1, 4), seed: 40,
+                                                 other: replaced ? 43 : 40, split: 100, noise: 9 + UInt64(step))
+                let drawn = tracker.advance(frame, scale: scale, time: time).placed.contains { $0.text == "T Title" }
+                XCTAssertEqual(drawn, !replaced, "replaced \(replaced), at \(time)")
+            }
+        }
+    }
+
+    /// A badge appears beside a bar title, and a pass begins over the bar, title included; while
+    /// it runs, the title is replaced in place by one that looks alike, and it becomes doubtful.
+    /// The pass then reads the old title from the picture it began with: that must not confirm
+    /// the doubtful block (the old translation would come back over the new title and stay
+    /// there, since nothing changes under it at rest); its place is read again instead. The same
+    /// title, unchanged, keeps its translation.
+    func testAPassThatBeganBeforeATitleWasReplacedDoesNotBringItsTranslationBack() {
+        let screen = SyntheticScreen(seed: 9)
+        let badgeAt = 2.0, replaceAt = 2.5, duration = 0.3, end = 6.0
+        for replaced in [false, true] {
+            let tracker = OverlayTracker()
+            var running: (request: RecognitionRequest, start: Double, replacedAtStart: Bool)?
+            var staleReading = false
+            var drawnAfterReplacement = 0, drawnAtEnd = false
+            var step = 0
+            var time = 0.0
+            while time <= end {
+                let changed = replaced && time >= replaceAt
+                let frame = Self.screenWithTitle(screen, offset: 120, seed: 40, other: changed ? 43 : 40,
+                                                 split: changed ? 100 : 0, badge: time >= badgeAt,
+                                                 noise: 7 + UInt64(step))
+                let output = tracker.advance(frame, scale: scale, time: time)
+                if let pass = running, time - pass.start >= duration {
+                    // (a pass reads what showed when it began)
+                    let text = pass.replacedAtStart ? "Other title" : "Title"
+                    let region = pass.request.region
+                    var blocks: [RecognizedBlock] = []
+                    if region.contains(Self.titleRect) {
+                        blocks.append(RecognizedBlock(text: text, rect: Self.titleRect))
+                        if replaced, !pass.replacedAtStart, time >= replaceAt { staleReading = true }
+                    } else if region.intersects(Self.titleRect) {
+                        // (the part inside the region)
+                        let part = region.intersection(Self.titleRect)
+                        let count = max(1, Int(Double(text.count) * Double(part.width / Self.titleRect.width)))
+                        blocks.append(RecognizedBlock(text: String(text.prefix(count)), rect: part))
+                    }
+                    tracker.finishRecognition(pass.request, blocks: blocks, time: time)
+                    for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                        tracker.setTranslation("T " + text, for: text)
+                    }
+                    running = nil
+                }
+                if running == nil, let request = tracker.beginRecognition(time: time) {
+                    running = (request, time, changed)
+                }
+                let drawn = output.placed.contains { $0.text == "T Title" }
+                if time >= replaceAt, drawn { drawnAfterReplacement += 1 }
+                drawnAtEnd = drawn
+                step += 1
+                time = Double(step) * 0.05
+            }
+            if replaced {
+                XCTAssertTrue(staleReading, "a pass that began before the title was replaced read it after")
+                XCTAssertEqual(drawnAfterReplacement, 0, "the old translation over the new title")
+            } else {
+                XCTAssertTrue(drawnAtEnd, "the unchanged title keeps its translation")
+            }
+        }
+    }
+}

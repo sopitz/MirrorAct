@@ -182,7 +182,15 @@ final class OverlayTracker {
         var fitBase = 4.0
         var fitTexture = 0.3
         /// a block found elsewhere than its area took it, or found again after it was lost, must
-        /// fit at most this much worse than it did before (a line that looks alike fits worse)
+        /// fit at most this much worse than it did before (a line that looks alike fits worse); one
+        /// that stayed where it was likewise. One in no scrolling area that no movement carried,
+        /// found a fraction of a pixel away after the picture changed under it in place (by a shift
+        /// no movement of the frame explains within a pixel; a slow one anywhere on the screen
+        /// does) and fitting worse by more than twice this, becomes doubtful and is not drawn (a
+        /// bar the page shows through fits a little worse while the page moves under it; a title
+        /// that replaced another fits far worse). It stays so, in whatever later frame, while it
+        /// fits worse by more than this, unless a reading of its place by a pass that started after
+        /// the doubt arose confirms it first (`Block.isDoubtful`, `moveBlocks`)
         var refitTolerance = 3.0
         /// a block found less than this far from where it was (thumbnail pixels) stayed in place
         var restingShift = 0.08
@@ -376,6 +384,22 @@ final class OverlayTracker {
         /// a pass at rest did not find it although its text still showed: the next one that
         /// misses it removes it (`finishRecognition`)
         var missedOnce = false
+        /// its text may have been replaced in place by one that looks alike, and it is not drawn
+        /// (`moveBlocks`). Set when it lies in no scrolling area, no movement carried it, the
+        /// picture changed under it, and it fits best farther than `restingShift` from where it
+        /// was, by an amount no movement of this frame explains within a pixel, but worse than
+        /// when it was confirmed by more than twice `refitTolerance` (a bar the page shows
+        /// through fits a little worse while the page moves under it, and its own title must not
+        /// become doubtful). Kept in every later frame, whatever carries it, while it fits worse
+        /// than when it was confirmed by more than `refitTolerance` (its fit is not raised
+        /// meanwhile); cleared when it fits within `refitTolerance` of that again, or when a
+        /// reading of its place confirms its text (`absorb`) – only a reading of a pass that
+        /// started after the doubt arose (`doubtfulSince`); an older one read the old picture,
+        /// and its place is read again instead. Known limit: a slow movement anywhere on the
+        /// screen within a pixel of the shift keeps it from being set.
+        var isDoubtful = false
+        /// when it became doubtful: a reading of a pass that started before does not end the doubt
+        var doubtfulSince: TimeInterval?
     }
 
     /// A part of the screen whose content was seen to move as one (the view of a page between
@@ -960,6 +984,9 @@ final class OverlayTracker {
             let own = motionIndex(ofArea: block.areaID)
             var found = false
             let likely = candidates(for: block, rect: rect, own: own, motions: motions, in: current)
+            // (it lies in no scrolling area – a bar, a page that never scrolled – and the picture
+            // changed under it in a way no movement explains)
+            let changedInPlace = areaID(around: rect) < 0 && isActive(under: rect, kind: .changed)
             var ordered: [Int] = []
             if let primary = likely.primary { ordered.append(primary) }
             ordered += likely.others
@@ -984,6 +1011,26 @@ final class OverlayTracker {
                     x = located.x
                     y = located.y
                 }
+                // One that no movement carried, in no scrolling area, under which the picture changed in
+                // place, and that fits best a fraction of a pixel away from where it was – farther than
+                // `restingShift`, by an amount no movement of this frame explains (within a pixel) – may
+                // show a text that replaced its own and looks alike (the title of a bar when another
+                // screen comes). If it fits worse than when it was confirmed by more than twice
+                // `refitTolerance`, it becomes doubtful and is not drawn: a title that replaced another
+                // fits far worse, while a bar the page shows through fits a little worse as the page
+                // moves under it, and its own title must stay. The doubt lasts, whatever later frames
+                // carry it, while it fits worse than when it was confirmed by more than
+                // `refitTolerance` (its fit is not raised meanwhile); it ends when it fits within that
+                // again or when a reading of its place by a pass that started after the doubt arose
+                // confirms it (`absorb`, `doubtfulSince`; the change there is read once it rests). (A
+                // page that starts to move before its scrolling area holds it moves by about as much
+                // as its movement.) Known limit: any movement of this frame within a pixel of the
+                // shift counts as explaining it, wherever on the screen it is, so a slow one (a
+                // ticker, a page that starts or ends a scroll) keeps a replaced title from becoming
+                // doubtful.
+                let mayBeReplaced = candidate < 0 && changedInPlace
+                    && (abs(x - block.x) >= configuration.restingShift || abs(y - block.y) >= configuration.restingShift)
+                    && !motions.contains { abs(x - block.x - $0.dx) <= 1 && abs(y - block.y - $0.dy) <= 1 }
                 // the common case: all of it showed, it fits very well, and nothing can cover it from an edge
                 let placed = rect.offsetBy(dx: x - block.x, dy: y - block.y)
                 if candidate == likely.primary || likely.primary == nil, block.seen == block.inner,
@@ -992,10 +1039,18 @@ final class OverlayTracker {
                    fit <= configuration.sureFitBase + configuration.sureFitTexture * block.texture,
                    !(abs(x - block.x) < configuration.restingShift && abs(y - block.y) < configuration.restingShift
                      && fit > block.fit + configuration.refitTolerance) {
-                    if abs(x - block.x) >= configuration.restingShift || abs(y - block.y) >= configuration.restingShift
-                        || fit < block.fit {
+                    // (Only the check below can make a block doubtful: `isReached` holds wherever the
+                    // picture changed under the block, so `mayBeReplaced` is false here. This one only
+                    // keeps the doubt of a block that still fits worse, or ends it.)
+                    let isDoubtful = mayBeReplaced && fit > block.fit + 2 * configuration.refitTolerance
+                        || block.isDoubtful && fit > block.fit + configuration.refitTolerance
+                    if (abs(x - block.x) >= configuration.restingShift || abs(y - block.y) >= configuration.restingShift)
+                        && !isDoubtful || fit < block.fit {
                         block.fit = fit
                     }
+                    if isDoubtful, !block.isDoubtful { block.doubtfulSince = time }
+                    if !isDoubtful { block.doubtfulSince = nil }
+                    block.isDoubtful = isDoubtful
                     block.x = x
                     block.y = y
                     block.lostSince = nil
@@ -1016,10 +1071,15 @@ final class OverlayTracker {
                 // it was confirmed is its text fading away (into another screen, under a veil).
                 let stayed = abs(x - block.x) < configuration.restingShift && abs(y - block.y) < configuration.restingShift
                 if stayed, fit > block.fit + configuration.refitTolerance { continue }
+                let isDoubtful = mayBeReplaced && fit > block.fit + 2 * configuration.refitTolerance
+                    || block.isDoubtful && fit > block.fit + configuration.refitTolerance
                 block.x = x
                 block.y = y
                 block.seen = seen
-                if !stayed || fit < block.fit { block.fit = fit }
+                if !stayed && !isDoubtful || fit < block.fit { block.fit = fit }
+                if isDoubtful, !block.isDoubtful { block.doubtfulSince = time }
+                if !isDoubtful { block.doubtfulSince = nil }
+                block.isDoubtful = isDoubtful
                 block.lostSince = nil
                 if candidate >= 0 { block.areaID = motionAreaIDs[candidate] }
                 found = true
@@ -1176,7 +1236,7 @@ final class OverlayTracker {
         var result: [PlacedBlock] = []
         let factor = Double(scale)
         let bounds = CGRect(x: 0, y: 0, width: previous.width, height: previous.height)
-        for block in tracked {
+        for block in tracked where !block.isDoubtful {
             guard let seen = block.seen, let text = shownTranslation(of: block) else { continue }
             let rect = thumbnailRect(of: block)
             var visible = rect
@@ -1401,7 +1461,7 @@ final class OverlayTracker {
                              atRest: restedThrough(pass, area: block.areaID, around: thumbnailRect(of: block),
                                                    vertically: true))
             let index: Int
-            if let known = absorb(&block, attempts: rereadAttempt, time: time) {
+            if let known = absorb(&block, attempts: rereadAttempt, passStart: pass.startTime, time: time) {
                 index = known
             } else {
                 tracked.append(block)
@@ -1911,8 +1971,10 @@ final class OverlayTracker {
     /// as stale until the new one is there; other text replaces it. A part of a known paragraph
     /// read alone is left out (the paragraph took it). Returns the index of the block that took
     /// it, nil when it is a new block (then it has got an id). A reading that takes the place of
-    /// a block whose place it does not cover has that place read again (`askToReadPlace`).
-    private func absorb(_ block: inout Block, attempts: Int, time: TimeInterval) -> Int? {
+    /// a block whose place it does not cover has that place read again (`askToReadPlace`). Same
+    /// text ends the doubt of a doubtful block only when the pass started (`passStart`) after
+    /// the doubt arose; otherwise its place is read again and it stays doubtful.
+    private func absorb(_ block: inout Block, attempts: Int, passStart: TimeInterval, time: TimeInterval) -> Int? {
         let rect = thumbnailRect(of: block)
         var match: Int?
         var bestOverlap = 0.0
@@ -2007,6 +2069,13 @@ final class OverlayTracker {
             old.colors = block.colors
             old.readAt = block.readAt
             old.missedOnce = false
+            if let since = old.doubtfulSince, passStart < since {
+                // (read from a picture before it became doubtful: its place is read again)
+                askToReadPlace(thumbnailRect(of: old), attempts: attempts, time: time)
+            } else {
+                old.isDoubtful = false
+                old.doubtfulSince = nil
+            }
             // (read once without anything that may continue it, it is complete)
             old.openEdges &= block.openEdges
             tracked[index] = old

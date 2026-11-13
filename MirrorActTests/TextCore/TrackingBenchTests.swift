@@ -1051,6 +1051,29 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.score, 75)
         XCTAssertLessThanOrEqual(result.halfRead, 50)
     }
+    /// Seed 8 of slideOver: the title of the top bar changes when the other screen starts to
+    /// slide in. The old title's patch fitted the new one a fraction of a pixel away, so its
+    /// translation stayed over the new title until a pass read the bar (46 misplaced frames).
+    func testSlideOverSeed8() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("slideOver", seed: 8)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 85)
+    }
+    /// Seed 19 of frostedBars: the page shows through the top bar, so its unchanged title fits a
+    /// little worse while the page scrolls under it. It must not be taken for a title replaced in
+    /// place: when it was, its translation stayed hidden, also at rest, until a pass read the bar
+    /// again (coverage at rest 0.955 instead of 0.998).
+    func testFrostedBarsSeed19() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("frostedBars", seed: 19)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertGreaterThanOrEqual(result.coverageResting, 0.98, result.events.joined(separator: "\n"))
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+    }
     func testKeyboard() throws { try check("keyboard") }
     func testLateContent() throws { try check("lateContent") }
     func testZoom() throws { try check("zoom") }
