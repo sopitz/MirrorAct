@@ -161,10 +161,12 @@ final class AppleTranslationEngine: ObservableObject {
         let all = languages.all
         let tags = LanguageMatching.recognizerTags(for: all)
         let before = client.screenLanguage
+        let recent = client.labelsRead
         let read = await Task.detached(priority: .userInitiated) {
-            AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: all, before: before)
+            AppleTranslationEngine.readLanguages(of: texts, tags: tags, supported: all, before: before, recent: recent)
         }.value
         client.screenLanguage = read.screen
+        client.labelsRead = read.recent
         client.turnLanguages.add(texts, findings: read.findings, screen: read.screen)
         // the languages on the screen, too, as the on-device models know them where they can.
         // A label that keeps one of the turn's languages instead of the screen's never makes
@@ -1061,10 +1063,15 @@ final class AppleTranslationEngine: ObservableObject {
     /// screen after these texts when it was `before` (nil = cannot be told). Only the words of a
     /// text are read (`LanguageMatching.wording`): names, numbers and identifiers say nothing
     /// about a language. The texts that decide nothing on their own (short labels) are read
-    /// together as well, for the language of the screen. Takes a moment: call it off the main thread.
+    /// together as well, for the language of the screen. Whether that language is evident, the
+    /// labels in view say (`LanguageMatching.languageOfTheLabels`): those of the request after
+    /// those the turn read before (`recent`, given back with the request's added). Takes a
+    /// moment: call it off the main thread.
     nonisolated static func readLanguages(of texts: [String], tags: [String], supported: [Locale.Language],
-                                          before: LanguageMatching.ScreenLanguage? = nil)
-        -> (findings: [LanguageMatching.Finding], screen: LanguageMatching.ScreenLanguage?) {
+                                          before: LanguageMatching.ScreenLanguage? = nil,
+                                          recent: LanguageMatching.RecentLabels = .init())
+        -> (findings: [LanguageMatching.Finding], screen: LanguageMatching.ScreenLanguage?,
+            recent: LanguageMatching.RecentLabels) {
         // one recognizer, used by this call only; it must not be shared between threads
         let recognizer = NLLanguageRecognizer()
         let constraints = tags.map { NLLanguage(rawValue: $0) }
@@ -1079,10 +1086,17 @@ final class AppleTranslationEngine: ObservableObject {
             // a list of settings for example: together the labels are long enough
             joint = finding(for: words, letters: words.letters, with: recognizer, constraints: constraints,
                             supported: supported)
-            evidence.append(joint!)
+            // it counts for the screen's letters, and for the labels in view (`languageOfTheLabels`)
+            var letters = joint!
+            letters.standsApart = false
+            evidence.append(letters)
         }
+        let labels = LanguageMatching.languageOfTheLabels(of: texts, findings: findings, joint: joint, recent: recent)
+        var recent = recent
+        recent.add(texts, findings: findings, joint: joint)
         let guess = LanguageMatching.screenGuess(of: findings, joint: joint)
-        return (findings, LanguageMatching.screenLanguage(of: evidence, before: before, guess: guess))
+        return (findings, LanguageMatching.screenLanguage(of: evidence, before: before, guess: guess, labels: labels),
+                recent)
     }
 
     /// What the recognizer says about the words of a text with `letters` letters in all
@@ -1141,6 +1155,8 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     fileprivate var noticed: Set<String> = []
     /// the language of the screen, for texts that do not have one of their own
     fileprivate var screenLanguage: LanguageMatching.ScreenLanguage?
+    /// the labels read last, in view with those of the next request
+    fileprivate var labelsRead = LanguageMatching.RecentLabels()
     /// the languages enough text of this turn was in
     fileprivate var turnLanguages = LanguageMatching.TurnLanguages()
     /// the language pairs this client asked for: it is told what becomes of them

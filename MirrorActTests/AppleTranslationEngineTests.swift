@@ -18,8 +18,9 @@ final class AppleTranslationEngineTests: XCTestCase {
     }
 
     private func languages(of texts: [String]) -> (findings: [LanguageMatching.Finding], screen: LanguageMatching.ScreenLanguage?) {
-        AppleTranslationEngine.readLanguages(of: texts, tags: LanguageMatching.recognizerTags(for: supported),
-                                             supported: supported)
+        let read = AppleTranslationEngine.readLanguages(of: texts, tags: LanguageMatching.recognizerTags(for: supported),
+                                                        supported: supported)
+        return (read.findings, read.screen)
     }
 
     // MARK: The engine
@@ -1214,6 +1215,11 @@ final class AppleTranslationEngineTests: XCTestCase {
 
     // MARK: Screens of two languages (the language recognizer of macOS, FakeSession in place of the framework)
 
+    /// Rows of Android's Settings in German, as Vision read them
+    private static let germanRows = ["Netzwerk & Internet", "Verbundene Geräte", "Apps und Benachrichtigungen",
+                                     "Akku und Ladevorgang", "Speicher verwalten", "Ton & Vibration",
+                                     "Bildschirm und Darstellung", "Sicherheit & Datenschutz"]
+
     /// Languages of the recognizer, as many as macOS lists, so that it chooses among them as it
     /// does in the app; German and English (US) are on this Mac, as on the Mac the screens were
     /// read on
@@ -1368,6 +1374,78 @@ final class AppleTranslationEngineTests: XCTestCase {
         client.cancel()
         served.cancel()
         try await waitFor(served)
+    }
+
+    /// German labels the recognizer takes for Dutch ("Google Dienste", "Autofill Dienst") or for
+    /// Swedish ("Telefonnummer ändern", "Telefonnummer bestätigen") come two in one request after
+    /// the German rows of the screen, and again and again on a still screen. Added up, each pair
+    /// has enough letters to change the screen's language; read one by one they are no evidence.
+    /// The screen stays German, they are translated from German, and macOS is asked about
+    /// neither language, nor is the user told that Swedish needs Apple Intelligence.
+    func testGermanLabelsTakenForAnotherLanguageAskForNothing() async throws {
+        let session = FakeSession(["Google Dienste": "Google Services", "Autofill Dienst": "Autofill Service",
+                                   "Telefonnummer ändern": "Change phone number",
+                                   "Telefonnummer bestätigen": "Confirm phone number"])
+        // Swedish only with the models that need Apple Intelligence, which is off
+        let macOS = FakeMacOS(onDevice: Self.manyLanguages.filter { $0 != "sv" }, all: Self.manyLanguages)
+        macOS.appleIntelligence = .off
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let served = serveAll(engine, with: session)
+        let client = AppleTranslationClient(engine: engine)
+        let notices = Box<[String]>([])
+        client.notify = { message in MainActor.assumeIsolated { notices.value.append(message) } }
+        let (sources, watching) = watchHosts(of: engine)
+        _ = try await client.translate(Self.germanRows, into: language("en"))
+        for _ in 0..<3 {
+            let dienste = try await client.translate(["Google Dienste", "Autofill Dienst"], into: language("en"))
+            XCTAssertEqual(dienste, ["Google Services", "Autofill Service"])
+            let phone = try await client.translate(["Telefonnummer ändern", "Telefonnummer bestätigen"], into: language("en"))
+            XCTAssertEqual(phone, ["Change phone number", "Confirm phone number"])
+        }
+        watching.cancel()
+        XCTAssertEqual(sources.value, ["de"])
+        XCTAssertFalse(notices.value.contains { $0.contains("Apple Intelligence") }, "\(notices.value)")
+        client.cancel()
+        served.cancel()
+        try await waitFor(served)
+    }
+
+    /// A screen of French labels, French not on this Mac: macOS is asked for it when the screen
+    /// comes whole, and when it comes in pieces after a German screen, once its labels are most of
+    /// what is in view. (A French paragraph is asked for at once: testOnlyEnoughTextAsksForALanguageThatIsNotOnThisMac.)
+    func testAScreenOfLabelsInALanguageThatIsNotOnThisMacAsksForIt() async throws {
+        let french = ["Réseau et Internet", "Appareils connectés", "Applications et notifications", "Batterie et recharge",
+                      "Gérer le stockage", "Son et vibreur", "Affichage et apparence", "Sécurité et confidentialité"]
+        for inPieces in [false, true] {
+            let macOS = FakeMacOS(supported: Self.manyLanguages)
+            macOS.install("de")
+            let engine = engine(answeredBy: macOS)
+            // no session is served: the jobs are given up soon
+            engine.pickUpLimit = 0.2
+            let client = AppleTranslationClient(engine: engine)
+            let requests = inPieces ? [Self.germanRows] + stride(from: 0, to: french.count, by: 2).map { Array(french[$0..<$0 + 2]) }
+                                    : [french]
+            let (sources, watching) = watchHosts(of: engine)
+            for texts in requests {
+                _ = try await client.translate(texts, into: language("en"))
+            }
+            watching.cancel()
+            XCTAssertTrue(sources.value.contains("fr"), "in pieces: \(inPieces), \(sources.value)")
+            client.cancel()
+        }
+    }
+
+    /// The languages of every host `engine` makes while the task runs (the pairs it asks for)
+    private func watchHosts(of engine: AppleTranslationEngine) -> (sources: Box<Set<String>>, task: Task<Void, Never>) {
+        let sources = Box<Set<String>>([])
+        let task = Task {
+            while !Task.isCancelled {
+                for host in engine.hosts { sources.value.insert(host.source.languageCode?.identifier ?? "?") }
+                try? await Task.sleep(nanoseconds: 2_000_000)
+            }
+        }
+        return (sources, task)
     }
 
     // MARK: Short labels together (FakeSession answers in place of the framework)

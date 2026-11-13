@@ -43,8 +43,8 @@ final class LanguageMatchingTests: XCTestCase {
         LanguageMatching.Finding(decided: language(identifier), letters: letters, standsApart: true)
     }
 
-    private func screen(_ identifier: String, letters: Int = 100) -> LanguageMatching.ScreenLanguage {
-        LanguageMatching.ScreenLanguage(language: language(identifier), letters: letters)
+    private func screen(_ identifier: String, letters: Int = 100, evident: Bool = false) -> LanguageMatching.ScreenLanguage {
+        LanguageMatching.ScreenLanguage(language: language(identifier), letters: letters, isEvident: evident)
     }
 
     // MARK: Languages
@@ -515,28 +515,94 @@ final class LanguageMatchingTests: XCTestCase {
     }
 
     /// A request brings new texts only: what it holds replaces the language the screen was in
-    /// only with enough text, and more than it has in the language before
+    /// only with enough text, and more than it has in the language before; a language that
+    /// labels decide one by one replaces an evident screen's only when it is evident as well
     func testTheScreensLanguageChangesOnlyWithEnoughText() {
-        let german = screen("de", letters: 300)
+        let german = screen("de", letters: 300, evident: true)
         let limit = LanguageMatching.lettersToChangeTheScreensLanguage
         // nothing decided: as before
         XCTAssertEqual(LanguageMatching.screenLanguage(of: [LanguageMatching.Finding(letters: 13)], before: german), german)
         // one short text in another language
-        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("nb", letters: limit - 1)], before: german), german)
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [apart("nb", letters: limit - 1)], before: german), german)
         // enough of it
-        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("fr", letters: limit)], before: german),
-                       screen("fr", letters: limit))
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [apart("fr", letters: limit)], before: german),
+                       screen("fr", letters: limit, evident: true))
         // but not more than what this request has in the language before
-        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("fr", letters: 40), decided("de", letters: 40)],
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [apart("fr", letters: 40), decided("de", letters: 40)],
                                                        before: german), german)
-        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 40), decided("fr", letters: 40)],
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 40), apart("fr", letters: 40)],
                                                        before: german), german)
-        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 30), decided("fr", letters: 40)],
-                                                       before: german), screen("fr", letters: 40))
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 30), apart("fr", letters: 40)],
+                                                       before: german), screen("fr", letters: 40, evident: true))
         // the same language keeps the most letters it ever had
         XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de-CH", letters: 20)], before: german), german)
         XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 20)], before: screen("de", letters: 5)),
                        screen("de", letters: 20))
+    }
+
+    /// Two German labels the recognizer takes for Dutch ("Google Dienste", "Autofill Dienst", 27
+    /// letters) in one request: decided one by one, they are no evidence, and an evident German
+    /// screen stays German. The language the labels in view show, or a text that stands apart,
+    /// is evidence. A screen that is not evident gives way to a language that is not either
+    /// only with more letters than the screen ever had.
+    func testAnEvidentScreenGivesWayOnlyToAnEvidentLanguage() {
+        let german = screen("de", letters: 121, evident: true)
+        let misread = [decided("nl", letters: 13), decided("nl", letters: 14)]
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: misread, before: german), german)
+        // the labels in view show Dutch, or a Dutch paragraph
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: misread, before: german, labels: language("nl")),
+                       screen("nl", letters: 27, evident: true))
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [apart("nl", letters: 27)], before: german),
+                       screen("nl", letters: 27, evident: true))
+        // labels in view that show German make the screen evident as well
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: [decided("de", letters: 30)], before: screen("de", letters: 60),
+                                                       labels: language("de")),
+                       screen("de", letters: 60, evident: true))
+        // "Telefonnummer ändern", "Telefonnummer bestätigen" (Swedish to the recognizer, 42
+        // letters) on a German screen of 60 letters that is not evident
+        let swedish = [decided("sv", letters: 19), decided("sv", letters: 23)]
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: swedish, before: screen("de", letters: 60)),
+                       screen("de", letters: 60))
+        XCTAssertEqual(LanguageMatching.screenLanguage(of: swedish, before: screen("de", letters: 41)),
+                       screen("sv", letters: 42))
+    }
+
+    /// The labels in view show a language when three of them stand for it, and more than for any
+    /// other one; the request's labels come after the ones read before
+    func testTheLabelsInViewShowALanguage() {
+        let rows = ["Netzwerk & Internet", "Verbundene Geräte", "Apps und Benachrichtigungen", "Akku und Ladevorgang",
+                    "Speicher verwalten", "Ton & Vibration"]
+        let rowFindings = [LanguageMatching.Finding(letters: 16), decided("de", letters: 16), decided("de", letters: 25),
+                           decided("de", letters: 18), decided("de", letters: 17), LanguageMatching.Finding(letters: 12)]
+        let germanJoint = decided("de", letters: 28)
+        XCTAssertEqual(LanguageMatching.languageOfTheLabels(of: rows, findings: rowFindings, joint: germanJoint,
+                                                            recent: .init()), language("de"))
+        var recent = LanguageMatching.RecentLabels()
+        recent.add(rows, findings: rowFindings, joint: germanJoint)
+        // two labels misread alike, after the German ones, alone, and sent again
+        let pair = ["Google Dienste", "Autofill Dienst"]
+        let dutch = [decided("nl", letters: 13), decided("nl", letters: 14)]
+        XCTAssertEqual(LanguageMatching.languageOfTheLabels(of: pair, findings: dutch, joint: nil, recent: recent), language("de"))
+        XCTAssertNil(LanguageMatching.languageOfTheLabels(of: pair, findings: dutch, joint: nil, recent: .init()))
+        var again = recent
+        again.add(pair, findings: dutch, joint: nil)
+        XCTAssertEqual(LanguageMatching.languageOfTheLabels(of: pair, findings: dutch, joint: nil, recent: again), language("de"))
+        // a French screen in pieces after the German one: French once it holds most of the view
+        let french = [["Réseau et Internet", "Appareils connectés"], ["Applications et notifications", "Batterie et recharge"],
+                      ["Gérer le stockage", "Paramètres du compte"]]
+        let shown = french.map { texts -> Locale.Language? in
+            let findings = texts.map { _ in decided("fr", letters: 18) }
+            defer { recent.add(texts, findings: findings, joint: nil) }
+            return LanguageMatching.languageOfTheLabels(of: texts, findings: findings, joint: nil, recent: recent)
+        }
+        XCTAssertEqual(shown, [language("de"), nil, language("fr")])
+        // a list of single words, read together
+        let words = ["Réseau", "Batterie", "Stockage", "Affichage"]
+        XCTAssertEqual(LanguageMatching.languageOfTheLabels(of: words, findings: words.map { _ in LanguageMatching.Finding(letters: 8) },
+                                                            joint: decided("fr", letters: 32), recent: .init()), language("fr"))
+        // a paragraph is no label
+        XCTAssertNil(LanguageMatching.languageOfTheLabels(of: ["Un paragraphe"], findings: [apart("fr", letters: 60)],
+                                                          joint: nil, recent: .init()))
     }
 
     /// A screen on which nothing decides a language (Android's Modell page: "Modell", "Modell",
@@ -743,20 +809,26 @@ final class LanguageMatchingTests: XCTestCase {
         XCTAssertEqual(plan.groups.map(\.indices), [[0, 2, 3], [1]])
     }
 
-    /// Asking for a language that has to be loaded first takes a screen written in it, or a
-    /// text that stands apart in it: never one short text, a name or a number
+    /// Asking for a language that has to be loaded first takes a screen evidently written in it,
+    /// or a text that stands apart in it: never one short text, a name or a number, nor labels
+    /// that are each taken for it
     func testOnlyALanguageEnoughTextIsInMayBeAskedFor() {
         let limit = LanguageMatching.lettersToAskForALanguage
         let findings = [decided("de", letters: 20), apart("fr", letters: 70), decided("es", letters: 16),
                         LanguageMatching.Finding(letters: 6)]
-        let plan = LanguageMatching.Plan(findings: findings, screen: screen("de", letters: limit), target: language("en"),
-                                         supported: supported)
+        let plan = LanguageMatching.Plan(findings: findings, screen: screen("de", letters: limit, evident: true),
+                                         target: language("en"), supported: supported)
         XCTAssertEqual(plan.groups.map { $0.source.languageCode?.identifier }, ["de", "fr"])
         XCTAssertEqual(plan.groups.map(\.mayAskForTheLanguage), [true, true])
         // too little of the screen is in its language
-        let little = LanguageMatching.Plan(findings: findings, screen: screen("de", letters: limit - 1), target: language("en"),
-                                           supported: supported)
+        let little = LanguageMatching.Plan(findings: findings, screen: screen("de", letters: limit - 1, evident: true),
+                                           target: language("en"), supported: supported)
         XCTAssertEqual(little.groups.map(\.mayAskForTheLanguage), [false, true])
+        // the screen is Dutch only because two labels were taken for Dutch, one by one
+        let dutch = LanguageMatching.Plan(findings: [decided("nl", letters: 13), decided("nl", letters: 14)],
+                                          screen: screen("nl", letters: 27), target: language("en"), supported: supported)
+        XCTAssertEqual(dutch.groups.map(\.indices), [[0, 1]])
+        XCTAssertEqual(dutch.groups.map(\.mayAskForTheLanguage), [false])
         // the language of the screen is Norwegian only because of one text
         let norwegian = LanguageMatching.Plan(findings: [decided("nb", letters: 19), LanguageMatching.Finding(letters: 6)],
                                               screen: screen("nb", letters: 19), target: language("en"),

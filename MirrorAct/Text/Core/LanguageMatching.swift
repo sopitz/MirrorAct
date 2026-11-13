@@ -355,6 +355,17 @@ enum LanguageMatching {
     /// letters in words that must speak for a language before a translator is asked to load it
     /// (macOS asks the user whether it may download it)
     static let lettersToAskForALanguage = 25
+    /// labels that must show a language before it is evident on a screen of labels
+    /// (`languageOfTheLabels`): two short labels can be misread alike ("Google Dienste" and
+    /// "Autofill Dienst" are Dutch to the recognizer, also read together, 0.95). Its limits on
+    /// both sides: three labels misread alike show their language as well, and three labels of
+    /// a screen that really is in another language do not show it while more labels of the
+    /// screen before are still among the last ones read (then that language is asked for only
+    /// once more of it is read, and those three stay as they are)
+    static let labelsToShowALanguage = 3
+    /// the last labels of a turn that `languageOfTheLabels` looks at: about what a phone shows of
+    /// a list at a time
+    static let labelsInView = 8
     /// share of the probability that has to lie with languages the translator does not know
     /// before a text counts as written in one of them
     static let probabilityOfAnUnknownLanguage = 0.8
@@ -428,6 +439,10 @@ enum LanguageMatching {
     struct ScreenLanguage: Equatable {
         var language: Locale.Language
         var letters: Int
+        /// More than labels that each decide the language on their own speaks for it: a text that
+        /// stands apart in it, or most of the labels in view (`screenLanguage`). Only then may a
+        /// translator be asked to load it.
+        var isEvident = false
     }
 
     /// The words of the texts that decide nothing on their own (short labels), read as one
@@ -436,6 +451,79 @@ enum LanguageMatching {
         let undecided = zip(wordings, findings).filter { $0.1.decided == nil && $0.0.words > 0 }.map(\.0)
         guard undecided.count >= 2 else { return nil }
         return Wording(joining: undecided)
+    }
+
+    /// The language the labels of a screen show after a request of `texts`, or nil: the one that
+    /// most of the labels in view stand for. A label stands for the language it decides on its
+    /// own, or, where it decides none, for the one the words of the request's labels that decide
+    /// none read together decide (`jointWording`, whose finding is `joint`; a list of single
+    /// words). The labels in view are those of the request (its texts that do not stand apart and
+    /// have words, each text once) and, before them, the last ones the turn read before (`recent`,
+    /// not those of the request), `labelsInView` in all where the request has fewer. A language is
+    /// shown when at least `labelsToShowALanguage` labels in view stand for it, and more than for
+    /// any other one. The labels are not read together with those before them for this: the
+    /// recognizer takes German and English labels read together for Dutch ("Network & internet",
+    /// "Connected devices", "Apps and notifications", "Google Dienste", "Autofill Dienst": 0.97).
+    static func languageOfTheLabels(of texts: [String], findings: [Finding], joint: Finding?,
+                                    recent: RecentLabels) -> Locale.Language? {
+        let labels = RecentLabels.labels(of: texts, findings: findings, joint: joint)
+        guard !labels.isEmpty else { return nil }
+        let inView = recent.languages(before: texts, count: max(0, labelsInView - labels.count)) + labels.map(\.language)
+        var votes: [(language: Locale.Language, count: Int)] = []
+        for case let language? in inView {
+            if let known = votes.firstIndex(where: { sameLanguage($0.language, language) }) {
+                votes[known].count += 1
+            } else {
+                votes.append((language, 1))
+            }
+        }
+        guard let most = votes.max(by: { $0.count < $1.count }), most.count >= labelsToShowALanguage,
+              votes.filter({ $0.count == most.count }).count == 1 else { return nil }
+        return most.language
+    }
+
+    /// The labels a turn of translating read last, for `languageOfTheLabels`: the texts of its
+    /// requests that do not stand apart and have words, each once (a label read again counts as
+    /// read last), with the language each stands for; the last `rememberedLabels`.
+    struct RecentLabels: Equatable {
+        /// labels kept at most
+        static let rememberedLabels = 32
+        private var labels: [(text: String, language: Locale.Language?)] = []
+
+        init() {}
+
+        static func == (first: RecentLabels, second: RecentLabels) -> Bool {
+            first.labels.map(\.text) == second.labels.map(\.text)
+                && first.labels.map(\.language) == second.labels.map(\.language)
+        }
+
+        /// The labels of a request, each text once, with the language each stands for (see
+        /// `languageOfTheLabels`)
+        static func labels(of texts: [String], findings: [Finding], joint: Finding?)
+            -> [(text: String, language: Locale.Language?)] {
+            var seen: Set<String> = []
+            return zip(texts, findings).compactMap { text, finding in
+                guard !finding.standsApart, finding.weight > 0, seen.insert(text).inserted else { return nil }
+                return (text, finding.decided ?? joint?.decided)
+            }
+        }
+
+        /// The languages the last `count` labels read before a request of `texts` stand for (nil:
+        /// none), the earliest first; not those among `texts`: a label sent again is not its own
+        /// neighbour
+        func languages(before texts: [String], count: Int) -> [Locale.Language?] {
+            let excluded = Set(texts)
+            return Array(labels.filter { !excluded.contains($0.text) }.suffix(count).map(\.language))
+        }
+
+        /// Adds the labels of a request, in its order
+        mutating func add(_ texts: [String], findings: [Finding], joint: Finding?) {
+            for label in Self.labels(of: texts, findings: findings, joint: joint) {
+                labels.removeAll { $0.text == label.text }
+                labels.append(label)
+            }
+            if labels.count > Self.rememberedLabels { labels.removeFirst(labels.count - Self.rememberedLabels) }
+        }
     }
 
     /// The most likely language of a screen on which no text decides one: the guess of the
@@ -462,8 +550,27 @@ enum LanguageMatching {
     /// where the translator has the language at hand, and it is never asked for. Such a guess is
     /// not kept: a `before` with 0 letters counts as nothing known, so the next request guesses
     /// again, and any language it decides replaces the guess.
+    ///
+    /// A language is evident in a request when one of `findings` stands apart in it (a sentence,
+    /// a paragraph; the finding of the `jointWording` is not one of them), or when it is
+    /// `labels`, the language the labels in view show (`languageOfTheLabels`). Decided labels
+    /// that are only added up are no evidence: the recognizer misreads some short labels alike
+    /// (of 142 German labels of Android's Settings, "Google Dienste" and "Autofill Dienst" as
+    /// Dutch, "Telefonnummer ändern" as Swedish), and two of them in one request add up to 27 or
+    /// 42 letters. The screen is evident when its language was evident in a request since the
+    /// screen took that language. A language replaces the screen's as described above, and it
+    /// has to be evident in the request; where the screen is not evident, a language that is not
+    /// either may replace it with more letters than the screen ever had (`letters`). With German
+    /// and English installed, this changed nothing on 3,878 texts of Android's screens and the
+    /// lab page in sequences of requests, nor on the 152 screens of the bench of the language
+    /// rule (foreign paragraphs, foreign screens of labels, chats); the two pairs of misread
+    /// labels, alone or sent again on a still screen, no longer change a German screen.
     static func screenLanguage(of findings: [Finding], before: ScreenLanguage?,
-                               guess: Locale.Language? = nil) -> ScreenLanguage? {
+                               guess: Locale.Language? = nil, labels: Locale.Language? = nil) -> ScreenLanguage? {
+        func isEvident(_ language: Locale.Language) -> Bool {
+            findings.contains { $0.standsApart && $0.decided.map { sameLanguage($0, language) } == true }
+                || labels.map { sameLanguage($0, language) } == true
+        }
         let before = before.flatMap { $0.letters > 0 ? $0 : nil }
         var languages: [(language: Locale.Language, letters: Int)] = []
         for finding in findings {
@@ -484,16 +591,28 @@ enum LanguageMatching {
             if entry.letters > current.letters || winsTie { best = entry }
         }
         guard let best else {
-            if before == nil, let guess, !isUndetermined(guess) { return ScreenLanguage(language: guess, letters: 0) }
-            return before
+            if var before {
+                before.isEvident = before.isEvident || isEvident(before.language)
+                return before
+            }
+            if let guess, !isUndetermined(guess) { return ScreenLanguage(language: guess, letters: 0) }
+            return nil
         }
-        guard let before else { return ScreenLanguage(language: best.language, letters: best.letters) }
+        guard let before else {
+            return ScreenLanguage(language: best.language, letters: best.letters, isEvident: isEvident(best.language))
+        }
         if key(best.language) == key(before.language) {
-            return ScreenLanguage(language: before.language, letters: max(before.letters, best.letters))
+            return ScreenLanguage(language: before.language, letters: max(before.letters, best.letters),
+                                  isEvident: before.isEvident || isEvident(best.language))
         }
         let forBefore = languages.first { key($0.language) == key(before.language) }?.letters ?? 0
-        guard best.letters >= lettersToChangeTheScreensLanguage, best.letters > forBefore else { return before }
-        return ScreenLanguage(language: best.language, letters: best.letters)
+        guard best.letters >= lettersToChangeTheScreensLanguage, best.letters > forBefore,
+              isEvident(best.language) || (!before.isEvident && best.letters > before.letters) else {
+            var kept = before
+            kept.isEvident = before.isEvident || isEvident(before.language)
+            return kept
+        }
+        return ScreenLanguage(language: best.language, letters: best.letters, isEvident: isEvident(best.language))
     }
 
     /// The languages enough text of a turn of translating was in. The letters in words of the
@@ -556,9 +675,10 @@ enum LanguageMatching {
             /// their positions in the request, ascending
             var indices: [Int]
             /// Enough text speaks for the language to ask for it where the translator would
-            /// have to load it first: the screen is in it (with at least
-            /// `lettersToAskForALanguage` letters in words), or a text of the group stands apart
-            /// in it. Never for a single short text, a name or a number.
+            /// have to load it first: the screen is in it, evidently (`ScreenLanguage.isEvident`)
+            /// and with at least `lettersToAskForALanguage` letters in words, or a text of the
+            /// group stands apart in it. Never for a single short text, a name or a number, nor
+            /// for two short labels that are each taken for the language.
             var mayAskForTheLanguage = false
 
             /// Puts the translations of this group (in the order of `indices`) where they belong
@@ -624,7 +744,7 @@ enum LanguageMatching {
             var positions: [String: Int] = [:]
             var strangers: [(language: Locale.Language, letters: Int)] = []
             let screenSource = screen.flatMap { LanguageMatching.match($0.language, inFirstOf: lists) }
-            let screenIsEvident = (screen?.letters ?? 0) >= LanguageMatching.lettersToAskForALanguage
+            let screenIsEvident = screen.map { $0.isEvident && $0.letters >= LanguageMatching.lettersToAskForALanguage } == true
             for (index, finding) in findings.enumerated() {
                 guard finding.letters > 0 else {
                     unchanged.append(index)
