@@ -805,7 +805,9 @@ final class AppleTranslationEngine: ObservableObject {
     /// One call on the session, and one more where the answer to labels sent together does not
     /// fit (`AppleTranslationJoining`). false = the session may be broken and is not used again.
     private func run(_ job: AppleTranslationJob, calling call: AppleTranslationCall, for host: AppleTranslationHost) async -> Bool {
-        let packets = AppleTranslationJoining.packets(for: job.texts)
+        let earlier = job.client.recentLabels[job.pair] ?? []
+        let packets = AppleTranslationJoining.packets(for: job.texts, after: earlier)
+        job.client.recentLabels[job.pair] = AppleTranslationJoining.recentLabels(after: earlier, and: job.texts)
         running.append(job)
         let limit = UInt64(answerLimit * 1_000_000_000)
         let watch = Task { [weak self] in
@@ -820,19 +822,17 @@ final class AppleTranslationEngine: ObservableObject {
         var start = Self.clock
         var count = job.texts.count
         do {
-            let texts = packets.map { AppleTranslationJoining.text(of: $0, in: job.texts) }
+            let texts = packets.map { $0.text(in: job.texts) }
             let answers = try await Self.answers(to: texts, calling: call)
             Log.info(Self.callLine(job.pair, texts: count, requests: texts.count, milliseconds: Self.milliseconds(since: start)))
             var translations = [String?](repeating: nil, count: job.texts.count)
             var again: [Int] = []
             for (packet, answer) in zip(packets, answers) {
                 guard let answer else { continue }
-                if packet.count == 1 {
-                    translations[packet[0]] = answer
-                } else if let parts = AppleTranslationJoining.parts(of: answer, for: packet.map { job.texts[$0] }) {
-                    for (position, part) in zip(packet, parts) { translations[position] = part }
+                if let parts = packet.translations(in: answer, of: job.texts) {
+                    for (position, part) in zip(packet.positions, parts) { translations[position] = part }
                 } else {
-                    again += packet
+                    again += packet.positions
                 }
             }
             // Translate was turned off, or the call took too long: the job is answered already
@@ -1116,6 +1116,9 @@ final class AppleTranslationClient: TranslationEngine, @unchecked Sendable {
     fileprivate var pairs: Set<String> = []
     /// the lasting notice given last
     fileprivate var status: String?
+    /// by pair, the last labels sent (`AppleTranslationJoining.contextSize`): context for a label
+    /// that comes with few others
+    fileprivate var recentLabels: [String: [String]] = [:]
 
     init(engine: AppleTranslationEngine, targetIsChosen: Bool = false) {
         self.engine = engine
@@ -1196,8 +1199,12 @@ typealias AppleTranslationCall = @MainActor ([TranslationSession.Request]) async
 ///   and no ".", "!" or "?" after a letter is followed by more text ("13. November" and "Fertig?"
 ///   are labels). Everything else goes alone, as before.
 /// - The labels of a job go in its order, up to `groupSize` in one text, in as few texts as
-///   possible and these as even as possible (13 labels are 7 and 6). A label with nothing to join
-///   it to goes alone.
+///   possible and these as even as possible (13 labels are 7 and 6).
+/// - A text of fewer than `contextSize` + 1 labels gets the last labels the same turn sent into the
+///   same pair before (the rows above, or the screen before) put in front, up to `contextSize` + 1
+///   labels in all; their parts of the answer are dropped. While a screen changes, the tracker sends
+///   its texts as they appear, one or two at a time, and without this "Aus" would still come back
+///   as "From". A label with nothing to join it to (the first of a turn) goes alone.
 /// - An answer counts only if it splits at the separators into exactly as many parts as labels
 ///   went in, no part is empty, and no part is longer than `longestPart` for its label (4 times
 ///   its weight and 10 more: a separator that moved shifts words from one label to another).
@@ -1210,14 +1217,20 @@ typealias AppleTranslationCall = @MainActor ([TranslationSession.Request]) async
 /// text did worse than twelve (13 against 9 wrong into English), twenty no better. Labels of up to
 /// six words gained most; summaries of 7 to 9 words came back as good or a little better joined,
 /// sentences of 12 words and more as good alone, so these go alone, where an answer that does not
-/// split would cost most. Every joined answer split into as many parts as went in. A label may
-/// come back differently next to other labels: in shuffled screens about one in ten turned right
-/// or wrong with its neighbours, and the order of the screen (a row's title next to its summary)
-/// did best; the tracker keeps the translation of a text for the turn. Names, numbers and texts
+/// split would cost most. Of the screens sent whole, every joined answer split into as many parts
+/// as went in; once, with labels sent before as context, the framework left out a misread label
+/// ("Geratename"), which the count of parts caught. A label may come back differently next to
+/// other labels: in shuffled screens about one in ten turned right or wrong with its neighbours,
+/// and the order of the screen (a row's title next to its summary) did best; the tracker keeps
+/// the translation of a text for the turn. Names, numbers and texts
 /// in the target language inside a joined text came back as they were ("Google", "T-Mobile",
 /// "sdk_gphone64_arm64", "IMEI"); alone, "sdk_gphone64_arm64" came back as "Sdk_gphone64_arm64"
 /// and "Google" into German as "Googeln". Other pairs could not be measured: should one of them
-/// not keep the separators, the labels are translated one by one as before.
+/// not keep the separators, the labels are translated one by one as before. A turn that is on
+/// while the screen changes (the main list, then each other screen one or two texts at a time):
+/// 25 of 123 German and 26 of 118 English texts wrong one by one, 18 and 12 joined without the
+/// labels before, 4 and 7 with them. As context, one label before did less than three (15 and 11
+/// wrong against 10 and 9, measured outside the engine), eleven no better.
 enum AppleTranslationJoining {
     static let separator = " | "
     /// what an answer is split at: the separator, and the full-width form a translation into
@@ -1226,27 +1239,49 @@ enum AppleTranslationJoining {
     static let groupSize = 12
     static let maximumWords = 6
     static let maximumWeight = 50
+    /// how many labels sent before go in front of a text of few labels
+    static let contextSize = 3
 
-    /// The positions of `texts` that go into the framework together, one entry per text sent,
-    /// in the order of their first position
-    static func packets(for texts: [String]) -> [[Int]] {
+    /// One text that is sent: texts of a job, by their positions, and labels sent before that go
+    /// in front of them for context
+    struct Packet: Equatable {
+        var positions: [Int]
+        var context: [String] = []
+
+        func text(in texts: [String]) -> String {
+            (context + positions.map { texts[$0] }).joined(separator: separator)
+        }
+
+        /// The translations of the texts of `positions`; nil = the answer is not to be trusted
+        func translations(in answer: String, of texts: [String]) -> [String]? {
+            guard positions.count > 1 || !context.isEmpty else { return [answer] }
+            return AppleTranslationJoining.parts(of: answer, for: context + positions.map { texts[$0] })
+                .map { Array($0.dropFirst(context.count)) }
+        }
+    }
+
+    /// What goes into the framework for `texts`, one packet per text sent, in the order of their
+    /// first position. `earlier`: the labels the turn sent into the same pair before, oldest first.
+    static func packets(for texts: [String], after earlier: [String] = []) -> [Packet] {
         let labels = texts.indices.filter { isLabel(texts[$0]) }
-        guard labels.count >= 2 else { return texts.indices.map { [$0] } }
-        var packets = texts.indices.filter { !isLabel(texts[$0]) }.map { [$0] }
+        var packets = texts.indices.filter { !isLabel(texts[$0]) }.map { Packet(positions: [$0]) }
         var start = 0
         let count = (labels.count + groupSize - 1) / groupSize
+        let others = earlier.filter { !texts.contains($0) }
         for made in 0..<count {
             let left = count - made
             let size = (labels.count - start + left - 1) / left
-            packets.append(Array(labels[start..<(start + size)]))
+            let context = others.suffix(max(contextSize + 1 - size, 0))
+            packets.append(Packet(positions: Array(labels[start..<(start + size)]), context: Array(context)))
             start += size
         }
-        return packets.sorted { $0[0] < $1[0] }
+        return packets.sorted { $0.positions[0] < $1.positions[0] }
     }
 
-    /// What is sent for a packet
-    static func text(of packet: [Int], in texts: [String]) -> String {
-        packet.map { texts[$0] }.joined(separator: separator)
+    /// The last `contextSize` labels sent: those of `texts` after `earlier`
+    static func recentLabels(after earlier: [String], and texts: [String]) -> [String] {
+        let labels = texts.filter(isLabel)
+        return Array((earlier.filter { !labels.contains($0) } + labels).suffix(contextSize))
     }
 
     static func isLabel(_ text: String) -> Bool {

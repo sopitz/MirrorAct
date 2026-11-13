@@ -1237,7 +1237,7 @@ final class AppleTranslationEngineTests: XCTestCase {
     /// and a label with nothing to join it to, alone
     func testHowLabelsAreGrouped() {
         let long = Self.german
-        func packets(_ texts: [String]) -> [[Int]] { AppleTranslationJoining.packets(for: texts) }
+        func packets(_ texts: [String]) -> [[Int]] { AppleTranslationJoining.packets(for: texts).map(\.positions) }
         XCTAssertEqual(packets([]), [])
         XCTAssertEqual(packets(["Aus"]), [[0]])
         XCTAssertEqual(packets(["Aus", long]), [[0], [1]])
@@ -1246,7 +1246,31 @@ final class AppleTranslationEngineTests: XCTestCase {
         XCTAssertEqual(packets(Array(labels.prefix(12))), [Array(0..<12)])
         XCTAssertEqual(packets(Array(labels.prefix(13))), [Array(0..<7), Array(7..<13)])
         XCTAssertEqual(packets(labels).map(\.count), [9, 8, 8])
-        XCTAssertEqual(AppleTranslationJoining.text(of: [1, 3], in: [long, "Aus", long, "An"]), "Aus | An")
+        XCTAssertEqual(AppleTranslationJoining.Packet(positions: [1, 3]).text(in: [long, "Aus", long, "An"]), "Aus | An")
+    }
+
+    /// A text of fewer than four labels gets the last labels sent before in front, up to four in
+    /// all, and only its own parts of the answer; the first label of a turn goes alone
+    func testFewLabelsTakeTheLabelsSentBeforeAsContext() {
+        let earlier = ["Netzwerk & Internet", "SIM-Karten", "Flugmodus", "Datensparmodus"]
+        let lone = AppleTranslationJoining.packets(for: ["Aus"], after: earlier)
+        XCTAssertEqual(lone, [AppleTranslationJoining.Packet(positions: [0], context: ["SIM-Karten", "Flugmodus", "Datensparmodus"])])
+        XCTAssertEqual(lone[0].text(in: ["Aus"]), "SIM-Karten | Flugmodus | Datensparmodus | Aus")
+        XCTAssertEqual(lone[0].translations(in: "SIM cards | Airplane mode | Data Saver | Off", of: ["Aus"]), ["Off"])
+        XCTAssertNil(lone[0].translations(in: "SIM cards | Airplane mode | Data Saver Off", of: ["Aus"]))
+        // two labels take two; a label of the job is no context of its own; four take none
+        XCTAssertEqual(AppleTranslationJoining.packets(for: ["Aus", Self.german, "Flugmodus"], after: earlier),
+                       [AppleTranslationJoining.Packet(positions: [0, 2], context: ["SIM-Karten", "Datensparmodus"]),
+                        AppleTranslationJoining.Packet(positions: [1])])
+        XCTAssertEqual(AppleTranslationJoining.packets(for: ["Aus", "An", "Ein", "Fertig"], after: earlier),
+                       [AppleTranslationJoining.Packet(positions: [0, 1, 2, 3])])
+        XCTAssertEqual(AppleTranslationJoining.packets(for: ["Aus"]), [AppleTranslationJoining.Packet(positions: [0])])
+        XCTAssertEqual(AppleTranslationJoining.packets(for: [Self.german], after: earlier),
+                       [AppleTranslationJoining.Packet(positions: [0])])
+        // what is kept for the next job: the last three labels, the newest last
+        XCTAssertEqual(AppleTranslationJoining.recentLabels(after: earlier, and: ["Aus", Self.german]),
+                       ["Flugmodus", "Datensparmodus", "Aus"])
+        XCTAssertEqual(AppleTranslationJoining.recentLabels(after: ["Aus"], and: ["Flugmodus", "Aus"]), ["Flugmodus", "Aus"])
     }
 
     /// An answer is split at the separators; it counts only with one part per label, none empty
@@ -1332,6 +1356,41 @@ final class AppleTranslationEngineTests: XCTestCase {
             client.cancel()
             try await waitFor(served)
         }
+    }
+
+    /// A label that comes alone in a turn (the tracker sends a new screen's texts as they appear)
+    /// goes with the labels sent before it; should the answer not fit, it is asked for alone. The
+    /// first label of a new turn has nothing to go with.
+    func testALabelThatComesAloneGoesWithTheLabelsBeforeIt() async throws {
+        let session = FakeSession(Self.toEnglish.merging(["SIM-Karten": "SIM cards", "Flugmodus": "Airplane mode"]) { $1 })
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        macOS.install("de")
+        let engine = engine(answeredBy: macOS)
+        let client = AppleTranslationClient(engine: engine)
+        let first = Task { try await client.translate(["Netzwerk & Internet", "SIM-Karten", "Flugmodus"], into: self.language("en")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let served = Task { await engine.serve(host, prepare: {}, work: { await engine.work(for: host, calling: session.call) }) }
+        let firstAnswer = try await first.value
+        XCTAssertEqual(firstAnswer, ["Network & internet", "SIM cards", "Airplane mode"])
+        let second = try await client.translate(["Aus"], into: language("en"))
+        XCTAssertEqual(second, ["Off"])
+        XCTAssertEqual(session.calls.last, ["Netzwerk & Internet | SIM-Karten | Flugmodus | Aus"])
+        // an answer that does not fit: the label alone, in one more call
+        session.answers["SIM-Karten | Flugmodus | Aus | An"] = "SIM cards | Airplane mode | Off On"
+        let third = try await client.translate(["An"], into: language("en"))
+        XCTAssertEqual(third, ["On"])
+        XCTAssertEqual(Array(session.calls.suffix(2)), [["SIM-Karten | Flugmodus | Aus | An"], ["An"]])
+        client.cancel()
+        try await waitFor(served)
+
+        // a new turn
+        let fresh = FakeSession(Self.toEnglish)
+        let (translations, next, servedNext) = try await translate(["Aus"], on: fresh)
+        XCTAssertEqual(translations, ["Off"])
+        XCTAssertEqual(fresh.calls, [["Aus"]])
+        next.cancel()
+        try await waitFor(servedNext)
     }
 
     /// Translate goes off while the framework works on a joined text whose answer would not fit:
