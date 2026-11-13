@@ -712,6 +712,28 @@ final class TranslationCompositorTests: XCTestCase {
         XCTAssertEqual(fitting.lines.joined(), sentence)
     }
 
+    /// When not even one line fits the block, the one line that is drawn ends with the ellipsis:
+    /// not a line below the picture, and not no line at all.
+    func testALineCutOffAtTheTopAndBottomEndsWithTheEllipsis() throws {
+        let cases: [(text: String, width: Int, height: Int, language: String)] = [
+            ("ข้อความที่ยาวมากเกินไปสำหรับกล่องนี้และจะต้องถูกตัดทอน", 100, 10, "th"),
+            ("مرحبا بالعالم، هذه ترجمة طويلة جدا لا تتسع في هذا المكان الصغير", 100, 8, "ar"),
+            ("A translation that is far too long for this tiny box", 100, 8, "en"),
+            (String(repeating: "Ein langer Satz, der nicht passt. ", count: 12), 300, 6, "de"),
+        ]
+        for item in cases {
+            let label = "\(item.text.prefix(16)) in \(item.width) × \(item.height)"
+            let mask = try XCTUnwrap(BlockTextMask(text: item.text, width: item.width, height: item.height,
+                                                   lineCount: 1, language: item.language), label)
+            XCTAssertFalse(mask.fits, label)
+            XCTAssertEqual(mask.lines.count, 1, "\(label): \(mask.lines)")
+            let line = try XCTUnwrap(mask.lines.first, label)
+            XCTAssertTrue(line.hasSuffix("\u{2026}"), "\(label): \(mask.lines)")
+            XCTAssertTrue(item.text.hasPrefix(line.dropLast()), "\(label): \(mask.lines)")
+            XCTAssertGreaterThan(mask.pixels.filter { $0 > 64 }.count, 10, label)
+        }
+    }
+
     /// The line that ends with an ellipsis is set in the direction of its paragraph, also when
     /// it starts with a word of the other direction: in Arabic it stays at the right with the
     /// ellipsis at its left end, in English at the left with the ellipsis at its right end.

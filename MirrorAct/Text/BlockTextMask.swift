@@ -328,29 +328,34 @@ struct BlockTextMask {
         let below = -(lineHeight + 16)
         var bottom = layout.fitsBox ? below : 0
         var frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: bottom)
+        var lineLimit = Int.max
         if !layout.fitsBox, CFArrayGetCount(CTFrameGetLines(frame)) == 0 {
             // Too long: only the lines that fit as a whole are drawn. Here not even one does;
-            // then rather a line that is cut off than an empty box over the original.
+            // then rather a line that is cut off than an empty box over the original. Only the
+            // first: those below it would lie below the picture, with the ellipsis.
             bottom = below
             frame = textFrame(layout.framesetter, width: CGFloat(width), from: top, to: bottom)
+            lineLimit = 1
         }
         let text = layout.text as NSString
-        var lines = CTFrameGetLines(frame) as? [CTLine] ?? []
+        var lines = Array((CTFrameGetLines(frame) as? [CTLine] ?? []).prefix(lineLimit))
         var texts = lines.map { line -> String in
             let range = CTLineGetStringRange(line)
             return text.substring(with: NSRange(location: range.location, length: range.length))
         }
-        if !layout.fitsBox, let last = lines.last, let ending = endingWithEllipsis(last, layout, width: CGFloat(width)) {
-            // Too long: the last line that fits ends with an ellipsis, so that the text is seen
-            // to go on instead of just stopping in the middle of a sentence
+        if !layout.fitsBox, let last = lines.last {
             var origins = [CGPoint](repeating: .zero, count: lines.count)
-            CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
-            // A line of a paragraph written from the right stays aligned at the right
-            if layout.rightToLeft {
-                origins[lines.count - 1].x = CGFloat(CTLineGetPenOffsetForFlush(ending.line, 1, Double(width)))
+            CTFrameGetLineOrigins(frame, CFRange(location: 0, length: lines.count), &origins)
+            // Too long: the last line drawn ends with an ellipsis, so that the text is seen to
+            // go on instead of just stopping in the middle of a sentence
+            if let ending = endingWithEllipsis(last, layout, width: CGFloat(width)) {
+                // A line of a paragraph written from the right stays aligned at the right
+                if layout.rightToLeft {
+                    origins[lines.count - 1].x = CGFloat(CTLineGetPenOffsetForFlush(ending.line, 1, Double(width)))
+                }
+                lines[lines.count - 1] = ending.line
+                texts[texts.count - 1] = ending.text
             }
-            lines[lines.count - 1] = ending.line
-            texts[texts.count - 1] = ending.text
             for (line, origin) in zip(lines, origins) {
                 // the origins are counted from the corner of the frame's rectangle
                 context.textPosition = CGPoint(x: origin.x, y: origin.y + bottom)
