@@ -48,6 +48,12 @@ final class AppleTranslationEngine: ObservableObject {
     var retryPause: TimeInterval = 60
     /// seconds to wait for languages that macOS is loading
     var loadingLimit: TimeInterval = 1800
+    /// Seconds after the question of macOS is answered from which the user is told what to do
+    /// if the languages were not downloaded. macOS does not tell a download from a question that
+    /// was closed without one, so no wait would be long enough for every download (German and
+    /// English, about 730 MB, took 49 s on a fast line); the notice is worded to hold for both,
+    /// and the user learns within half a minute what to do if nothing comes.
+    var downloadPatience: TimeInterval = 20
     /// seconds between two looks at languages that are on their way
     var loadingCheckInterval: TimeInterval = 2
 
@@ -75,8 +81,11 @@ final class AppleTranslationEngine: ObservableObject {
     /// hosts whose prepareTranslation has not returned yet: macOS shows its question. Giving
     /// nil stops waiting for the call (see `ask`).
     private var questions: [UUID: AppleTranslationFirstAnswer<Result<Void, Error>>] = [:]
-    /// hosts of `loading` whose question was answered: their languages are on their way
+    /// hosts of `loading` whose question was answered: their languages are on their way, or the
+    /// question was closed without downloading them (macOS does not say which)
     private var downloading: Set<UUID> = []
+    /// hosts of `downloading` whose languages are not there after `downloadPatience` seconds
+    private var missing: Set<UUID> = []
     /// the host that asks macOS to load its languages right now, and those that wait for their
     /// turn, oldest first
     private var loadingTurn: UUID?
@@ -539,6 +548,7 @@ final class AppleTranslationEngine: ObservableObject {
         } else {
             loading.remove(host.id)
             downloading.remove(host.id)
+            missing.remove(host.id)
         }
         updateStatuses()
         placeWindow()
@@ -672,22 +682,31 @@ final class AppleTranslationEngine: ObservableObject {
                     }
                     return false
                 }
-                // prepareTranslation also returns while the languages are still on their way
+                // prepareTranslation returns in the same way whether the user downloaded the
+                // languages or closed the question with "Done" without downloading, and macOS
+                // says "supported" during a download as well: whether they come shows only when
+                // they are there. The notices hold in both cases.
                 downloading.insert(host.id)
                 updateStatuses()
                 placeWindow()
                 let start = Self.clock
                 status = await availability.status(host.source, host.target, host.strategy)
                 while status == .supported, !isEnding(host), Self.clock - start < loadingLimit {
+                    if !missing.contains(host.id), Self.clock - start >= downloadPatience {
+                        // so far for a download; the user is told what to do should they not come
+                        Log.info("Translation: the languages for \(host.pair) are not there after "
+                                 + "\(Int(downloadPatience)) s; still looking for them")
+                        missing.insert(host.id)
+                        updateStatuses()
+                    }
                     try? await Task.sleep(nanoseconds: UInt64(loadingCheckInterval * 1_000_000_000))
                     status = await availability.status(host.source, host.target, host.strategy)
                 }
                 if status == .supported, !isEnding(host) {
                     setLoading(false, for: host)
-                    blockedUntil[host.pair] = Self.clock + retryPause
-                    Log.error("Translation: the languages for \(host.pair) are not there after \(Int(loadingLimit)) s")
-                    note("not loaded " + host.pair, String(localized: "Loading \(language) failed"),
-                         to: clients(using: host.pair))
+                    Log.info("Translation: the languages for \(host.pair) are not there after \(Int(loadingLimit)) s")
+                    // most likely they were never downloaded: as if the question had been declined
+                    declinedLoading(for: host)
                     return false
                 }
                 if status == .installed { Log.info("Translation: the languages for \(host.pair) are loaded") }
@@ -726,11 +745,11 @@ final class AppleTranslationEngine: ObservableObject {
         return answer
     }
 
-    /// The user closed the question of macOS or its progress window: not now. Nothing is asked
-    /// again until translating is turned off and on.
+    /// The user closed the question of macOS or its progress window, or the languages did not
+    /// come: not now. Nothing is asked again until translating is turned off and on.
     private func declinedLoading(for host: AppleTranslationHost) {
         declined.insert(host.pair)
-        Log.info("Translation: the languages for \(host.pair) were not loaded (cancelled)")
+        Log.info("Translation: the languages for \(host.pair) were not loaded")
         let language = LanguageMatching.name(of: host.source, in: Self.noticeLocale)
         note("declined " + host.pair,
              String(localized: "\(language) is not loaded yet – turn translating on again to load it"),
@@ -853,8 +872,10 @@ final class AppleTranslationEngine: ObservableObject {
             var status: String?
             if let host = waiting.first(where: { !downloading.contains($0.id) }) {
                 status = askingNotice(for: host)
+            } else if let host = waiting.first(where: { !missing.contains($0.id) }) {
+                status = waitingNotice(for: host)
             } else if let host = waiting.first {
-                status = downloadingNotice(for: host)
+                status = missingNotice(for: host)
             }
             guard status != client.status else { continue }
             client.status = status
@@ -868,10 +889,17 @@ final class AppleTranslationEngine: ObservableObject {
         return String(localized: "macOS asks whether it may download \(sourceName) and \(targetName) – answer its question")
     }
 
-    /// The lasting notice once the user has agreed
-    func downloadingNotice(for host: AppleTranslationHost) -> String {
+    /// The lasting notice once the user has answered: the languages may be downloading, or the
+    /// question may have been closed without downloading them
+    func waitingNotice(for host: AppleTranslationHost) -> String {
         let (sourceName, targetName) = noticeNames(for: host)
-        return String(localized: "Downloading \(sourceName) and \(targetName) for translating …")
+        return String(localized: "Translating starts once \(sourceName) and \(targetName) are on this Mac …")
+    }
+
+    /// The lasting notice when the languages are not there `downloadPatience` seconds after the answer
+    func missingNotice(for host: AppleTranslationHost) -> String {
+        let (sourceName, targetName) = noticeNames(for: host)
+        return String(localized: "\(sourceName) and \(targetName) aren’t on this Mac yet – if they weren’t downloaded, turn translating off and on again to be asked once more")
     }
 
     /// The languages of a pair as macOS names them in its question: with the region where its

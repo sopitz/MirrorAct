@@ -382,7 +382,7 @@ final class AppleTranslationEngineTests: XCTestCase {
             XCTAssertEqual(names.source, entry.source.map { "\(plain.0) (\(place($0)))" } ?? plain.0, label)
             XCTAssertEqual(names.target, entry.target.map { "\(plain.1) (\(place($0)))" } ?? plain.1, label)
             XCTAssertTrue(engine.askingNotice(for: host).contains(names.target), label)
-            XCTAssertTrue(engine.downloadingNotice(for: host).contains(names.source), label)
+            XCTAssertTrue(engine.waitingNotice(for: host).contains(names.source), label)
             client.cancel()
             _ = try await request.value
         }
@@ -785,7 +785,7 @@ final class AppleTranslationEngineTests: XCTestCase {
             try await waitUntil { macOS.preparing == [french.id] }
             if state == .downloading {
                 macOS.finish(french, installing: false)
-                let downloading = engine.downloadingNotice(for: french)
+                let downloading = engine.waitingNotice(for: french)
                 try await waitUntil { statuses.value.last == downloading }
             }
         case .serving:
@@ -833,7 +833,7 @@ final class AppleTranslationEngineTests: XCTestCase {
         try await waitUntil { engine.hosts.count == 1 }
         let host = engine.hosts[0]
         let asking = engine.askingNotice(for: host)
-        let downloading = engine.downloadingNotice(for: host)
+        let downloading = engine.waitingNotice(for: host)
         XCTAssertNotEqual(asking, downloading)
         let served = Task { await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: {}) }
         _ = try await request.value
@@ -885,6 +885,89 @@ final class AppleTranslationEngineTests: XCTestCase {
         try await waitFor(served)
         XCTAssertEqual(statuses.value, [engine.askingNotice(for: host), nil])
         XCTAssertEqual(notices.value.count, 1)
+        client.cancel()
+    }
+
+    /// The user closes the question of macOS with "Done" without downloading: prepareTranslation
+    /// returns as it does after a download, and macOS says "supported" as it does during one. So
+    /// no notice claims a download: first that translating starts once the languages are there,
+    /// after `downloadPatience` what to do if they were not downloaded, while the engine keeps
+    /// looking for them without asking again. After `loadingLimit` the pair counts as declined.
+    func testAQuestionClosedWithoutDownloadingSaysWhatToDo() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        let engine = engine(answeredBy: macOS)
+        engine.loadingCheckInterval = 0.02
+        engine.downloadPatience = 0.3
+        engine.loadingLimit = 1.5
+        let client = AppleTranslationClient(engine: engine)
+        let notices = Box<[String]>([])
+        let statuses = Box<[String?]>([])
+        client.notify = { message in MainActor.assumeIsolated { notices.value.append(message) } }
+        client.notifyStatus = { status in MainActor.assumeIsolated { statuses.value.append(status) } }
+        let request = Task { try await client.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let worked = Box(false)
+        let served = Task {
+            await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: { worked.value = true })
+        }
+        _ = try await request.value
+        try await waitUntil { macOS.preparing.count == 1 }
+        let asking = engine.askingNotice(for: host)
+        let waiting = engine.waitingNotice(for: host)
+        let missing = engine.missingNotice(for: host)
+        XCTAssertEqual(Set([asking, waiting, missing]).count, 3)
+        // "Done": nothing is downloaded
+        macOS.finish(host, installing: false)
+        try await waitUntil { statuses.value.count == 3 }
+        XCTAssertEqual(statuses.value, [asking, waiting, missing])
+        XCTAssertEqual(notices.value, [])
+        // it keeps looking, and asks nothing
+        let looked = macOS.statusAsked.count
+        try await waitUntil { macOS.statusAsked.count > looked + 2 }
+        XCTAssertEqual(macOS.asked, [host.id])
+        try await waitFor(served)
+        XCTAssertFalse(worked.value)
+        XCTAssertEqual(statuses.value, [asking, waiting, missing, nil])
+        XCTAssertEqual(notices.value.count, 1)
+        // not asked for again in this turn of translating
+        let again = try await client.translate([Self.english], into: language("de"))
+        XCTAssertEqual(again, [nil])
+        XCTAssertTrue(engine.hosts.isEmpty)
+        XCTAssertEqual(macOS.asked, [host.id])
+        client.cancel()
+    }
+
+    /// A download that takes longer than `downloadPatience`: the notice says what to do if the
+    /// languages were not downloaded, and goes once they are there; then they translate
+    func testLanguagesThatComeLaterAreStillUsed() async throws {
+        let macOS = FakeMacOS(supported: ["de", "en"])
+        let engine = engine(answeredBy: macOS)
+        engine.loadingCheckInterval = 0.02
+        engine.downloadPatience = 0.3
+        let client = AppleTranslationClient(engine: engine)
+        let notices = Box<[String]>([])
+        let statuses = Box<[String?]>([])
+        client.notify = { message in MainActor.assumeIsolated { notices.value.append(message) } }
+        client.notifyStatus = { status in MainActor.assumeIsolated { statuses.value.append(status) } }
+        let request = Task { try await client.translate([Self.english], into: self.language("de")) }
+        try await waitUntil { engine.hosts.count == 1 }
+        let host = engine.hosts[0]
+        let worked = Box(false)
+        let served = Task {
+            await engine.serve(host, prepare: { try await macOS.prepare(host) }, work: { worked.value = true })
+        }
+        _ = try await request.value
+        try await waitUntil { macOS.preparing.count == 1 }
+        macOS.finish(host, installing: false)
+        try await waitUntil { statuses.value.count == 3 }
+        XCTAssertEqual(statuses.value.last, engine.missingNotice(for: host))
+        macOS.installEverything()
+        try await waitFor(served)
+        XCTAssertTrue(worked.value)
+        XCTAssertEqual(statuses.value, [engine.askingNotice(for: host), engine.waitingNotice(for: host),
+                                        engine.missingNotice(for: host), nil])
+        XCTAssertEqual(notices.value, [])
         client.cancel()
     }
 

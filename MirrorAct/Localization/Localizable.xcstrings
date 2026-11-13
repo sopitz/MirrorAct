@@ -3153,18 +3153,34 @@
         }
       }
     },
-    "Downloading %@ and %@ for translating …" : {
+    "Translating starts once %@ and %@ are on this Mac …" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ und %2$@ werden zum Übersetzen geladen …"
+            "value" : "Das Übersetzen beginnt, sobald %1$@ und %2$@ auf diesem Mac sind …"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Downloading %1$@ and %2$@ for translating …"
+            "value" : "Translating starts once %1$@ and %2$@ are on this Mac …"
+          }
+        }
+      }
+    },
+    "%@ and %@ aren’t on this Mac yet – if they weren’t downloaded, turn translating off and on again to be asked once more" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ und %2$@ sind noch nicht auf diesem Mac – falls sie nicht geladen wurden, das Übersetzen aus- und wieder einschalten, um erneut gefragt zu werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ and %2$@ aren’t on this Mac yet – if they weren’t downloaded, turn translating off and on again to be asked once more"
           }
         }
       }
