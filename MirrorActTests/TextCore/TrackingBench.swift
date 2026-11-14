@@ -73,7 +73,8 @@ import Foundation
 //   allowance (block × display frames, and how often one appeared).
 // - cost: recognition passes and their total area; translation requests; texts drawn (a text is
 //   drawn again whenever the id, the text, the rounded size or the line count of its block
-//   changes: `BlockTextCache`); the time of `advance`.
+//   changes: `BlockTextCache`); the time of `advance`. Reported, not scored: the passes begun on
+//   a picture that had not changed for a second, and the most passes begun on one picture.
 // - contract slips (reported, and a regression test fails on any): `FrameUpdate.recognitionDue`
 //   differs from the property, a wrong `FrameChange` for the first frame, a new size or an
 //   identical picture, movement reported without `.scrolled`, a recognition region outside of
@@ -271,6 +272,12 @@ struct TrackingResult: Codable, Equatable {
     var advanceSameMs = 0.0
     var advanceMaxMs = 0.0
     var passes = 0
+    /// passes started while the picture had not changed for a second or more (reported, not
+    /// scored): a still picture is read a few times at most
+    var restPasses = 0
+    /// the most passes started on one picture, between two frames whose picture differed
+    /// (reported, not scored)
+    var mostPassesOnPicture = 0
     var failedPasses = 0
     /// total area of the recognition requests in frames
     var areaRead = 0.0
@@ -462,6 +469,10 @@ final class TrackingBench {
         var reportedScroll = CGPoint.zero
         var pass: Pass?
         var passesStarted = 0
+        /// tick of the last frame whose picture differed from the one before
+        var changedTick = 0
+        /// passes started since then
+        var passesOnPicture = 0
         var batch: Batch?
         var isReaderAwake = false
         var isTranslatorAwake = false
@@ -576,6 +587,8 @@ final class TrackingBench {
                 if scenario.pictureDiffers(tick, from: last) {
                     link.thumbnail = scenario.thumbnail(at: tick)
                     link.shownTick = tick
+                    link.changedTick = clock
+                    link.passesOnPicture = 0
                     isNewFrame = true
                 } else if !scenario.sendsOnlyChanges {
                     // a cable sends the same picture again
@@ -589,6 +602,7 @@ final class TrackingBench {
             } else {
                 link.thumbnail = scenario.thumbnail(at: tick)
                 link.shownTick = tick
+                link.changedTick = clock
                 isNewFrame = true
             }
         }
@@ -710,6 +724,9 @@ final class TrackingBench {
         let share = Double(region.area) / Double(frame.area)
         link.passesStarted += 1
         tally.passes += 1
+        if clock - link.changedTick >= SimScenario.ticksPerSecond { tally.restPasses += 1 }
+        link.passesOnPicture += 1
+        tally.mostPassesOnPicture = max(tally.mostPassesOnPicture, link.passesOnPicture)
         tally.areaRead += share
         let fails = root.failingPasses.contains(link.passesStarted)
         // (a pass that the bench lets fail has to be made again: its area is not held against the tracker)
@@ -1022,6 +1039,8 @@ final class TrackingBench {
         var frames = 0
         var redraws = 0
         var passes = 0
+        var restPasses = 0
+        var mostPassesOnPicture = 0
         var failedPasses = 0
         var areaRead = 0.0
         var failedArea = 0.0
@@ -1133,6 +1152,8 @@ final class TrackingBench {
             result.frames = frames
             result.redraws = redraws
             result.passes = passes
+            result.restPasses = restPasses
+            result.mostPassesOnPicture = mostPassesOnPicture
             result.failedPasses = failedPasses
             result.areaRead = areaRead
             result.areaBudget = TrackingBench.areaBase + TrackingBench.freshFactor * fresh + failedArea
@@ -1765,6 +1786,8 @@ struct TrackingReport: Codable {
             sum.staleReadings += result.staleReadings
             sum.contractSlips += result.contractSlips
             sum.passes += result.passes
+            sum.restPasses += result.restPasses
+            sum.mostPassesOnPicture = max(sum.mostPassesOnPicture, result.mostPassesOnPicture)
             sum.failedPasses += result.failedPasses
             sum.areaRead += result.areaRead
             sum.areaBudget += result.areaBudget
