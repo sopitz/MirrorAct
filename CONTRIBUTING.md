@@ -69,8 +69,9 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 
 ### Text and Translate
 
-"Text" reads the current frame with `TextRecognizer` and copies `TextLayout.plainText`, which keeps
-everything but the status bar, lines cut off at the top or bottom edge and garbage
+"Text" reads the current frame as the device sent it (`FrameSink.latestSource`, so the device's
+own text also while "Translate" is on) with `TextRecognizer` and copies `TextLayout.plainText`,
+which keeps everything but the status bar, lines cut off at the top or bottom edge and garbage
 (`TextLayout.Purpose.copying`).
 
 While "Translate" is on, `ScreenTranslator` is the `FrameProcessor` of the window's `FrameSink`,
@@ -91,8 +92,9 @@ and every frame passes through it:
    40 s and then every 60 s; the engine of a service waits the same steps for the service as a
    whole (`TranslationWait`), so that neither wait adds to the other.
 4. `TranslationCompositor.prepare` sets the translations with Core Text off the frame thread
-   (`BlockTextMask`), and `compose` draws them into a copy of each frame, which the window,
-   screenshots and recordings show.
+   (`BlockTextMask`, in font sizes of quarter-pixel steps, so that Core Text keeps few fonts), and
+   `compose` draws them into a copy of each frame, which the window, screenshots and recordings
+   show.
 
 Each time "Translate" is turned on, or its settings change, it starts over with the engine
 `TranslationEngines` makes from the settings.
@@ -106,6 +108,22 @@ pure functions only, so that the same code and tests describe what goes to a ser
 between the parts are in frame pixels with the origin at the top left; those of `TextLayout` in 0…1
 of the picture. `TextLayout` keeps a row's title apart from its summary only where the recognizer
 measured `RecognizedLine.tone`; without it that rule does nothing.
+
+Some rules of `OverlayTracker` hold for every case and are easily undone by a change elsewhere. A
+translation is never handed on, nor drawn, across texts with other numbers: a reading whose digits
+differ does not show the old translation while its own is on its way
+(`TextSimilarity.hasOtherNumbers`), and a block of one line whose digits no longer fit the picture
+under it (`numbersFit`, against the median of all its letters) is not drawn until a reading by a
+later pass confirms it (`Block.numbersDifferSince`). A refined bottom edge of a scrolling area is
+checked again on the picture at rest and dropped when the rows beyond it no longer show what they
+showed and the page's ground goes on in them (`dropBottomEdgesThatDoNotHold`); top edges are not
+checked. A block that shows whole and stays while its scrolling area moves under it, such as the
+title of a bar, is not cut at that area's edges (`Block.staysOverArea`). A place where a block may
+be cut off, or where two blocks may be one paragraph, is read again at most `maxRereads` times, and
+a picture that nothing changes is read by at most `maxPassesOnPicture` passes; what is left then
+waits for the next change. The bench has no rows that differ only in their numbers:
+`OverlayTrackerNumbersTests` covers them, `OverlayTrackerEdgeTests` the edges and
+`OverlayTrackerStillPictureTests` the still picture.
 
 ## Test without a device
 
@@ -217,7 +235,11 @@ the longest run, the first), how much of the text at rest and of moving text was
 latency, the alignment error and jitter, flickers and half-read translations, and what it cost
 (recognition passes, area read, translation requests and texts drawn, each against its budget);
 then the mean score per scenario and overall. How the score is made is described at the top of
-`TrackingBench.swift`: a misplaced translation weighs far more than a missing one.
+`TrackingBench.swift`: a misplaced translation weighs far more than a missing one. The JSON report
+also counts, without scoring them, the passes begun on a picture that had not changed for a second
+or more (`restPasses`) and the most passes begun on one picture (`mostPassesOnPicture`): a change
+should keep both low, and one that brings the latter near `maxPassesOnPicture` runs into that
+bound.
 
 A change to the tracker comes with a unit test of the case it settles (in the
 `OverlayTracker*Tests` of `MirrorActTests/TextCore`), passes all regression tests of the bench in a
@@ -248,8 +270,10 @@ DistributedNotificationCenter.default().postNotificationName(
 ```
 
 For the text on the screen there are `cmd=translate on=1|0`, `cmd=copytext`, `cmd=translator` (logs
-the translator's state), `cmd=dump path=<folder>` (one frame as sent and as shown, and what the
-translator draws into it), `cmd=textsettings path=<file.png>` and `cmd=setting key=… value=…`
+the translator's state), `cmd=dump path=<folder>` (one frame as sent and as shown, and in
+`placement.json` what the translator draws into it, every paragraph the tracker knows with whether
+it shows, is lost or doubtful, and under `reading` what it still has to read and when),
+`cmd=textsettings path=<file.png>` and `cmd=setting key=… value=…`
 (changes a setting while the app runs and puts the stored value back afterwards). With "Translate"
 on, a debug build falls behind the stream, because the tracker is many times slower without
 optimization; to try the feature this way, build with

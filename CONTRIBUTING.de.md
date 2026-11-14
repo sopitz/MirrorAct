@@ -69,9 +69,10 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 
 ### Text und Übersetzen
 
-«Text» liest das aktuelle Bild mit `TextRecognizer` und kopiert `TextLayout.plainText`, das alles
-behält ausser der Statusleiste, Zeilen, die der obere oder untere Rand abschneidet, und
-Unlesbarem (`TextLayout.Purpose.copying`).
+«Text» liest das aktuelle Bild, wie das Gerät es gesendet hat (`FrameSink.latestSource`, also den
+eigenen Text des Geräts auch, wenn «Übersetzen» an ist), mit `TextRecognizer` und kopiert
+`TextLayout.plainText`, das alles behält ausser der Statusleiste, Zeilen, die der obere oder untere
+Rand abschneidet, und Unlesbarem (`TextLayout.Purpose.copying`).
 
 Solange «Übersetzen» an ist, ist `ScreenTranslator` der `FrameProcessor` im `FrameSink` des
 Fensters, und jedes Bild läuft durch ihn:
@@ -92,7 +93,8 @@ Fensters, und jedes Bild läuft durch ihn:
    wartet mit denselben Schritten auf den Dienst als Ganzes (`TranslationWait`), damit sich die
    beiden Wartezeiten nicht addieren.
 4. `TranslationCompositor.prepare` setzt die Übersetzungen mit Core Text ausserhalb des Threads der
-   Bilder (`BlockTextMask`), und `compose` zeichnet sie in eine Kopie jedes Bildes, die Fenster,
+   Bilder (`BlockTextMask`, in Schriftgrössen in Schritten von einem Viertelpixel, damit Core Text
+   wenige Schriften behält), und `compose` zeichnet sie in eine Kopie jedes Bildes, die Fenster,
    Screenshots und Aufnahmen zeigen.
 
 Jedes Mal, wenn «Übersetzen» eingeschaltet wird oder sich seine Einstellungen ändern, beginnt es
@@ -108,6 +110,24 @@ derselbe Code und dieselben Tests beschreiben, was an einen Dienst geht. Rechtec
 Teilen sind in Pixeln des Bildes, Ursprung oben links; die von `TextLayout` in 0…1 des Bildes.
 `TextLayout` hält den Titel eines Eintrags nur dann von seiner Zusammenfassung getrennt, wenn die
 Texterkennung `RecognizedLine.tone` gemessen hat; ohne das bewirkt diese Regel nichts.
+
+Einige Regeln von `OverlayTracker` gelten für jeden Fall und gehen durch eine Änderung an anderer
+Stelle leicht verloren. Eine Übersetzung wird nie über Texte mit anderen Zahlen hinweg weitergegeben
+oder gezeichnet: Eine Lesung mit anderen Ziffern zeigt nicht die alte Übersetzung, solange ihre
+eigene unterwegs ist (`TextSimilarity.hasOtherNumbers`), und ein Block aus einer Zeile, dessen
+Ziffern nicht mehr zum Bild darunter passen (`numbersFit`, gemessen am Median aller seiner Zeichen),
+wird nicht gezeichnet, bis eine Lesung eines späteren Durchgangs ihn bestätigt
+(`Block.numbersDifferSince`). Eine genau bekannte untere Kante eines Scrollbereichs wird auf dem
+ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr zeigen, was
+sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt (`dropBottomEdgesThatDoNotHold`);
+obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen ist und stehen bleibt, während sich
+sein Scrollbereich unter ihm bewegt, etwa der Titel einer Leiste, wird nicht an den Kanten dieses
+Bereichs abgeschnitten (`Block.staysOverArea`). Eine Stelle, an der ein Block abgeschnitten sein
+kann oder zwei Blöcke ein Absatz sein können, wird höchstens `maxRereads`-mal erneut gelesen, und
+ein Bild, an dem sich nichts ändert, von höchstens `maxPassesOnPicture` Durchgängen; was dann noch
+übrig ist, wartet auf die nächste Änderung. Der Prüfstand hat keine Zeilen, die sich nur in ihren
+Zahlen unterscheiden: Diese deckt `OverlayTrackerNumbersTests` ab, die Kanten
+`OverlayTrackerEdgeTests` und das ruhende Bild `OverlayTrackerStillPictureTests`.
 
 ## Ohne Gerät testen
 
@@ -227,7 +247,12 @@ erste), wie viel des ruhenden und des bewegten Textes abgedeckt war, die Latenz,
 Zittern, Flackern und halb gelesene Übersetzungen und was es gekostet hat (Lesedurchgänge, gelesene
 Fläche, Übersetzungsanfragen und gezeichnete Texte, jeweils gegen ihr Budget); danach die
 mittlere Punktzahl pro Szenario und insgesamt. Wie die Punktzahl entsteht, steht oben in
-`TrackingBench.swift`: Eine falsch platzierte Übersetzung wiegt weit mehr als eine fehlende.
+`TrackingBench.swift`: Eine falsch platzierte Übersetzung wiegt weit mehr als eine fehlende. Der
+JSON-Bericht zählt ausserdem, ohne sie zu bewerten, die Durchgänge, die auf einem Bild begonnen
+wurden, das sich seit einer Sekunde oder länger nicht geändert hatte (`restPasses`), und die
+meisten Durchgänge, die auf einem Bild begonnen wurden (`mostPassesOnPicture`): Eine Änderung
+sollte beide niedrig halten, und eine, die den zweiten Wert in die Nähe von `maxPassesOnPicture`
+bringt, stösst an diese Grenze.
 
 Eine Änderung am Tracker kommt mit einem Unit-Test des Falls, den sie löst (in den
 `OverlayTracker*Tests` von `MirrorActTests/TextCore`), besteht alle Regressionstests des Prüfstands
@@ -260,7 +285,9 @@ DistributedNotificationCenter.default().postNotificationName(
 
 Für den Text auf dem Bildschirm gibt es `cmd=translate on=1|0`, `cmd=copytext`, `cmd=translator`
 (schreibt den Zustand des Übersetzens ins Log), `cmd=dump path=<ordner>` (ein Bild, wie gesendet
-und wie gezeigt, und was der Übersetzer hineinzeichnet), `cmd=textsettings path=<datei.png>` und
+und wie gezeigt, und in `placement.json`, was der Übersetzer hineinzeichnet, welche Absätze der
+Tracker kennt und ob jeder zu sehen, verloren oder zweifelhaft ist, und unter `reading`, was er
+noch wann lesen muss), `cmd=textsettings path=<datei.png>` und
 `cmd=setting key=… value=…` (ändert eine Einstellung, während die App läuft, und stellt den
 gespeicherten Wert danach wieder her). Mit eingeschaltetem «Übersetzen» kommt ein Debug-Build dem
 Videostrom nicht nach, weil das Nachführen ohne Optimierung um ein Vielfaches langsamer ist; um die
