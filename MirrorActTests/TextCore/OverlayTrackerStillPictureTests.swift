@@ -244,4 +244,83 @@ final class OverlayTrackerStillPictureTests: XCTestCase {
         XCTAssertEqual(tracker.blocks.map(\.translation), ["T Netzwerk & Internet"])
         XCTAssertNil(tracker.recognitionDue)
     }
+
+    /// The screen of a page under a bar with its title slides in from the right (the viewer
+    /// shows the page again), so the movement covers the bar as well: the title, read once the
+    /// screen rests, lies in the scrolling area of that movement. Then the page scrolls up under
+    /// the bar: its movement joins that area, whose top edge is found where the bar ends, and the
+    /// title lay above it. It stayed where it was, translated, and was cut off by that edge for
+    /// good: not drawn at all, while the page around it was translated (as on the phone, after a
+    /// swipe on a page shown again while Translate was on). A block that shows whole and stays
+    /// where it is while its area moves, outside of that area, lies over the content, and the
+    /// area's edge does not cut it off.
+    func testTheTitleOfABarStaysDrawnAfterTheScreenSlidInAndThePageScrolls() {
+        let screen = SyntheticScreen(seed: 5)
+        let title = CGRect(x: 150, y: 20, width: 100, height: 20)
+        let tracker = OverlayTracker()
+        var time = 0.0, seed: UInt64 = 1
+        var pending: (request: RecognitionRequest, blocks: [RecognizedBlock], at: TimeInterval)?
+        var titleDrawn = 0, frames = 0
+        /// what a pass reads of the screen moved sideways by `shift` and scrolled by `offset`
+        func read(_ region: CGRect, shift: Int, offset: Int) -> [RecognizedBlock] {
+            var blocks: [RecognizedBlock] = []
+            let shown = title.offsetBy(dx: Double(shift), dy: 0)
+            if region.contains(shown) { blocks.append(RecognizedBlock(text: "Titel", rect: shown)) }
+            for index in 0..<50 {
+                var block = SyntheticScreen.block(index, offset: offset, text: "Zeile \(index)")
+                block.rect = block.rect.offsetBy(dx: Double(shift), dy: 0)
+                guard block.rect.minY >= Double(SyntheticScreen.topBar), block.rect.maxY <= Double(SyntheticScreen.bottomBar),
+                      region.contains(block.rect) else { continue }
+                blocks.append(block)
+            }
+            return blocks
+        }
+        func frame(shift: Int, offset: Int, counting: Bool) {
+            time += 1.0 / 30
+            seed += 1
+            var image = screen.thumbnail(offset: offset)
+            if shift > 0 {
+                // (moved right by `shift` frame pixels: what comes in on the left is the bar's grey)
+                let moved = shift / SyntheticScreen.scale
+                var pixels = [UInt8](repeating: 225, count: image.pixels.count)
+                for y in 0..<image.height {
+                    for x in moved..<image.width {
+                        pixels[y * image.width + x] = image.pixels[y * image.width + x - moved]
+                    }
+                }
+                image.pixels = pixels
+            }
+            let placed = tracker.advance(SyntheticPage.noisy(image, amount: 2, seed: seed), scale: SyntheticScreen.scale,
+                                         time: time).placed
+            if counting {
+                frames += 1
+                if placed.contains(where: { $0.text == "T Titel" }) { titleDrawn += 1 }
+            }
+            if let job = pending, time >= job.at {
+                tracker.finishRecognition(job.request, blocks: job.blocks, time: time)
+                pending = nil
+            }
+            if pending == nil, let due = tracker.recognitionDue, due <= time,
+               let request = tracker.beginRecognition(time: time) {
+                pending = (request, read(request.region, shift: shift, offset: offset), time + 0.1)
+            }
+            for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                tracker.setTranslation("T " + text, for: text)
+            }
+        }
+        for shift in stride(from: 200, through: 0, by: -20) {
+            frame(shift: shift, offset: 500, counting: false)
+        }
+        for _ in 0..<45 {
+            frame(shift: 0, offset: 500, counting: false)
+        }
+        XCTAssertTrue(tracker.blocks.contains { $0.text == "Titel" && $0.translation == "T Titel" })
+        for step in 1...10 {
+            frame(shift: 0, offset: 500 + 6 * step, counting: true)
+        }
+        for _ in 0..<60 {
+            frame(shift: 0, offset: 560, counting: true)
+        }
+        XCTAssertEqual(titleDrawn, frames, "the title drawn in \(titleDrawn) of \(frames) frames")
+    }
 }

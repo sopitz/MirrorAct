@@ -460,6 +460,11 @@ final class OverlayTracker {
         /// is found (`moveBlocks`, `makeBlock`); its line is read again once everything over it
         /// rests (`askToReadLine`).
         var numbersDifferSince: TimeInterval?
+        /// It showed whole and stayed where it was while its scrolling area moved, outside of that
+        /// area (`moveBlocks`): it lies over the content there (the title of a bar, a header that
+        /// sticks), and the area's edge does not cut it off (`placed`, `visibleRect`). That ends
+        /// once it no longer shows whole.
+        var staysOverArea = false
     }
 
     /// A part of the screen whose content was seen to move as one (the view of a page between
@@ -1187,6 +1192,18 @@ final class OverlayTracker {
         for index in tracked.indices {
             var block = tracked[index]
             let rect = thumbnailRect(of: block)
+            // A block that shows whole and stays where it is while its scrolling area moves, and
+            // lies outside of that area, lies over the content (`Block.staysOverArea`). It was
+            // taken for a part of the area from a movement that carried it along (a screen that
+            // slid in sideways with its bar, a header before it stuck), and the area's edge,
+            // found where it ends, would cut it off for as long as it stays (the title of the bar
+            // over a page that scrolls). A block of the area that goes under a bar is cut off on
+            // its way there: it does not show whole.
+            if block.areaID >= 0, motionIndex(ofArea: block.areaID) != nil, !isActive(under: rect),
+               let area = scrollArea(id: block.areaID), !area.rect.contains(x: rect.midX, y: rect.midY),
+               stillShows(block, in: current) {
+                tracked[index].staysOverArea = true
+            }
             guard isActive(under: rect) || block.seen == nil else { continue }
             let own = motionIndex(ofArea: block.areaID)
             var found = false
@@ -1316,6 +1333,7 @@ final class OverlayTracker {
                 block.seen = nil
                 block.lostSince = block.lostSince ?? time
             }
+            if block.seen != block.inner { block.staysOverArea = false }
             tracked[index] = block
         }
         // A block that could not be found for `lostLifetime` is forgotten. Where its place still
@@ -1598,7 +1616,9 @@ final class OverlayTracker {
                 visible = visible.intersection(CGRect(x: block.x + Double(seen.x), y: block.y + Double(seen.y),
                                                       width: Double(seen.width), height: Double(seen.height)))
             }
-            if let area = scrollArea(id: block.areaID) { visible = OverlayTracker.cut(visible, toViewOf: area) }
+            if !block.staysOverArea, let area = scrollArea(id: block.areaID) {
+                visible = OverlayTracker.cut(visible, toViewOf: area)
+            }
             visible = visible.intersection(bounds)
             guard !visible.isNull, let clear = avoidingOverlays(visible),
                   // (what an overlay leaves of it must be a good part of it)
@@ -2146,7 +2166,9 @@ final class OverlayTracker {
             visible = visible.intersection(CGRect(x: block.x + Double(seen.x), y: block.y + Double(seen.y),
                                                   width: Double(seen.width), height: Double(seen.height)))
         }
-        if let area = scrollArea(id: block.areaID) { visible = OverlayTracker.cut(visible, toViewOf: area) }
+        if !block.staysOverArea, let area = scrollArea(id: block.areaID) {
+            visible = OverlayTracker.cut(visible, toViewOf: area)
+        }
         visible = visible.intersection(CGRect(x: 0, y: 0, width: previous.width, height: previous.height))
         guard !visible.isNull, visible.width > 0, visible.height > 0 else { return nil }
         return visible
