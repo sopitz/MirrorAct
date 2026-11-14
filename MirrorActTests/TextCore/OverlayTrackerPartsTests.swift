@@ -524,6 +524,24 @@ final class ReadingPlanTests: XCTestCase {
                        accuracy: 1e-9)
     }
 
+    /// A small change in a known line (a bar title, the line of a field) is read with that whole
+    /// line, but the line does not make it the largest due area: text that came into view at the
+    /// same time is read first, and the change with its line by the next pass
+    func testAChangeWithItsLineDoesNotGoBeforeTextThatCameIntoView() throws {
+        let plan = ReadingPlan(configuration: configuration)
+        let line = CGRect(x: 0, y: 0, width: 200, height: 40)
+        var change = UnreadArea(rect: CGRect(x: 150, y: 10, width: 20, height: 10), kind: .changed, since: 4.8)
+        change.readWith = line
+        plan.add(change)
+        plan.add(UnreadArea(rect: CGRect(x: 0, y: 340, width: 200, height: 30), kind: .strip, since: 5))
+        let first = try XCTUnwrap(plan.takeRegion(at: 5, lastMotion: 5, bounds: bounds, isFullyVisible: { _ in true }))
+        XCTAssertGreaterThanOrEqual(first.minY, 340 - configuration.readMargin - 1e-9, "the text that came into view")
+        XCTAssertEqual(plan.inFlight.map(\.kind), [.strip])
+        plan.finishPass(succeeded: true)
+        let second = try XCTUnwrap(plan.takeRegion(at: 5.3, lastMotion: 5, bounds: bounds, isFullyVisible: { _ in true }))
+        XCTAssertTrue(second.contains(line), "the change with its whole line")
+    }
+
     /// A place to read again as a whole is not cut into slivers by a pass that reads a part of it
     func testRereadIsTakenWholeOrLeftWhole() throws {
         let plan = ReadingPlan(configuration: configuration)
@@ -1086,7 +1104,7 @@ extension OverlayTrackerFollowingTests {
     /// title, unchanged, keeps its translation.
     func testAPassThatBeganBeforeATitleWasReplacedDoesNotBringItsTranslationBack() {
         let screen = SyntheticScreen(seed: 9)
-        let badgeAt = 2.0, replaceAt = 2.5, duration = 0.3, end = 6.0
+        let badgeAt = 2.0, replaceAt = 2.3, duration = 0.3, end = 6.0
         for replaced in [false, true] {
             let tracker = OverlayTracker()
             var running: (request: RecognitionRequest, start: Double, replacedAtStart: Bool)?

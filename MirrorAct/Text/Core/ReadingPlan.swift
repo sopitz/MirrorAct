@@ -40,6 +40,10 @@ struct UnreadArea: Equatable {
     /// that area to rest, else for the motion near it (`ReadingPlan.RestClock`);
     /// `everythingOver`: it waits for every scrolling area it overlaps or that lies near it
     var areaID = -1
+    /// For a change: the known line it lies in or at the end of, which a pass reads whole with
+    /// it (`OverlayTracker.addChangedAreas`); it neither cuts other changes nor becomes due by
+    /// itself
+    var readWith: CGRect?
 
     /// What was read while the picture moved fast, or not found again while it moved
     /// (`Kind.confirm`), waits for every scrolling area it overlaps, or that lies within
@@ -118,6 +122,8 @@ final class ReadingPlan {
         result.since = first.kind == .strip || first.kind == .reread || first.kind == .rest
             ? min(first.since, second.since) : max(first.since, second.since)
         result.attempts = max(first.attempts, second.attempts)
+        // (changes are carved, not merged, in `add`; two of them become one only in `limitCount`)
+        if let other = second.readWith { result.readWith = first.readWith.map { $0.union(other) } ?? other }
         // (a place outside of every area joined with one in an area waits for that area; one in
         // two areas waits for the picture as a whole)
         if first.areaID == UnreadArea.everythingOver || second.areaID == UnreadArea.everythingOver {
@@ -182,6 +188,7 @@ final class ReadingPlan {
             guard !inside.isNull, inside.width >= 1, inside.height >= 1 else { continue }
             var copy = area
             copy.rect = inside
+            if let line = area.readWith?.intersection(bounds) { copy.readWith = line.isNull ? nil : line }
             result.append(copy)
         }
         return result
@@ -204,6 +211,7 @@ final class ReadingPlan {
                     if !shifted.isNull, shifted.width >= 1, shifted.height >= 1 {
                         var copy = area
                         copy.rect = shifted
+                        copy.readWith = area.readWith?.offsetBy(dx: shifts[index].dx, dy: shifts[index].dy)
                         result.append(copy)
                     }
                     rest += ReadingPlan.subtract(region, from: piece)
@@ -301,9 +309,12 @@ final class ReadingPlan {
     }
 
     /// The region the next pass reads (thumbnail pixels, inside `bounds`): the largest area
-    /// that is due, with the other due areas that lie close to it, and a margin all around so
-    /// that text at its edges can be read completely. The areas it covers are in flight then.
-    /// nil when nothing is due.
+    /// that is due (by its own rectangle), with the other due areas that lie close to it, and
+    /// a margin all around so that text at its edges can be read completely; a change brings
+    /// the line it is read with (`UnreadArea.readWith`) into the region, but that line does not
+    /// make it larger when the first area is chosen, so a small change in a known line does not
+    /// go before text that came into view. The areas it covers are in flight then. nil when
+    /// nothing is due.
     func takeRegion(at time: TimeInterval, lastMotion: TimeInterval, bounds: CGRect,
                     isFullyVisible: (CGRect) -> Bool, areaMotion: RestClock? = nil) -> CGRect? {
         var dueAreas: [UnreadArea] = []
@@ -314,12 +325,13 @@ final class ReadingPlan {
             }
         }
         guard !dueAreas.isEmpty else { return nil }
+        func extent(_ area: UnreadArea) -> CGRect { area.readWith.map { area.rect.union($0) } ?? area.rect }
         dueAreas.sort { $0.rect.width * $0.rect.height > $1.rect.width * $1.rect.height }
-        var region = dueAreas[0].rect
+        var region = extent(dueAreas[0])
         for area in dueAreas.dropFirst() {
-            let union = region.union(area.rect)
+            let rect = extent(area), union = region.union(rect)
             if Double(union.width * union.height) <= configuration.regionSlack
-                * Double(region.width * region.height + area.rect.width * area.rect.height) {
+                * Double(region.width * region.height + rect.width * rect.height) {
                 region = union
             }
         }

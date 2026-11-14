@@ -2906,8 +2906,23 @@ final class OverlayTracker {
             if tiles < configuration.minChangedTilesWhileMoving, movingArea(atX: center.x, y: center.y) != nil {
                 continue
             }
-            plan.add(UnreadArea(rect: CGRect(x: box.x, y: box.y, width: box.width, height: box.height), kind: .changed,
-                                since: time))
+            var area = UnreadArea(rect: CGRect(x: box.x, y: box.y, width: box.width, height: box.height), kind: .changed,
+                                  since: time)
+            // (a change in a known line of its own, or at its end, about as high as that line, on
+            // a still page – nothing moves under it and nothing near it moved for `restDelay` – is
+            // read with the whole line: read with only `readMargin` around the change, a long line
+            // is cut, and a line read cut is read again, a little farther each time: a word typed
+            // at the end of a field was translated after 1.5 s, by the fifth pass)
+            let still = movingArea(atX: center.x, y: center.y) == nil
+                && time - lastMoved(area: -1, around: area.rect) >= configuration.restDelay
+            for block in tracked where still && block.lineCount == 1 && block.seen != nil {
+                let line = thumbnailRect(of: block), change = area.rect
+                let rows = min(change.maxY, line.maxY) - max(change.minY, line.minY)
+                guard rows * 2 >= line.height, change.height <= 2 * line.height + Double(configuration.tileSize),
+                      change.minX <= line.maxX + line.height, change.maxX >= line.minX - line.height else { continue }
+                area.readWith = area.readWith.map { $0.union(line) } ?? line
+            }
+            plan.add(area)
         }
     }
 
