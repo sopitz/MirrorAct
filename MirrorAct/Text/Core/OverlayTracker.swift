@@ -88,7 +88,8 @@ final class OverlayTracker {
         /// in it, a keyboard)
         var maxMotions = 3
         /// a movement must explain at least this many tiles; another one after the first is looked
-        /// for only in a group of at least `minSecondMotionTiles` changed tiles that touch
+        /// for only in a group of at least `minSecondMotionTiles` changed tiles that touch, and a
+        /// movement of more than a pixel in what is left of a picture found at rest must move as many
         var minMotionTiles = 6
         var minSecondMotionTiles = 16
         /// … at least this share of the tiles it can be checked on (the others may be damaged)

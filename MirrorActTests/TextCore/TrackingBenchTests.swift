@@ -1066,6 +1066,19 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.score, 75)
     }
 
+    /// Seed 27 of alikeRows: the list glided by about a row a frame and stopped. In the first frame
+    /// of rest the link repaired the picture; standing still explained it best, but the fit on
+    /// every other row put it a fraction of a pixel off, and the movement of the frame before, a
+    /// row on, was kept. Every translation stood on the next row for 126 frames.
+    func testAlikeRowsSeed27() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("alikeRows", seed: 27)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
+        XCTAssertGreaterThanOrEqual(result.score, 75)
+    }
+
     /// Seed 13 of largeTitle: the label to go back, misread once while the bar has no title, stays
     /// where it is when the titled bar takes over. Both bars show it with the same misreading;
     /// with one of their own each, its translation counted as drawn over text that is not on the

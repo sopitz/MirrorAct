@@ -527,6 +527,8 @@ final class MotionEstimator {
     }
 
     private func findMotions(_ previous: LumaImage, _ current: LumaImage, priors: [FrameMotion]) {
+        // nothing moved, found in this frame already
+        var rests = false
         for _ in 0..<configuration.maxMotions {
             residual.removeAll(keepingCapacity: true)
             if motions.isEmpty {
@@ -612,23 +614,34 @@ final class MotionEstimator {
                    let motion = accepted(prior, share: configuration.minMatchedShare, previous, current) {
                     found = motion
                 }
-                // A movement of more than a pixel where a step of less than a pixel did not hold up
-                // (`turnedDown`), measured on every other row only (`squaredDifference`): over rows
-                // that look alike at an even pitch that fit can miss by a few tenths of a pixel,
-                // and a movement of a row or a few explains such a picture almost as well. A step
-                // of less than a pixel that holds up measured on every row (a creep of half a pixel
-                // a frame at the end of a flick) is taken instead.
-                if motions.isEmpty, let motion = found, abs(motion.dx) > 1 || abs(motion.dy) > 1,
-                   let near = turnedDown.lazy.compactMap({
-                       self.accepted($0, share: self.configuration.minMatchedShare, everyRow: true, previous, current)
-                   }).first {
-                    found = near
+                // A movement of more than a pixel where no movement, or a step of less than a pixel,
+                // did not hold up, measured on every other row only (`squaredDifference`): over rows
+                // that look alike at an even pitch that fit can miss by a few tenths of a pixel, and
+                // a movement of a row or a few explains such a picture almost as well. Measured on
+                // every row, standing still that comes out as no movement at all (the codec repairs
+                // a picture that came to rest after a glide of about a row a frame, and the
+                // movement of the frame before explained it nearly as well), or else a step of less
+                // than a pixel that holds up (`turnedDown`: a creep of half a pixel a frame at the
+                // end of a flick), is taken instead. (A list that starts from rest by exactly a row
+                // a frame cannot be told from rest in its first frame.)
+                if motions.isEmpty, let motion = found, abs(motion.dx) > 1 || abs(motion.dy) > 1 {
+                    if Double(still.matched) >= configuration.priorShortcutShare * Double(still.valid),
+                       let rest = accepted(still, share: configuration.priorShortcutShare, everyRow: true, previous,
+                                           current),
+                       rest.dx == 0, rest.dy == 0 {
+                        found = rest
+                    } else if let near = turnedDown.lazy.compactMap({
+                        self.accepted($0, share: self.configuration.minMatchedShare, everyRow: true, previous, current)
+                    }).first {
+                        found = near
+                    }
                 }
             }
             guard let (dx, dy) = found else { return }
             if dx == 0, dy == 0 {
                 // nothing moved: what it explains is damage that is being repaired
                 guard labelStill(previous, current) >= configuration.minMotionTiles else { return }
+                rests = true
                 continue
             }
             let index = motions.count
@@ -638,9 +651,13 @@ final class MotionEstimator {
                 movedBox = movedBox.union(tileRect(tile))
             }
             // (a part that moves is more than a line of tiles: one row of letters may fit anywhere;
-            // a second one is most of what shows where it is, not a few tiles strewn over another)
+            // a second one is most of what shows where it is, not a few tiles strewn over another;
+            // a movement of more than a pixel in what is left of a picture that came to rest is as
+            // many tiles as another moving part is looked for in: a few tiles the codec repairs
+            // there may fit a row that looks alike a row away)
             guard moved >= configuration.minMotionTiles, movedBox.width > tileSize, movedBox.height > tileSize,
-                  index == 0 || Double(moved) >= configuration.minMotionDensity * Double(texturedTiles(in: movedBox))
+                  index == 0 || Double(moved) >= configuration.minMotionDensity * Double(texturedTiles(in: movedBox)),
+                  !rests || abs(dx) <= 1 && abs(dy) <= 1 || moved >= configuration.minSecondMotionTiles
             else {
                 // (it explains too little: undo)
                 for tile in kinds.indices where motionIndex[tile] == Int8(index) {

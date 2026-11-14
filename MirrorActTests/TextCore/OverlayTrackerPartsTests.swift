@@ -339,6 +339,73 @@ final class MotionEstimatorTests: XCTestCase {
             }
         }
     }
+
+    /// A list whose rows look alike glides by about a row a frame and stops. In the first frame of
+    /// rest the link repairs the picture it blurred while it moved: standing still explains every
+    /// tile but a fit of it on every other row came out a tenth of a pixel off (the edges of all
+    /// rows lie on rows of the same parity), so it was not taken as rest; the movement of the frame
+    /// before explains the picture almost as well, a row away, and kept winning. Measured on every
+    /// row, standing still is no movement at all, and nothing moves.
+    func testRowsThatLookAlikeComeToRestWhileTheLinkRepairsThePicture() {
+        let width = 400, height = 800, period = 92
+        var page = SyntheticPage.page(width: width, height: 3000, seed: 51, period: period)
+        let other = SyntheticPage.page(width: width, height: 3000, seed: 52, lineHeight: 24, lineGap: 56)
+        // every row the same but for its right end
+        for y in 0..<3000 {
+            for x in 280..<width {
+                page[y * width + x] = other[y * width + x]
+            }
+        }
+        func frame(_ top: Int, noise: UInt64) -> LumaImage {
+            SyntheticPage.noisy(SyntheticPage.thumbnail(page, pageWidth: width, left: 0, top: top, width: width,
+                                                        height: height, scale: 2), amount: 2, seed: noise)
+        }
+        for speed in [period - 4, period - 2, period + 2] {
+            let estimator = MotionEstimator(configuration: configuration)
+            let tops = [300, 300 + speed, 300 + 2 * speed, 300 + 3 * speed]
+            var previous = frame(tops[0], noise: 1)
+            var priors: [FrameMotion] = []
+            for (index, top) in tops.dropFirst().enumerated() {
+                // (blurred where it moves fast)
+                let current = MotionEstimatorTests.softened(frame(top, noise: UInt64(index + 2)), share: 60,
+                                                            seed: UInt64(index + 10))
+                XCTAssertTrue(estimator.analyze(previous: previous, current: current, priors: priors))
+                XCTAssertEqual(estimator.motions.first?.dy ?? 0, -Double(speed) / 2, accuracy: 0.5, "speed \(speed)")
+                priors = estimator.motions
+                previous = current
+            }
+            // at rest: the same place, repaired
+            _ = estimator.analyze(previous: previous, current: frame(tops[3], noise: 9), priors: priors)
+            XCTAssertTrue(estimator.motions.allSatisfy { abs($0.dx) < 1 && abs($0.dy) < 1 },
+                          "speed \(speed): at rest, not a row on: \(estimator.motions.map(\.dy))")
+        }
+    }
+
+    /// `share` percent of the blocks of 8 × 8 pixels blurred, the way a video link loses detail in
+    /// a fast movement (deterministic)
+    private static func softened(_ image: LumaImage, share: Int, seed: UInt64) -> LumaImage {
+        var copy = image
+        var state = seed &* 0x9E37_79B9_7F4A_7C15 | 1
+        func at(_ x: Int, _ y: Int) -> Int {
+            Int(image[min(image.width - 1, max(0, x)), min(image.height - 1, max(0, y))])
+        }
+        for top in stride(from: 0, to: image.height, by: 8) {
+            for left in stride(from: 0, to: image.width, by: 8) {
+                state ^= state << 13
+                state ^= state >> 7
+                state ^= state << 17
+                guard Int(state % 100) < share else { continue }
+                for y in top..<min(image.height, top + 8) {
+                    for x in left..<min(image.width, left + 8) {
+                        let near = (at(x - 1, y) + at(x + 1, y) + at(x, y - 1) + at(x, y + 1)) / 4
+                        let far = (at(x - 2, y) + at(x + 2, y) + at(x, y - 2) + at(x, y + 2)) / 4
+                        copy[x, y] = UInt8((4 * at(x, y) + 3 * (2 * near + at(x, y) + far)) / 16)
+                    }
+                }
+            }
+        }
+        return copy
+    }
 }
 
 final class ReadingPlanTests: XCTestCase {
