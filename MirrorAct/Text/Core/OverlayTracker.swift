@@ -233,6 +233,9 @@ final class OverlayTracker {
         /// a movement that carries this many blocks that showed whole, and finds none of them, has
         /// replaced the picture where it lies (`moveBlocks`)
         var replacedBlocks = 3
+        /// a scrolling area that no movement reaches is forgotten when at least this share of its
+        /// tiles that show something changed (`updateScrollAreas`): its picture was replaced
+        var replacedShare = 0.75
         /// a block read again at nearly the same place is the same block when they share this
         /// share of the larger one's area
         var sameBlockOverlap = 0.6
@@ -1064,23 +1067,36 @@ final class OverlayTracker {
 
     /// Every movement belongs to the scrolling area it overlaps most (the smaller one of two that
     /// it overlaps as much), or to a new one; areas that changed for the most part (another
-    /// screen) are forgotten. A movement joins an area when they cover most of each other, or
-    /// when it covers most of the smaller of the two and moves the same way (up or down, or
-    /// sideways, as the area last did): a strip that glides sideways inside a page that scrolls
-    /// is an area of its own, and does not keep the page moving.
+    /// screen) are forgotten, and so is one where no movement of this frame reaches and three
+    /// quarters of the tiles that show something changed (`Configuration.replacedShare`): the
+    /// picture in it was replaced in place, and what the area learned of the content that was
+    /// there – how far it reaches, where it ends – is no knowledge about the new one. (Android
+    /// slides the page before a little and then fades it into the new one: the area of that
+    /// slide ended a few pixels under the new page's title, which a pass read cut, and the
+    /// title's place, asked to be read again on the still page, waited for that area to move.
+    /// Counted over all of its tiles, a page of text that is replaced by another changes in only
+    /// a fifth of them: the ground between the lines stays.) A movement joins an area when they
+    /// cover most of each other, or when it covers most of the smaller of the two and moves the
+    /// same way (up or down, or sideways, as the area last did): a strip that glides sideways
+    /// inside a page that scrolls is an area of its own, and does not keep the page moving.
     private func updateScrollAreas(_ motions: [FrameMotion], in current: LumaImage, time: TimeInterval) {
         // forget what is gone
         areas.removeAll { area in
-            var changed = 0, total = 0
+            var changed = 0, total = 0, shown = 0
             let range = estimator.tileRange(of: CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
                                                        height: area.rect.height))
             for row in range.rows {
                 for column in range.columns {
+                    let kind = estimator.kinds[row * estimator.columns + column]
                     total += 1
-                    if estimator.kinds[row * estimator.columns + column] == .changed { changed += 1 }
+                    if kind != .plain { shown += 1 }
+                    if kind == .changed { changed += 1 }
                 }
             }
-            return total > 0 && changed * 2 >= total
+            if total > 0, changed * 2 >= total { return true }
+            // (a movement that reaches it may have gone too far to be followed in this frame)
+            guard !motions.contains(where: { !$0.area.intersection(area.rect).isEmpty }) else { return false }
+            return shown > 0 && Double(changed) >= configuration.replacedShare * Double(shown)
         }
         let known = Set(areas.map(\.id))
         for index in tracked.indices where tracked[index].areaID >= 0 && !known.contains(tracked[index].areaID) {

@@ -190,6 +190,20 @@ final class OverlayTrackerPageTransitionTests: XCTestCase {
         }
     }
 
+    /// Every line of the page that slid in is drawn on the still page, and nothing is left in the
+    /// plan without a time: the title, read cut by the edge of a piece, is read again at once, in
+    /// view (only the rough edge of the scrolling area the slide made lies there, and the old
+    /// title, carried along where it could not be found, does not widen its place across the
+    /// edge of the frame).
+    func testAPageThatSlidesInAndFadesIsReadWhole() {
+        let outcome = play(Self.slideSteps, last: Self.connected)
+        XCTAssertEqual(Set(outcome.drawn), Set(Self.connected.map(\.text)), "lines not drawn")
+        XCTAssertLessThan(outcome.drawnAfter["Verbundene Geraete"] ?? 99, 1.5, "the title is drawn late")
+        XCTAssertTrue(outcome.places.allSatisfy { $0.due != nil }, "places that wait for a movement: \(outcome.places)")
+        XCTAssertLessThanOrEqual(outcome.mostPassesOnPicture, 20)
+        XCTAssertLessThanOrEqual(outcome.passesAtRest, 20)
+    }
+
     /// The new page slides up over the old one in six frames. The first of them replaces the
     /// picture where it carries the old rows away; the rows that come in below in the frames
     /// after are part of the same replacement and are read once it rests, whole.
