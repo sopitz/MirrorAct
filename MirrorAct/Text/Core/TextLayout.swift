@@ -1,0 +1,726 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import Foundation
+// CGRect is a Foundation type on Linux; on Apple platforms its members come with CoreGraphics
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
+
+/// A line of text found on the screen. `rect` is in image coordinates 0…1, origin at the top left.
+struct RecognizedLine: Equatable {
+    var text: String
+    var rect: CGRect
+    /// 0…1 where the recognizer says how sure it is, nil otherwise
+    var confidence: Double?
+    /// How bright its letters and the plain background around them are and how much of the
+    /// letters is coloured, when the recognizer measured that (`TextLayout.blocks` keeps lines of
+    /// different brightness apart unless one of them is coloured)
+    var tone: Tone?
+
+    /// The brightness (luma as the frame holds it: 0 black … 255 white, or 16 … 235 in video
+    /// range) of the letters of a line and of the background in its box, and how much of the
+    /// letters is coloured. The recognizer gives it only where the background is plain (most
+    /// of the box is of one brightness) and the letters stand out from it.
+    struct Tone: Equatable {
+        var text: Double
+        var background: Double
+        /// 0…1: the share of the letters' pixels that are coloured (a link, a mention, a coloured
+        /// status), not black, white or grey
+        var colour: Double
+
+        init(text: Double, background: Double, colour: Double = 0) {
+            self.text = text
+            self.background = background
+            self.colour = colour
+        }
+    }
+
+    init(text: String, rect: CGRect, confidence: Double? = nil, tone: Tone? = nil) {
+        self.text = text
+        self.rect = rect
+        self.confidence = confidence
+        self.tone = tone
+    }
+}
+
+/// Lines that belong together (a paragraph); `rect` like `RecognizedLine.rect`
+struct TextBlock: Equatable {
+    var text: String
+    var rect: CGRect
+    var lineCount: Int
+    /// that of the least certain line, nil when the recognizer reports none
+    var confidence: Double?
+    /// The edges (`FrameMotion.top`, `.bottom`) beyond which the paragraph may go on, hidden: it
+    /// is a line of which perhaps only a part shows (then both), or a part that looks cut off or is
+    /// garbage lies right above or below it (see `TextLayout.blocks`). It may not be complete.
+    var cutOffEdges: Int
+    /// It is a line of which only a part shows, read as garbage, beyond doubt: it is never
+    /// complete, and never worth translating (`cutOffEdges` holds both edges)
+    var isGarbled: Bool
+
+    init(text: String, rect: CGRect, lineCount: Int, confidence: Double? = nil, cutOffEdges: Int = 0,
+         isGarbled: Bool = false) {
+        self.text = text
+        self.rect = rect
+        self.lineCount = lineCount
+        self.confidence = confidence
+        self.cutOffEdges = cutOffEdges
+        self.isGarbled = isGarbled
+    }
+}
+
+/// Puts recognized lines in order: as plain text and as paragraphs for translating.
+///
+/// The height of a line's box says little about the size of its text: Vision's box reaches from
+/// the highest to the lowest ink of the line, so lines of one paragraph differ by half their
+/// height and more depending on ascenders, descenders and accents on capitals. The width does not
+/// depend on that: the size of the text is measured from the width of the line and the letters
+/// it holds (`textSize`).
+enum TextLayout {
+    /// Top to bottom; lines at the same height from left to right
+    static func readingOrder(_ lines: [RecognizedLine]) -> [[RecognizedLine]] {
+        var rows: [[RecognizedLine]] = []
+        for line in lines.sorted(by: { $0.rect.midY < $1.rect.midY }) {
+            if let first = rows.last?.first,
+               abs(line.rect.midY - first.rect.midY) < min(first.rect.height, line.rect.height) * 0.5 {
+                rows[rows.count - 1].append(line)
+            } else {
+                rows.append([line])
+            }
+        }
+        return rows.map { $0.sorted { $0.rect.minX < $1.rect.minX } }
+    }
+
+    /// All text the way it reads when pasted somewhere: one paragraph per line (its lines on the
+    /// screen joined), in reading order. Left out: the status bar (`content` for `.copying`, which
+    /// keeps the icons of rows read as characters), lines cut off at the top or bottom edge of the
+    /// picture (within `screenEdgeShare` of it), and lines read as garbage because only a part of
+    /// them shows (`TextBlock.isGarbled`).
+    static func plainText(_ lines: [RecognizedLine], imageSize: CGSize,
+                          statusBar: StatusBar = .heightOfPicture) -> String {
+        let edge = Double(imageSize.height) * screenEdgeShare
+        let kept = content(lines, imageSize: imageSize, statusBar: statusBar, for: .copying).filter { line in
+            let top = Double(line.rect.minY * imageSize.height), bottom = Double(line.rect.maxY * imageSize.height)
+            return top > edge && bottom < Double(imageSize.height) - edge
+        }
+        let whole = measure(kept, imageSize: imageSize).filter { !$0.1.isGarbled }.map(\.0)
+        return blocks(whole, imageSize: imageSize).map(\.text).joined(separator: "\n")
+    }
+
+    /// How high the status bar of a device is, which `content` leaves out
+    enum StatusBar {
+        /// `statusBarShare` of the height of the picture: an iPhone or iPad, whose status bar is
+        /// lower in landscape, or which hides it there and shows a title in its place
+        case heightOfPicture
+        /// `statusBarShare` of the longer side of the picture, in either orientation: Android,
+        /// whose status bar has the same height in portrait and in landscape
+        case longerSide
+    }
+
+    /// What the lines of `content` are for. Copying and translating weigh a short reading centred
+    /// before a row of two lines differently (`isRowIcon`), because nothing in the lines tells a
+    /// real word there from an icon read as letters.
+    enum Purpose {
+        /// Text, the copy: no real text may be lost. Opening hours copied without their weekdays
+        /// are worse than a stray "G" in the copy, so the icons of rows stay.
+        case copying
+        /// Translate, what is sent and drawn: a translation drawn over an icon is worse than a
+        /// short word left untranslated, so the icons of rows are left out.
+        case translating
+    }
+
+    /// The lines that show what is on the screen: all but those of the status bar (whose box ends
+    /// within the top `statusBarShare` of the picture's height, or of its longer side for
+    /// `StatusBar.longerSide`: a clock and icons, read as letters), and for `.translating` also the
+    /// icons of rows read as characters (`isRowIcon`). `.copying`, the default, keeps those: the
+    /// icon of such a row can come along as a stray character, and no short word or initials
+    /// before a row of two lines are lost.
+    static func content(_ lines: [RecognizedLine], imageSize: CGSize, statusBar: StatusBar = .heightOfPicture,
+                        for purpose: Purpose = .copying) -> [RecognizedLine] {
+        let side = statusBar == .longerSide ? max(imageSize.width, imageSize.height) : imageSize.height
+        let limit = Double(side) * statusBarShare
+        let shown = lines.filter { Double($0.rect.maxY * imageSize.height) > limit }
+        guard purpose == .translating else { return shown }
+        return shown.filter { !isRowIcon($0, among: shown, imageSize: imageSize) }
+    }
+
+    /// Whether `line` is the icon of a row of two lines (a title and a line below it, as on a
+    /// settings screen) that Vision read as a character or a few, which `content` leaves out for
+    /// `.translating` only: it holds at most `rowIconCharacters` besides spaces and no decimal
+    /// digit, and it stands before two lines that follow each other (the lower one less than `paragraphGap` of the higher box below the upper one, their leading
+    /// edges within `alignment` of the higher box) with its middle between theirs, and its middle
+    /// lies further than `rowIconOffset` of the lower box (its own or the line's) from the middle
+    /// of every line it stands before. Before means: left of them, less than `rowIconGap` of the
+    /// higher box away (boxes may overlap by `rowIconOverlap` of its height); or right of them when
+    /// they are written from right to left. An icon is centred on its row; a short word set apart
+    /// in a column ("Mo", "5", "2x") sits on the line of its text, which its descenders or capitals
+    /// move by at most about a quarter of a line. Measured with Vision on Android (settings, light
+    /// and dark, font scales 1 and 1.3, portrait and landscape; rows of 100 short first words set
+    /// 0.6 to 1.4 of their size before their text): the icons read as "Cou", "LoD", "OT", "+)",
+    /// "®", "G", "の" lay 0.35 to 0.6 of the lower box from the nearest middle, the words at most
+    /// 0.25 ("x:y", "go"). It holds no decimal digit: a number centred before a row of two lines is
+    /// a rank, a step, a quantity or a value (charts, instructions, shopping lists, a temperature);
+    /// of the icons only "4)" and "1)" were read with a digit. A short word or initials centred
+    /// before a row of two lines (a value in a table cell centred in its height, a weekday before
+    /// two opening times, "東京", the initials in an avatar) are taken for an icon too: without the
+    /// picture's pixels nothing tells them apart. So only Translate leaves them out, where such a
+    /// word stays untranslated rather than a label covering an icon; Text copies them, and with
+    /// them the icon of such a row as a stray character, rather than lose a real word.
+    static func isRowIcon(_ line: RecognizedLine, among lines: [RecognizedLine], imageSize: CGSize) -> Bool {
+        guard line.text.unicodeScalars.filter({ $0 != " " }).count <= rowIconCharacters else { return false }
+        // a number is a rank, a step, a quantity or a value set before its row, never an icon
+        guard !line.text.unicodeScalars.contains(where: { $0.properties.numericType == .decimal }) else { return false }
+        func pixels(_ rect: CGRect) -> CGRect {
+            CGRect(x: rect.minX * imageSize.width, y: rect.minY * imageSize.height,
+                   width: rect.width * imageSize.width, height: rect.height * imageSize.height)
+        }
+        let icon = pixels(line.rect)
+        guard icon.height > 0 else { return false }
+        // the lines it stands before, with whether they lie on its right
+        let column: [(rect: CGRect, onRight: Bool)] = lines.compactMap { other in
+            guard other != line else { return nil }
+            let rect = pixels(other.rect)
+            let reach = rowIconGap * max(icon.height, rect.height)
+            let onRight = rect.minX >= icon.maxX - rowIconOverlap * icon.height && rect.minX - icon.maxX < reach
+            let onLeft = isRightToLeft(other.text) && rect.maxX <= icon.minX + rowIconOverlap * icon.height
+                && icon.minX - rect.maxX < reach
+            return onRight || onLeft ? (rect, onRight) : nil
+        }
+        for side in [true, false] {
+            let beside = column.filter { $0.onRight == side }.map(\.rect)
+            let level = { (rect: CGRect) in Double(rect.midY - icon.midY) / Double(min(rect.height, icon.height)) }
+            guard !beside.contains(where: { abs(level($0)) <= rowIconOffset }),
+                  let upper = beside.filter({ level($0) < 0 }).max(by: { $0.midY < $1.midY }),
+                  let lower = beside.filter({ level($0) > 0 }).min(by: { $0.midY < $1.midY }) else { continue }
+            let higher = Double(max(upper.height, lower.height))
+            let lead = side ? abs(Double(upper.minX - lower.minX)) : abs(Double(upper.maxX - lower.maxX))
+            let gap = Double(lower.minY - upper.maxY)
+            if gap > -overlap * higher, gap < paragraphGap * higher, lead < alignment * higher { return true }
+        }
+        return false
+    }
+
+    /// Joins the lines of a paragraph. `imageSize` in pixels, because x and y of the rects have
+    /// different scales. A line continues the paragraph above it when
+    /// - its text has the same size: their sizes (`textSize`) are within `sameSize` (`sameSizeShort`
+    ///   when a line is short). Lines that lie as close as lines of a paragraph do (a gap of less
+    ///   than `closeGap` of the higher box) are split only by a size that is `clearlyLarger` and a
+    ///   box that is higher by more than `sameBoxHeight` as well: the size measured from the width
+    ///   alone is not trusted to split lines that close. When a line is too short to measure, the
+    ///   box heights are compared instead (within `sameHeight`).
+    /// - the gap between the two boxes is less than `paragraphGap` of the height of a line (the
+    ///   larger text size, kept between `sizeUnderBox` and `sizeOverBox` times the higher box: a
+    ///   box is higher than its text with accents on capitals and descenders; a box may also
+    ///   reach into the one above by up to `overlap` of the higher box),
+    /// - their left edges or their centres are within `alignment` of the height of a line (or their
+    ///   right edges, when either is written from right to left: `isRightToLeft`),
+    /// - its letters are as bright as those of the line above, when the recognizer measured both
+    ///   on the same background (`RecognizedLine.tone`: backgrounds within `sameBackground` of each
+    ///   other, letters within `sameTone`) and neither line's letters are coloured (less than
+    ///   `colouredLetters` of them). The title of a list row and the summary below it differ in
+    ///   brightness, not in colour (Android and iOS set the summary grey, the title black, or
+    ///   white and grey in a dark theme), even when the summary is not much smaller or too short
+    ///   to measure ("VPN" over "Kein VPN", "Akku" over "100 %"). A line of a paragraph that is
+    ///   mostly a link or mentions measures as bright as the link, but its letters are coloured,
+    ///   so it stays in its paragraph. (For the same reason a summary in colour, a green
+    ///   "Verbunden" or a blue "Tippt …" under a black title, is told apart from the title only
+    ///   by the boxes. In very small text, about 15 pixels high or less, a bold, an all-caps or
+    ///   an Arabic line may measure darker or lighter than the regular lines around it and be
+    ///   kept apart.)
+    /// - neither shows only part of its letters, and it does not start a list item ("• …", "1. …":
+    ///   `listMarkerUnits`; a number only in a list or where the line above ends short of it:
+    ///   `startsItem`); the line after the first one of an item may also line up with where the
+    ///   text of the item begins, behind the marker.
+    /// Of several paragraphs it could continue, it continues the last one begun.
+    ///
+    /// Part of a line may show (something hides the rest: a bar, the edge of the screen or of the
+    /// part that was read) when its box is low for its text size (`isLow`, see `measure`). The low
+    /// box alone does not tell: with letters of unusual widths (a monospaced or letter-spaced
+    /// typeface) the size comes out too large. So a line counts as a part when its box is lower
+    /// than `partHeight` of its size and at most `partOfNeighbour` of the box of a line right
+    /// above or below it that could be the next line of its paragraph, or lower than
+    /// `cutOffHeight` of its size (`looksCutOff`) where bars lie: within `barReach` of the longer
+    /// side of the picture from its top or bottom edge. A part is a block of its own, marked as
+    /// going on beyond both edges (`TextBlock.cutOffEdges`); so is the paragraph it would continue
+    /// or that would continue it, on that side, when the part looks cut off (`looksCutOff`) or is
+    /// garbage beyond doubt (`TextBlock.isGarbled`, which it can be with a box that is not lower
+    /// than `cutOffHeight`, see below). A part is garbage
+    /// beyond doubt (`TextBlock.isGarbled`) only where bars lie, and only when its box is lower
+    /// than `garbledHeight` of its size; or lower than `cutOffHeight` and the recognizer is not
+    /// sure of it (a confidence below `sureConfidence`; that does not count when a line right above
+    /// or below it, overlapping it across, has tall letters too and a box about as high: within
+    /// `partOfNeighbour` of each other) or a line next to it is clearly higher; or lower than
+    /// `unsurePartHeight`, not sure, and a line next to it is clearly higher.
+    static func blocks(_ lines: [RecognizedLine], imageSize: CGSize) -> [TextBlock] {
+        var open: [Paragraph] = []
+        for (line, measured) in measure(lines, imageSize: imageSize) {
+            let match = open.lastIndex { candidate in
+                continues(candidate, with: measured)
+            }
+            if let match {
+                open[match].block.text += separator(after: open[match].block.text) + line.text
+                open[match].block.rect = open[match].block.rect.union(line.rect)
+                open[match].block.lineCount += 1
+                if let confidence = line.confidence {
+                    open[match].block.confidence = min(open[match].block.confidence ?? confidence, confidence)
+                }
+                open[match].last = measured
+                open[match].left = min(open[match].left, Double(measured.rect.minX))
+                open[match].right = max(open[match].right, Double(measured.rect.maxX))
+            } else {
+                let cutOff = measured.isPart ? FrameMotion.top | FrameMotion.bottom : 0
+                open.append(Paragraph(block: TextBlock(text: line.text, rect: line.rect, lineCount: 1,
+                                                       confidence: line.confidence, cutOffEdges: cutOff,
+                                                       isGarbled: measured.isGarbled),
+                                      first: measured, last: measured, left: Double(measured.rect.minX),
+                                      right: Double(measured.rect.maxX)))
+            }
+        }
+        let cutOff = open.map(\.last).filter { $0.isPart && ($0.isCutOff || $0.isGarbled) }
+        for index in open.indices where !open[index].last.isPart {
+            for line in cutOff {
+                if adjoins(open[index].last, below: line, size: open[index].last.size) {
+                    open[index].block.cutOffEdges |= FrameMotion.bottom
+                }
+                if adjoins(line, below: open[index].first, size: open[index].first.size) {
+                    open[index].block.cutOffEdges |= FrameMotion.top
+                }
+            }
+        }
+        return open.map(\.block)
+    }
+
+    /// The lines in reading order, measured (pixels, text size, whether only part shows). For a
+    /// line whose box is lower than `partHeight` of its size, in this order: whether it lies where
+    /// bars lie, whether a line right above or below it is clearly higher, whether it is a part,
+    /// and whether it is garbage beyond doubt (see `blocks`; a line of fewer than `shortUnits`
+    /// that is not mostly full-width characters only by its box, lower than `shortGarbledHeight`).
+    private static func measure(_ lines: [RecognizedLine], imageSize: CGSize) -> [(RecognizedLine, Measured)] {
+        var all = readingOrder(lines).flatMap { $0 }.map { line in
+            let rect = CGRect(x: line.rect.minX * imageSize.width, y: line.rect.minY * imageSize.height,
+                              width: line.rect.width * imageSize.width, height: line.rect.height * imageSize.height)
+            let units = widthUnits(of: line.text)
+            let width = Double(rect.width), height = Double(rect.height)
+            let size = units >= minUnits ? width / units : nil
+            return (line, Measured(rect: rect, units: units, size: size,
+                                   isLow: isLow(line.text, width: width, height: height, share: partHeight),
+                                   isCutOff: looksCutOff(line.text, width: width, height: height),
+                                   isGarbled: false, isPart: false,
+                                   marker: listMarkerUnits(line.text).map { $0 * (size ?? height) },
+                                   numberLead: numberLeadUnits(line.text).map { $0 * (size ?? height) },
+                                   endsWithColon: line.text.unicodeScalars.last { $0 != " " }.map {
+                                       ":\u{FF1A}".unicodeScalars.contains($0) } ?? false,
+                                   isRightToLeft: isRightToLeft(line.text)))
+        }
+        for index in all.indices { all[index].1.tone = all[index].0.tone }
+        let reach = barReach * Double(max(imageSize.width, imageSize.height))
+        for index in all.indices where all[index].1.isLow {
+            let (recognized, line) = all[index]
+            let nearBar = Double(line.rect.minY) < reach || Double(imageSize.height - line.rect.maxY) < reach
+            let belowNeighbour = all.contains { _, neighbour in
+                Double(line.rect.height) <= partOfNeighbour * Double(neighbour.rect.height)
+                    && (adjoins(neighbour, below: line, size: neighbour.size)
+                        || adjoins(line, below: neighbour, size: neighbour.size))
+            }
+            // a line right above or below it with tall letters too, in a box about as high: it is
+            // set like its neighbours (in letters of unusual widths, whose size comes out too
+            // large), not cut off
+            let besidePeer = all.indices.contains { other in
+                let (text, neighbour) = all[other]
+                let higher = Double(max(line.rect.height, neighbour.rect.height))
+                let lower = Double(min(line.rect.height, neighbour.rect.height))
+                return other != index && lower > partOfNeighbour * higher && hasTallLetters(text.text)
+                    && line.rect.minX < neighbour.rect.maxX && neighbour.rect.minX < line.rect.maxX
+                    && (liesClose(neighbour, above: line, size: neighbour.size)
+                        || liesClose(line, above: neighbour, size: neighbour.size))
+            }
+            let unsure = recognized.confidence.map { $0 < sureConfidence } ?? false
+            // (the size of a few letters of a script set in varying widths is not trusted much)
+            let trusted = line.units >= shortUnits || isFullWidth(recognized.text)
+            all[index].1.isPart = belowNeighbour || (line.isCutOff && nearBar)
+            let width = Double(line.rect.width), height = Double(line.rect.height)
+            all[index].1.isGarbled = nearBar
+                && (isLow(recognized.text, width: width, height: height,
+                          share: trusted ? garbledHeight : shortGarbledHeight)
+                    || (trusted && line.isCutOff && ((unsure && !besidePeer) || belowNeighbour))
+                    || (trusted && unsure && belowNeighbour
+                        && isLow(recognized.text, width: width, height: height, share: unsurePartHeight)))
+        }
+        return all
+    }
+
+    /// A line as `blocks` compares it with others
+    private struct Measured {
+        /// in pixels
+        var rect: CGRect
+        var units: Double
+        /// nil = too short to tell
+        var size: Double?
+        /// the box is lower than `partHeight` of the text size …
+        var isLow: Bool
+        /// … or even lower than `cutOffHeight`
+        var isCutOff: Bool
+        /// only part of its letters show, read as garbage, beyond doubt (`TextBlock.isGarbled`)
+        var isGarbled: Bool
+        /// only part of its letters may show (see `blocks`); always when `isGarbled`
+        var isPart: Bool
+        /// the width of the marker in front of the text when the line starts an item of a list
+        /// (`listMarkerUnits`)
+        var marker: Double?
+        var startsListItem: Bool { marker != nil }
+        /// when the marker is a number ("3. …"): the width of the marker and the word behind it,
+        /// which the line above must have had no room for if the line is a sentence wrapped there
+        /// (`numberLeadUnits`)
+        var numberLead: Double?
+        /// its text ends with a colon (also a full-width one)
+        var endsWithColon: Bool
+        /// most of its letters are of a script written from right to left
+        var isRightToLeft: Bool
+        /// `RecognizedLine.tone`
+        var tone: RecognizedLine.Tone? = nil
+    }
+
+    /// A paragraph being put together by `blocks`
+    private struct Paragraph {
+        var block: TextBlock
+        var first: Measured
+        var last: Measured
+        /// the leftmost left edge and the rightmost right edge of its lines, in pixels
+        var left: Double
+        var right: Double
+    }
+
+    /// Whether `line` is the next line of `paragraph`
+    private static func continues(_ paragraph: Paragraph, with line: Measured) -> Bool {
+        let last = paragraph.last
+        guard !last.isPart, !line.isPart, !(line.startsListItem && startsItem(line, after: paragraph)) else {
+            return false
+        }
+        // a grey summary under a black title is not part of it; a line in the colour of a link
+        // measures as bright as the link and may still be part of its paragraph
+        if let upper = last.tone, let lower = line.tone, abs(upper.background - lower.background) <= sameBackground,
+           abs(upper.text - lower.text) > sameTone, max(upper.colour, lower.colour) < colouredLetters {
+            return false
+        }
+        if let lastSize = last.size, let size = line.size {
+            let limit = min(last.units, line.units) >= shortUnits ? sameSize : sameSizeShort
+            let ratio = max(lastSize, size) / min(lastSize, size)
+            if ratio > limit {
+                let gap = Double(line.rect.minY - last.rect.maxY)
+                // the box of the line with the larger text, against the other one
+                let larger = Double(lastSize > size ? last.rect.height : line.rect.height)
+                let smaller = Double(lastSize > size ? line.rect.height : last.rect.height)
+                guard gap < closeGap * max(larger, smaller),
+                      ratio <= clearlyLarger || larger <= sameBoxHeight * smaller else { return false }
+            }
+        } else {
+            let higher = Double(max(last.rect.height, line.rect.height))
+            guard higher <= sameHeight * Double(min(last.rect.height, line.rect.height)) else { return false }
+        }
+        var size: Double?
+        if let lastSize = last.size, let lineSize = line.size { size = max(lastSize, lineSize) }
+        return adjoins(last, below: line, size: size, orBehindMarker: true)
+    }
+
+    /// Whether a line that starts with a list marker (`listMarkerUnits`) starts an item below
+    /// `paragraph` rather than goes on with it. A bullet always does. A number does when the
+    /// paragraph is an item that starts with a number itself, when the line above ends with a
+    /// colon, or when the line above had room for the number and the word behind it
+    /// (`Measured.numberLead`): its right edge (left edge, right to left) lies further than that
+    /// from the rightmost right edge (leftmost left edge) of the paragraph's lines and this one.
+    /// Otherwise it is a sentence of the paragraph wrapped in front of a number ("… ab dem /
+    /// 3. Oktober …").
+    private static func startsItem(_ line: Measured, after paragraph: Paragraph) -> Bool {
+        guard let lead = line.numberLead else { return true }
+        let last = paragraph.last
+        if paragraph.first.numberLead != nil || last.endsWithColon { return true }
+        let room = last.isRightToLeft ? Double(last.rect.minX) - min(paragraph.left, Double(line.rect.minX))
+            : max(paragraph.right, Double(line.rect.maxX)) - Double(last.rect.maxX)
+        return room > lead
+    }
+
+    /// Whether `lower` lies right below `upper` as the next line of a paragraph would: close below
+    /// it and aligned with it (`orBehindMarker`: or with where the text of a list item that `upper`
+    /// starts begins, behind its marker; on the right for right-to-left text). Distances count in
+    /// the height of a line: the text `size`, kept between `sizeUnderBox` and `sizeOverBox` times
+    /// the higher of the two boxes (a size measured from letters of unusual widths may be far
+    /// off); the box when the size is nil.
+    private static func adjoins(_ upper: Measured, below lower: Measured, size: Double?,
+                                orBehindMarker: Bool = false) -> Bool {
+        let box = Double(max(upper.rect.height, lower.rect.height))
+        let limit = alignment * lineHeight(size, box: box)
+        return liesClose(upper, above: lower, size: size)
+            && (abs(Double(upper.rect.minX - lower.rect.minX)) < limit
+                || abs(Double(upper.rect.midX - lower.rect.midX)) < limit
+                || ((upper.isRightToLeft || lower.isRightToLeft) && abs(Double(upper.rect.maxX - lower.rect.maxX)) < limit)
+                || (orBehindMarker ? upper.marker : nil).map { marker in
+                    upper.isRightToLeft ? abs(Double(upper.rect.maxX) - marker - Double(lower.rect.maxX)) < limit
+                        : abs(Double(upper.rect.minX) + marker - Double(lower.rect.minX)) < limit
+                } ?? false)
+    }
+
+    /// Whether `lower` lies close below `upper`, as the next line of a paragraph does, wherever
+    /// it lies across: the gap between their boxes is less than `paragraphGap` of the height of a
+    /// line (see `adjoins`), and the lower box reaches into the upper one by less than `overlap`
+    /// of the higher box
+    private static func liesClose(_ upper: Measured, above lower: Measured, size: Double?) -> Bool {
+        let box = Double(max(upper.rect.height, lower.rect.height))
+        let gap = Double(lower.rect.minY - upper.rect.maxY)
+        return gap > -overlap * box && gap < paragraphGap * lineHeight(size, box: box)
+    }
+
+    /// The height of a line for the distances of `adjoins`: the text `size`, kept between
+    /// `sizeUnderBox` and `sizeOverBox` times the higher box `box`; the box when the size is nil
+    private static func lineHeight(_ size: Double?, box: Double) -> Double {
+        min(max(size ?? box, sizeUnderBox * box), sizeOverBox * box)
+    }
+
+    // MARK: Size of text
+
+    /// Lines of one paragraph measure within this factor of each other …
+    static let sameSize = 1.18
+    /// … or within this one when a line has fewer than `shortUnits` (a few letters)
+    static let sameSizeShort = 1.3
+    static let shortUnits = 4.0
+    /// lines closer than this share of the higher box are of different sizes only when one
+    /// measures larger by this factor and its box is higher by `sameBoxHeight`
+    static let closeGap = 0.4
+    static let clearlyLarger = 1.3
+    static let sameBoxHeight = 1.15
+    /// a line of fewer units is too short to measure; its box height is compared instead, within
+    /// this factor
+    static let minUnits = 2.0
+    static let sameHeight = 1.5
+    /// largest gap between two lines of a paragraph, as a share of the height of a line
+    static let paragraphGap = 0.7
+    static let sizeUnderBox = 0.8
+    static let sizeOverBox = 1.25
+    /// how far a line's box may reach into the box above, as a share of the higher box
+    static let overlap = 0.3
+    /// how far left edges or centres of the lines of a paragraph may lie apart, as a share of the
+    /// height of a line
+    static let alignment = 0.6
+    /// The letters of the lines of a paragraph differ in brightness (`RecognizedLine.tone`, luma
+    /// 0…255) by no more than this, measured on backgrounds within `sameBackground` of each
+    /// other. Measured with Vision's boxes on Android screens (light and dark, font scale 1 and
+    /// 1.3) and web pages: the lines of a paragraph differed by at most 6, the title and the
+    /// summary of a row by at least 25 (white and light grey of a dark theme); a frame in video
+    /// range, which holds 16…235 for 0…255, brings these to 5 and 21. The brightness of the
+    /// letters is the 75th percentile of the line's letter pixels (counted from the background),
+    /// so a coloured run over a fifth to a half of a line or more (a link, mentions) moves it to
+    /// that colour (`colouredLetters` keeps such a line in its paragraph); and where strokes are
+    /// only 1 or 2 pixels wide (text of about 15 pixels or less), a bold or an all-caps line
+    /// measures 15 to 35 darker than regular ones, and an Arabic line may differ as much, so it
+    /// is kept apart from the lines around it.
+    static let sameTone = 14.0
+    static let sameBackground = 12.0
+    /// A line counts as coloured when at least this share of its letters' pixels is
+    /// (`RecognizedLine.Tone.colour`); its brightness then says nothing about whether it belongs
+    /// to the line above or below. Measured on 849 Android frames, each read as BGRA and as
+    /// 4:2:0: black, white and grey lines at most 0.08, nearly all 0; coloured headings, links
+    /// and captions 0.6 to 1. On drawn posts: a line with a short mention, a hashtag or two emoji
+    /// in small text (12 to 16 pixels) 0.15 to 0.2, its brightness moved by up to 20; a line
+    /// with a link over a fifth of it about 0.2 to 0.3, its brightness moved by up to 18 in the
+    /// dark theme at half resolution; mentions over half a line 0.5 to 0.8.
+    static let colouredLetters = 0.12
+    /// a box lower than this share of the size of its text and at most `partOfNeighbour` of the
+    /// box of the line next to it holds only part of its letters; one lower than `cutOffHeight`
+    /// of its size was read as garbage
+    static let partHeight = 0.78
+    static let partOfNeighbour = 0.75
+    static let cutOffHeight = 0.62
+    /// bars lie within this share of the longer side of the picture from its top or bottom edge
+    /// (the bars of iOS reach 249 to 294 pixels into a picture of 2532 to 2796)
+    static let barReach = 0.12
+    /// where bars lie, a box lower than this share of its text size is garbage beyond doubt; one
+    /// lower than `cutOffHeight` is when the recognizer's confidence is below `sureConfidence`
+    /// (Vision reports 1, 0.5 or 0.3) or a line next to it is clearly higher
+    static let garbledHeight = 0.58
+    static let sureConfidence = 0.75
+    static let unsurePartHeight = 0.7
+    /// … and a line of fewer than `shortUnits` (not mostly full-width) only by a box lower than this
+    static let shortGarbledHeight = 0.5
+    /// `content`: the status bar lies in this top share of the height of the picture (of its
+    /// longer side, `StatusBar.longerSide`); `plainText`: a line within `screenEdgeShare` of the
+    /// height of the top or bottom edge is cut off there
+    static let statusBarShare = 0.04
+    static let screenEdgeShare = 0.004
+    /// `isRowIcon`: an icon read as at most this many characters (besides spaces) …
+    static let rowIconCharacters = 3
+    /// … stands less than this share of the higher box before each line of its row (their boxes
+    /// may reach into its box by `rowIconOverlap` of its height) …
+    static let rowIconGap = 3.0
+    static let rowIconOverlap = 0.2
+    /// … with its middle further from theirs than this share of the lower box
+    static let rowIconOffset = 0.3
+
+    /// The size of the text of a line (about the height of its font, in the units of `width`),
+    /// measured from its width: `width` divided by `widthUnits`. nil when the text is too short to
+    /// tell (less than `minUnits`).
+    static func textSize(of text: String, width: Double) -> Double? {
+        let units = widthUnits(of: text)
+        return units >= minUnits ? width / units : nil
+    }
+
+    /// How wide a text is in units of the size of its font, as an average sans-serif typeface sets
+    /// it: a space 0.28, i j l f t r I and narrow punctuation 0.3, m w M W 0.85, other capitals
+    /// 0.66, digits 0.55, other letters and signs 0.52, Chinese, Japanese and Korean characters
+    /// and full-width forms 1. A full stop or comma of these scripts at the end of a line counts
+    /// 0.4: its ink sits at the left of its cell, and the box of the line ends there.
+    static func widthUnits(of text: String) -> Double {
+        var units = 0.0
+        var last: Unicode.Scalar?
+        for scalar in text.unicodeScalars {
+            units += widthUnits(of: scalar)
+            last = scalar
+        }
+        if let last, [0x3001, 0x3002, 0xFF0C, 0xFF0E].contains(last.value) { units -= 0.6 }
+        return units
+    }
+
+    private static func widthUnits(of scalar: Unicode.Scalar) -> Double {
+        switch scalar.value {
+        case 0x20: return 0.28
+        case 0x2E80...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF, 0xFF00...0xFF60, 0xFFE0...0xFFE6: return 1
+        default: break
+        }
+        if "ijlI.,:;'!|ftr()[]-/\"\u{201E}\u{201C}\u{201D}\u{2018}\u{2019}".unicodeScalars.contains(scalar) { return 0.3 }
+        if "mwMW".unicodeScalars.contains(scalar) { return 0.85 }
+        if scalar.properties.isUppercase { return 0.66 }
+        if (0x30...0x39).contains(scalar.value) { return 0.55 }
+        return 0.52
+    }
+
+    /// Whether a line's box (`width` and `height` in pixels) is too low for its text, as when
+    /// something hides part of the line. Only said of text with tall letters (capitals, digits,
+    /// ascenders, Chinese, Japanese, Korean, Arabic or Thai): a line of x-height letters alone is
+    /// low anyway.
+    static func looksCutOff(_ text: String, width: Double, height: Double) -> Bool {
+        isLow(text, width: width, height: height, share: cutOffHeight)
+    }
+
+    /// Whether the box is lower than `share` of the text size, for text with tall letters
+    private static func isLow(_ text: String, width: Double, height: Double, share: Double) -> Bool {
+        guard let size = textSize(of: text, width: width), height < share * size else { return false }
+        return hasTallLetters(text)
+    }
+
+    /// Capitals, digits, ascenders, Chinese, Japanese, Korean, Arabic or Thai (`isLow`)
+    private static func hasTallLetters(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            scalar.properties.isUppercase || (0x30...0x39).contains(scalar.value) || "bdfhklt".unicodeScalars.contains(scalar)
+                || (0x2E80...0xD7AF).contains(scalar.value) || hasTallForms(scalar)
+        }
+    }
+
+    /// Arabic (letters with tall strokes and dots above and below the line) and Thai (vowel and
+    /// tone marks above and below)
+    private static func hasTallForms(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0600...0x06FF, 0x0750...0x077F, 0xFB50...0xFDFF, 0xFE70...0xFEFF, 0x0E00...0x0E7F: return true
+        default: return false
+        }
+    }
+
+    /// At least half of the characters besides spaces are full-width (Chinese, Japanese, Korean):
+    /// the width of a few of them tells their size well
+    private static func isFullWidth(_ text: String) -> Bool {
+        var count = 0, wide = 0
+        for scalar in text.unicodeScalars where scalar != " " {
+            count += 1
+            if widthUnits(of: scalar) == 1 { wide += 1 }
+        }
+        return count > 0 && 2 * wide >= count
+    }
+
+    /// How wide the marker is that starts `text` as an item of a list (not the next line of a
+    /// paragraph), in `widthUnits`, with the space behind it; nil when it starts none. A marker is
+    /// one of `listBullets`, or a number of one to three digits (0 to 9, also full-width) followed
+    /// by one of `listNumberEnds`. A space must follow it, or a Chinese, Japanese or Korean
+    /// character; behind a number the line may also end there. ("1.5 kg" starts no item.)
+    static func listMarkerUnits(_ text: String) -> Double? {
+        let scalars = Array(text.unicodeScalars.prefix(5))
+        guard let first = scalars.first else { return nil }
+        var end = 1
+        if !listBullets.unicodeScalars.contains(first) {
+            var digits = 0
+            while digits < min(scalars.count, 4), isListDigit(scalars[digits]) { digits += 1 }
+            guard (1...3).contains(digits), digits < scalars.count,
+                  listNumberEnds.unicodeScalars.contains(scalars[digits]) else { return nil }
+            end = digits + 1
+        }
+        let marker = scalars[..<end].reduce(0.0) { $0 + widthUnits(of: $1) }
+        guard end < scalars.count else { return end > 1 ? marker : nil }
+        switch scalars[end].value {
+        case 0x20: return marker + widthUnits(of: scalars[end])
+        case 0x2E80...0x9FFF, 0xAC00...0xD7AF, 0xF900...0xFAFF: return marker
+        default: return nil
+        }
+    }
+
+    /// For a line that starts with a number as an item of a list (`listMarkerUnits`): how wide the
+    /// number is, with its end and the space behind it, and the word that follows (up to the next
+    /// space, at most `numberLeadWord`; only its first character when that is a Chinese, Japanese
+    /// or Korean one), in `widthUnits`. nil when the line starts with no number, or with a bullet.
+    static func numberLeadUnits(_ text: String) -> Double? {
+        guard let first = text.unicodeScalars.first, !listBullets.unicodeScalars.contains(first),
+              let marker = listMarkerUnits(text) else { return nil }
+        var word = 0.0
+        var rest = text.unicodeScalars.drop { isListDigit($0) }.dropFirst()
+        if rest.first == " " { rest = rest.dropFirst() }
+        for scalar in rest {
+            if scalar == " " { break }
+            word += widthUnits(of: scalar)
+            if widthUnits(of: scalar) == 1 { break }
+        }
+        return marker + min(word, numberLeadWord)
+    }
+
+    /// The most of the word behind a number that `numberLeadUnits` counts: a line wrapped in front
+    /// of the number had no room for the number alone (the word only matters where a space that
+    /// does not break binds them), and scripts written without spaces (Thai) break inside a run
+    static let numberLeadWord = 2.0
+
+    /// Signs that start an item of a list (`listMarkerUnits`)
+    static let listBullets = "•◦▪‣●○■□–—*・-"
+    static let listNumberEnds = ".．)）"
+
+    private static func isListDigit(_ scalar: Unicode.Scalar) -> Bool {
+        (0x30...0x39).contains(scalar.value) || (0xFF10...0xFF19).contains(scalar.value)
+    }
+
+    /// Whether more of the letters of `text` belong to scripts written from right to left
+    /// (Hebrew, Arabic and the scripts up to U+08FF, and their presentation forms) than to the
+    /// others (Latin, Greek, Cyrillic, Armenian, the scripts of U+0900 to U+1FFF, Chinese,
+    /// Japanese and Korean). Spaces, punctuation and the digits 0 to 9 count for neither.
+    static func isRightToLeft(_ text: String) -> Bool {
+        var rightToLeft = 0, leftToRight = 0
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF: rightToLeft += 1
+            case 0x41...0x5A, 0x61...0x7A, 0xC0...0x058F, 0x0900...0x1FFF, 0x2E80...0xD7AF, 0xF900...0xFAFF:
+                leftToRight += 1
+            default: break
+            }
+        }
+        return rightToLeft > leftToRight
+    }
+
+    /// Space between two lines of a paragraph; none in scripts written without spaces
+    private static func separator(after text: String) -> String {
+        guard let scalar = text.unicodeScalars.last else { return "" }
+        switch scalar.value {
+        case 0x3040...0x30FF, 0x3400...0x9FFF, 0xFF00...0xFFEF, 0x3000...0x303F: return ""
+        default: return " "
+        }
+    }
+
+    /// Worth translating: contains at least two letters (not a time, a price or a symbol)
+    static func isTranslatable(_ text: String) -> Bool {
+        var letters = 0
+        for character in text where character.isLetter {
+            letters += 1
+            if letters >= 2 { return true }
+        }
+        return false
+    }
+}

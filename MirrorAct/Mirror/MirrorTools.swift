@@ -20,6 +20,9 @@ struct MirrorActions {
     /// Control on/off and device buttons (only for controllable devices)
     var toggleControl: () -> Void = {}
     var press: (DeviceButton) -> Void = { _ in }
+    /// Copy the text on the screen; translate it in place on/off
+    var copyText: () -> Void = {}
+    var toggleTranslation: () -> Void = {}
 }
 
 /// Visibility of the tools
@@ -53,6 +56,13 @@ struct MirrorToolRail: View {
                            NSEvent.modifierFlags.contains(.option) ? actions.copyScreenshot() : actions.saveScreenshot()
                        })
                 .onDrag { screenshotProvider() }
+                .railItem(visible)
+            RailButton(symbol: "text.viewfinder", title: String(localized: "Text"),
+                       help: String(localized: "Copy the text on the screen (⌥⌘T)"), action: actions.copyText)
+                .railItem(visible)
+            RailButton(symbol: "character.bubble", title: String(localized: "Translate"),
+                       help: String(localized: "Translate the text on the screen in place (⇧⌘T) – language under Settings"),
+                       active: session.isTranslating, action: actions.toggleTranslation)
                 .railItem(visible)
             RailButton(symbol: session.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                        title: session.muted ? String(localized: "Muted") : String(localized: "Sound")) {
@@ -352,7 +362,7 @@ struct StylePanel: View {
                     .toggleStyle(.checkbox)
                 Spacer()
                 Button("All Settings …") {
-                    UserDefaults.standard.set("design", forKey: "settingsTab")
+                    AppSettings.shared.defaults.set("design", forKey: "settingsTab")
                     openSettings()
                 }
                 .buttonStyle(.link)

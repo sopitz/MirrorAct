@@ -14,7 +14,7 @@ struct SettingsView: View {
         max(300, visibleHeight - windowChrome - screenMargin)
     }
 
-    @AppStorage("settingsTab") private var tab = "general"
+    @AppStorage("settingsTab", store: AppSettings.shared.defaults) private var tab = "general"
 
     var body: some View {
         let maxHeight = Self.maxPageHeight(visibleHeight: NSScreen.main?.visibleFrame.height ?? 800)
@@ -27,6 +27,10 @@ struct SettingsView: View {
                 .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("Style", systemImage: "paintpalette") }
                 .tag("design")
+            TextSettingsView()
+                .settingsPage(maxHeight: maxHeight)
+                .tabItem { Label("Text", systemImage: "text.viewfinder") }
+                .tag("text")
         }
         .frame(width: Self.width)
     }

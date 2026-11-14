@@ -1,0 +1,474 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+import AppKit
+import Combine
+import CoreMedia
+import CoreVideo
+import Foundation
+
+/// Translates the text on the mirrored screen in place.
+///
+/// While it is on, every frame passes through `process` (it is the sink's `FrameProcessor`): the
+/// `OverlayTracker` moves the known paragraphs with the content and the `TranslationCompositor`
+/// draws their translations into a copy of the frame. Display, screenshots and recordings
+/// therefore all show the translations, exactly on their text, also while it scrolls.
+/// Reading the picture (Vision) and translating run beside the frames; the text recognition
+/// always gets the frame as the device sent it.
+final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Sendable {
+    /// on the main thread
+    @Published private(set) var isActive = false
+
+    /// short notices for the user, called on the main thread
+    var onMessage: ((String) -> Void)?
+    /// a notice that stays until it is replaced or withdrawn (nil), called on the main thread
+    var onStatus: ((String?) -> Void)?
+
+    /// What translates a turn, the way the settings say; the tests hand in a stand-in
+    var makeEngine: @MainActor (AppSettings) throws -> TranslationEngine = { try TranslationEngines.make(for: $0) }
+
+    private let sink: FrameSink
+    private let compositor = TranslationCompositor()
+
+    /// protects everything below up to `tasks`; never held while reading, translating or drawing
+    private let state = NSLock()
+    private let tracker = OverlayTracker()
+    private var running = false
+    /// Counts the turns of translating. Work of an earlier turn that is still on its way when
+    /// translating is turned off and on again (another language …) must not reach this one.
+    private var turn = 0
+    /// the frame given to the last `advance`, as the device sent it
+    private var source: CVPixelBuffer?
+    private var wakeRecognition: AsyncStream<Void>.Continuation?
+    private var wakeTranslation: AsyncStream<Void>.Continuation?
+    /// Before this time (`clock`) the engine sends nothing: it said it waits for its service
+    /// (`TranslationFailure.retryAfter`, `TranslationWait`). No text is offered meanwhile; a
+    /// wake-up is due when the wait is over.
+    private var engineWaitsUntil: TimeInterval = 0
+
+    private var tasks: [Task<Void, Never>] = []
+    private var engine: TranslationEngine?
+    private var settingsChanges: AnyCancellable?
+    private var lastNotice: (text: String, time: TimeInterval)?
+    #if DEBUG
+    /// debug builds: what `process` drew into the latest frame
+    private var debugPlaced: [PlacedBlock] = []
+    #endif
+
+    /// texts per translation request
+    private static let batchSize = 40
+    /// longest wait for a scrolling picture to rest before a remote engine is asked anyway
+    private static let longestWaitForRest: TimeInterval = 1.5
+
+    /// how high the status bar of the device is, which is not translated
+    private let statusBar: TextLayout.StatusBar
+    /// seconds of a steady clock, for the tracker
+    private let clock: @Sendable () -> TimeInterval
+    /// waits the given seconds before the texts that failed are offered again
+    private let pause: @Sendable (TimeInterval) async -> Void
+
+    /// - Parameters:
+    ///   - clock, pause: the tests hand in a clock of their own, so that they need not wait
+    init(sink: FrameSink, statusBar: TextLayout.StatusBar = .heightOfPicture,
+         clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         pause: @escaping @Sendable (TimeInterval) async -> Void = { seconds in
+             try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+         }) {
+        self.sink = sink
+        self.statusBar = statusBar
+        self.clock = clock
+        self.pause = pause
+    }
+
+
+    private func locked<T>(_ body: () -> T) -> T {
+        state.lock()
+        defer { state.unlock() }
+        return body()
+    }
+
+    /// Whether `turn` is the turn that is on. Call with `state` held.
+    private func isCurrent(_ turn: Int) -> Bool {
+        running && self.turn == turn
+    }
+
+    // MARK: On and off (main thread)
+
+    @MainActor
+    func toggle() {
+        isActive ? stop() : start()
+    }
+
+    @MainActor
+    func start() {
+        guard !isActive else { return }
+        guard sink.latestSource != nil else {
+            NSSound.beep()
+            onMessage?(String(localized: "No video to translate yet"))
+            return
+        }
+        let settings = AppSettings.shared
+        let engine: TranslationEngine
+        do {
+            engine = try makeEngine(settings)
+        } catch {
+            NSSound.beep()
+            onMessage?(error.localizedDescription)
+            return
+        }
+        let target = settings.translationTarget
+        // Han characters have other forms in Japanese than in Chinese: draw them as the target's
+        compositor.language = target.maximalIdentifier
+        self.engine = engine
+        engine.notify = { [weak self] message in
+            DispatchQueue.main.async { self?.onMessage?(message) }
+        }
+        engine.notifyStatus = { [weak self, weak engine] status in
+            DispatchQueue.main.async {
+                // not after the turn has ended, which withdrew the notice
+                guard let self, let engine, self.engine === engine else { return }
+                self.onStatus?(status)
+            }
+        }
+        Log.info("Translating the screen with \(engine.name) into \(target.minimalIdentifier)")
+
+        let (recognitions, wakeRecognition) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let (translations, wakeTranslation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let turn: Int = locked {
+            tracker.reset()
+            source = nil
+            running = true
+            engineWaitsUntil = 0
+            self.turn += 1
+            self.wakeRecognition = wakeRecognition
+            self.wakeTranslation = wakeTranslation
+            return self.turn
+        }
+        isActive = true
+        tasks = [
+            Task { [weak self] in await self?.recognitionLoop(recognitions, turn: turn) },
+            Task { [weak self] in await self?.translationLoop(translations, engine: engine, target: target, turn: turn) },
+        ]
+        // another language, engine, model or key: start over with it
+        settingsChanges = settings.translationSettingsChanged
+            .debounce(for: .milliseconds(400), scheduler: DispatchQueue.main)
+            .sink { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.isActive else { return }
+                    self.stop()
+                    self.start()
+                }
+            }
+        sink.processor = self
+        // the picture may be still: run the current frame through the tracker to start reading
+        sink.redisplay()
+        if engine.isRemote {
+            onMessage?(String(localized: "Translating with \(engine.name) – the text on the screen is sent there"))
+        }
+    }
+
+    @MainActor
+    func stop() {
+        guard isActive else { return }
+        isActive = false
+        settingsChanges = nil
+        locked {
+            running = false
+            source = nil
+            wakeRecognition?.finish()
+            wakeTranslation?.finish()
+            wakeRecognition = nil
+            wakeTranslation = nil
+        }
+        sink.processor = nil
+        tasks.forEach { $0.cancel() }
+        tasks = []
+        engine?.cancel()
+        engine?.notify = nil
+        engine?.notifyStatus = nil
+        engine = nil
+        onStatus?(nil)
+        compositor.reset()
+        // a still picture would keep the translations until the next frame
+        sink.redisplay()
+    }
+
+    // MARK: Frames (thread that delivers them)
+
+    func process(_ pixelBuffer: CVPixelBuffer, time: CMTime) -> CVPixelBuffer {
+        guard let thumbnail = FramePixels.thumbnail(of: pixelBuffer) else { return pixelBuffer }
+        state.lock()
+        guard running else {
+            state.unlock()
+            return pixelBuffer
+        }
+        let update = tracker.advance(thumbnail.image, scale: thumbnail.scale, time: clock())
+        source = pixelBuffer
+        #if DEBUG
+        debugPlaced = update.placed
+        #endif
+        let wake = update.recognitionDue == nil ? nil : wakeRecognition
+        state.unlock()
+        wake?.yield()
+        // The compositor draws into a copy in the frame's own pixel format, so a frame without
+        // translations can be shown as it is.
+        guard !update.placed.isEmpty else { return pixelBuffer }
+        return compositor.compose(pixelBuffer, blocks: update.placed) ?? pixelBuffer
+    }
+
+    // MARK: Reading the picture
+
+    private func recognitionLoop(_ wakeups: AsyncStream<Void>, turn: Int) async {
+        for await _ in wakeups {
+            while !Task.isCancelled {
+                guard let due = locked({ isCurrent(turn) ? tracker.recognitionDue : nil }) else { break }
+                let wait = due - clock()
+                if wait > 0 {
+                    // in short steps: scrolling can make the reading due at once
+                    try? await Task.sleep(nanoseconds: UInt64(min(wait, 0.015) * 1_000_000_000))
+                    continue
+                }
+                if await !recognizeOnce(turn: turn) { break }
+            }
+        }
+    }
+
+    /// One pass; false = nothing was started
+    private func recognizeOnce(turn: Int) async -> Bool {
+        let started: (frame: CVPixelBuffer, request: RecognitionRequest)? = locked {
+            guard isCurrent(turn), let frame = source, let request = tracker.beginRecognition(time: clock()) else {
+                return nil
+            }
+            return (frame, request)
+        }
+        guard let started else { return false }
+        let frame = started.frame, request = started.request
+
+        guard let lines = await TextRecognizer.recognize(frame, region: request.isFullFrame ? nil : request.region) else {
+            locked {
+                if isCurrent(turn) { tracker.abandonRecognition(request) }
+            }
+            // do not retry a failing recognition in a tight loop
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            return true
+        }
+        let areas = locked { tracker.scrollingAreas }
+        let blocks = Self.recognizedBlocks(from: lines, in: frame, areas: areas, statusBar: statusBar)
+        let finished: (wake: AsyncStream<Void>.Continuation?, known: [TrackedBlock])? = locked {
+            guard isCurrent(turn) else { return nil }
+            tracker.finishRecognition(request, blocks: blocks, time: clock())
+            return (wakeTranslation, tracker.blocks)
+        }
+        guard let finished else { return false }
+        finished.wake?.yield()
+        // Blocks whose translation is known already (text that came back into view) are drawn
+        // here, so that Core Text does not hold up the frames.
+        compositor.prepare(finished.known)
+        // blocks may have gone or moved on a picture that is still
+        sink.redisplay()
+        return true
+    }
+
+    /// Paragraphs worth translating, in frame pixels, with the colors to draw them in, of the lines
+    /// below the status bar that are no icons of rows (`TextLayout.content`). No paragraph reaches
+    /// across a known edge of a scrolling area: what lies on the other side is a bar that stays, or
+    /// other content.
+    static func recognizedBlocks(from lines: [RecognizedLine], in frame: CVPixelBuffer, areas: [ScrollingArea],
+                                 statusBar: TextLayout.StatusBar = .heightOfPicture) -> [RecognizedBlock] {
+        let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
+        var edges: [(y: CGFloat, from: CGFloat, to: CGFloat)] = []
+        for area in areas {
+            if area.knownEdges & FrameMotion.top != 0 { edges.append((area.rect.minY, area.rect.minX, area.rect.maxX)) }
+            if area.knownEdges & FrameMotion.bottom != 0 { edges.append((area.rect.maxY, area.rect.minX, area.rect.maxX)) }
+        }
+        // lines with the same known edges above them lie between the same edges
+        var keys: [[Int]] = []
+        var groups: [[Int]: [RecognizedLine]] = [:]
+        for line in TextLayout.content(lines, imageSize: size, statusBar: statusBar, for: .translating) {
+            let x = line.rect.midX * size.width, y = line.rect.midY * size.height
+            let above = edges.indices.filter { edges[$0].y < y && edges[$0].from <= x && x <= edges[$0].to }
+            if groups[above] == nil { keys.append(above) }
+            groups[above, default: []].append(line)
+        }
+        let paragraphs = keys.flatMap { TextLayout.blocks(groups[$0] ?? [], imageSize: size) }
+            .filter { TextLayout.isTranslatable($0.text) }
+        return paragraphs.map { paragraph in
+            let rect = CGRect(x: paragraph.rect.minX * size.width, y: paragraph.rect.minY * size.height,
+                              width: paragraph.rect.width * size.width, height: paragraph.rect.height * size.height)
+            // the frame's own colors, so that a box matches its surroundings exactly
+            let colors = FramePixels.blockColors(in: rect, of: frame)
+            return RecognizedBlock(text: paragraph.text, rect: rect, lineCount: paragraph.lineCount, colors: colors,
+                                   confidence: paragraph.confidence, cutOffEdges: paragraph.cutOffEdges,
+                                   isGarbled: paragraph.isGarbled)
+        }
+    }
+
+    // MARK: Translating
+
+    private func translationLoop(_ wakeups: AsyncStream<Void>, engine: TranslationEngine, target: Locale.Language,
+                                 turn: Int) async {
+        for await _ in wakeups {
+            while !Task.isCancelled {
+                if engine.prefersSettledText { await waitForRest(turn: turn) }
+                // (while the engine waits for its service, nothing is offered: it would send nothing)
+                let texts = locked {
+                    isCurrent(turn) && clock() >= engineWaitsUntil
+                        ? tracker.textsAwaitingTranslation(limit: Self.batchSize, time: clock()) : []
+                }
+                if texts.isEmpty { break }
+                do {
+                    let translations = try await engine.translate(texts, into: target)
+                    // turned off (and on again, perhaps into another language) meanwhile
+                    let postponed: Bool? = locked {
+                        guard isCurrent(turn) else { return nil }
+                        var postponed = false
+                        for (index, text) in texts.enumerated() {
+                            if index < translations.count, let translation = translations[index] {
+                                tracker.setTranslation(translation, for: text)
+                            } else {
+                                // "not now" (a language is still loading …): offered again after a pause
+                                tracker.translationFailed(for: text, time: clock())
+                                postponed = true
+                            }
+                        }
+                        return postponed
+                    }
+                    guard let postponed else { return }
+                    // draw the texts here, not on the thread that delivers the frames
+                    compositor.prepare(locked { tracker.blocks })
+                    sink.redisplay()
+                    if postponed { wakeTranslationLater(turn: turn, texts: texts) }
+                } catch let wait as TranslationWait {
+                    // Nothing was sent: the texts did not fail, so their wait does not grow, and a
+                    // text that came into view meanwhile goes out with the next request
+                    let stillOn: Bool = locked {
+                        guard isCurrent(turn) else { return false }
+                        for text in texts { tracker.translationPostponed(for: text) }
+                        engineWaitsUntil = max(engineWaitsUntil, clock() + wait.seconds)
+                        return true
+                    }
+                    if Task.isCancelled || !stillOn { return }
+                    wakeTranslationLater(turn: turn, texts: [], after: wait.seconds)
+                    break
+                } catch {
+                    let stillOn: Bool = locked {
+                        guard isCurrent(turn) else { return false }
+                        for text in texts { tracker.translationFailed(for: text, time: clock()) }
+                        if let seconds = (error as? TranslationFailure)?.retryAfter {
+                            engineWaitsUntil = max(engineWaitsUntil, clock() + seconds)
+                        }
+                        return true
+                    }
+                    if Task.isCancelled || !stillOn { return }
+                    await failed(error, texts: texts, turn: turn)
+                    break
+                }
+            }
+        }
+    }
+
+    /// Waits until the picture has stopped moving, but not forever.
+    private func waitForRest(turn: Int) async {
+        let start = clock()
+        while !Task.isCancelled, clock() - start < Self.longestWaitForRest {
+            if locked({ !isCurrent(turn) || tracker.isSettled(at: clock()) }) { return }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+    }
+
+    private func failed(_ error: Error, texts: [String], turn: Int) async {
+        let failure = error as? TranslationFailure
+        let message = failure?.message ?? String(localized: "Translation failed: \(error.localizedDescription)")
+        Log.error("Translation: \(message)")
+        await MainActor.run {
+            // a failure of an earlier turn neither shows nor turns off the one that is on now
+            guard locked({ isCurrent(turn) }) else { return }
+            // the same notice at most every ten seconds
+            let now = clock()
+            if lastNotice?.text != message || now - (lastNotice?.time ?? 0) > 10 {
+                lastNotice = (message, now)
+                onMessage?(message)
+            }
+            if failure?.isPermanent == true { stop() }
+        }
+        guard failure?.isPermanent != true else { return }
+        wakeTranslationLater(turn: turn, texts: texts, after: failure?.retryAfter)
+    }
+
+    /// Texts whose translation failed or was postponed are offered again by the tracker after a
+    /// wait that grows with each failure of a text; nothing else would wake the loop on a still
+    /// picture. Wakes it when the first of `texts` may be offered again (`OverlayTracker.nextRetry`)
+    /// and the engine's own wait is over, whichever is later: the two take the same steps
+    /// (`LLMTranslationEngine.firstBackOff`), so the later one is the wait that applies.
+    /// - Parameter seconds: the wait of the engine for its service (it sends nothing before then)
+    private func wakeTranslationLater(turn: Int, texts: [String], after seconds: TimeInterval? = nil) {
+        let next = locked { tracker.nextRetry(of: texts) }
+        let own = next.map { $0 - clock() } ?? (seconds == nil ? OverlayTracker.Configuration().retryDelay : 0)
+        let retry = max(own, seconds ?? 0, 0)
+        let pause = self.pause
+        Task { [weak self] in
+            await pause(retry + 0.2)
+            guard let self else { return }
+            let wake = self.locked { self.isCurrent(turn) ? self.wakeTranslation : nil }
+            wake?.yield()
+        }
+    }
+}
+
+#if DEBUG
+extension ScreenTranslator {
+    /// Debug builds: the engine of the turn that is on (main thread)
+    @MainActor
+    var debugEngineName: String? { engine?.name }
+
+    /// Debug builds: the translations drawn into the latest frame, with the text they replace,
+    /// every paragraph the tracker knows (whether it shows, is lost or doubtful, its scrolling
+    /// area, since when it is held back for its numbers, relative to now, and whether it lies over
+    /// its area's content), and what the tracker still has to read and when
+    /// (`OverlayTracker.readingState`).
+    /// Call inside `FrameSink.debugSnapshot`, so that no frame is processed meanwhile.
+    func debugPlacement() -> (placed: [[String: Any]], tracked: [[String: Any]], reading: [String: Any]) {
+        func rect(_ r: CGRect?) -> Any {
+            guard let r else { return NSNull() }
+            return ["x": r.minX, "y": r.minY, "width": r.width, "height": r.height]
+        }
+        func color(_ c: RGBColor) -> String { String(format: "#%02x%02x%02x", c.red, c.green, c.blue) }
+        return locked {
+            guard running else { return ([], [], [:]) }
+            let known = tracker.blocks
+            let state = tracker.readingState
+            let placed: [[String: Any]] = debugPlaced.map { block in
+                let original = known.first { $0.id == block.id }
+                return ["id": block.id, "recognized": original?.text ?? NSNull(), "translation": block.text,
+                        "rect": rect(block.rect), "visibleRect": rect(block.visibleRect), "lineCount": block.lineCount,
+                        "background": color(block.colors.background), "foreground": color(block.colors.foreground)]
+            }
+            let tracked: [[String: Any]] = known.map { block in
+                var entry: [String: Any] = [
+                    "id": block.id, "recognized": block.text, "translation": block.translation ?? NSNull(),
+                    "isStale": block.isStale, "rect": rect(block.rect), "lineCount": block.lineCount,
+                    "background": color(block.colors.background), "foreground": color(block.colors.foreground)]
+                if let more = state.blocks[block.id] {
+                    entry["isSeen"] = more.isSeen
+                    entry["isWhole"] = more.isWhole
+                    entry["isLost"] = more.isLost
+                    entry["isDoubtful"] = more.isDoubtful
+                    entry["areaID"] = more.areaID
+                    entry["numbersDifferSince"] = more.numbersDifferSince.map { $0 - clock() } ?? NSNull()
+                    entry["staysOverArea"] = more.staysOverArea
+                }
+                return entry
+            }
+            // (times relative to now, on the tracker's clock: negative = due already)
+            let now = clock()
+            let reading: [String: Any] = [
+                "isReading": state.isReading, "passesOnPicture": state.passesOnPicture,
+                "dueIn": state.due.map { $0 - now } ?? NSNull(),
+                "places": state.places.map { place in
+                    ["kind": place.kind, "rect": rect(place.rect), "age": now - place.since, "attempts": place.attempts,
+                     "dueIn": place.due.map { $0 - now } ?? NSNull()] as [String: Any]
+                },
+            ]
+            return (placed, tracked, reading)
+        }
+    }
+}
+#endif

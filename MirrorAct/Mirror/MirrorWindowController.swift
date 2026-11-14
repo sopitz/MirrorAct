@@ -66,7 +66,9 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             toggleRecording: { [weak self] in self?.session.toggleRecording() },
             disconnect: { AppModel.shared.disconnectWireless() },
             toggleControl: { [weak self] in self?.toggleControl() },
-            press: { [weak self] button in self?.session.control?.press(button) })
+            press: { [weak self] button in self?.session.control?.press(button) },
+            copyText: { [weak self] in self?.session.copyText() },
+            toggleTranslation: { [weak self] in self?.session.toggleTranslation() })
 
         railView = NSHostingView(rootView: MirrorToolRail(session: session, chrome: chrome, actions: actions))
         hudView = PassthroughHostingView(rootView: MirrorHUD(session: session))
@@ -186,6 +188,7 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         if presentation != nil { exitPresentation(reshow: false) }
         chrome.styleOpen = false
         session.control?.stop()
+        session.translator.stop()
         session.stopRecording()
         session.sink.attach(nil)
         session.onClose?()
@@ -227,6 +230,14 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         menu.addItem(ActionMenuItem(session.isRecording ? String(localized: "Stop Recording") : String(localized: "Start Recording"), key: "r", a.toggleRecording))
         menu.addItem(ActionMenuItem(String(localized: "Save Screenshot to Desktop"), key: "s", a.saveScreenshot))
         menu.addItem(ActionMenuItem(String(localized: "Copy Screenshot"), a.copyScreenshot))
+        menu.addItem(.separator())
+        let copyText = ActionMenuItem(String(localized: "Copy Text on Screen"), key: "t", a.copyText)
+        copyText.keyEquivalentModifierMask = [.command, .option]
+        menu.addItem(copyText)
+        let translate = ActionMenuItem(String(localized: "Translate Text on Screen"), key: "t",
+                                       state: session.isTranslating, a.toggleTranslation)
+        translate.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(translate)
         menu.addItem(.separator())
         if let control = session.control {
             if session.isControlReady {

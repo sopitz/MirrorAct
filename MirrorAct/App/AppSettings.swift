@@ -1,12 +1,40 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import AppKit
+import Combine
 import Foundation
 
 /// Persistent settings (UserDefaults).
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
-    private let defaults = UserDefaults.standard
+    /// Where the settings are kept: the app's own preferences, or those of the tests while the
+    /// app runs as their host. The test host has the app's bundle identifier, so without a domain
+    /// of their own the tests would change the settings of the installed app.
+    let defaults: UserDefaults
+
+    /// The domain of the tests' settings; nil when the app is not running as the test host
+    static let testSuiteName: String? = AppDelegate.isTesting
+        ? (Bundle.main.bundleIdentifier ?? "io.github.sopitz.MirrorAct") + ".tests"
+        : nil
+
+    /// The app's preferences, or those of the tests, emptied first so that every test run starts
+    /// from the registered defaults. `atExit` registers what runs when the process exits; the
+    /// tests pass their own, so that they can check what is registered without exiting.
+    static func makeDefaults(atExit: (@convention(c) () -> Void) -> Void = { _ = atexit($0) }) -> UserDefaults {
+        guard let name = testSuiteName, let suite = UserDefaults(suiteName: name) else { return .standard }
+        suite.removePersistentDomain(forName: name)
+        // emptied again when the test run ends, so that the code, the device ID and what the
+        // tests set do not stay on the Mac; XCTest ends the test host with exit()
+        atExit { AppSettings.emptyTestDomain() }
+        return suite
+    }
+
+    /// Empties the tests' settings. cfprefsd keeps the file of the domain, empty: it writes it
+    /// again when it is deleted while the app runs.
+    static func emptyTestDomain() {
+        guard let name = testSuiteName else { return }
+        UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+    }
 
     @Published var receiverName: String { didSet { defaults.set(receiverName, forKey: "receiverName") } }
     @Published var pin: String { didSet { defaults.set(pin, forKey: "pin") } }
@@ -24,6 +52,23 @@ final class AppSettings: ObservableObject {
     @Published var alwaysShowTools: Bool { didSet { defaults.set(alwaysShowTools, forKey: "alwaysShowTools") } }
     /// Start iPhone/iPad control right away on connect (otherwise only via “Control”)
     @Published var autoStartControl: Bool { didSet { defaults.set(autoStartControl, forKey: "autoStartControl") } }
+    /// Language the text on the screen is translated into: "system" or a language identifier
+    @Published var translationLanguage: String {
+        didSet { defaults.set(translationLanguage, forKey: "translationLanguage") }
+    }
+    /// What translates the text on the screen: "apple" (on this Mac) or "llm" (a language model
+    /// service with the user's own API key)
+    @Published var translationEngine: String {
+        didSet { defaults.set(translationEngine, forKey: "translationEngine") }
+    }
+    /// The language model service (`LLMProvider.id`)
+    @Published var llmProvider: String { didSet { defaults.set(llmProvider, forKey: "llmProvider") } }
+    /// Model per service; none = the service's default model
+    @Published var llmModels: [String: String] { didSet { defaults.set(llmModels, forKey: "llmModels") } }
+    /// Address per service, for those where it can be changed (own server, local model)
+    @Published var llmBaseURLs: [String: String] { didSet { defaults.set(llmBaseURLs, forKey: "llmBaseURLs") } }
+    /// Counts up whenever an API key was saved or removed; the keys themselves are in the Keychain
+    @Published var llmKeyRevision = 0
     /// Frame color, background etc. for screenshots, recordings and presentation
     @Published var style: FrameStyle {
         didSet {
@@ -36,6 +81,7 @@ final class AppSettings: ObservableObject {
     let receiverDeviceID: String
 
     init() {
+        defaults = Self.makeDefaults()
         defaults.register(defaults: [
             "receiverName": "MirrorAct",
             "streamHeight": 2160,
@@ -49,6 +95,9 @@ final class AppSettings: ObservableObject {
             "recordWithFrame": false,
             "alwaysShowTools": false,
             "autoStartControl": true,
+            "translationLanguage": "system",
+            "translationEngine": "apple",
+            "llmProvider": "openai",
         ])
         receiverName = defaults.string(forKey: "receiverName") ?? "MirrorAct"
         streamHeight = defaults.integer(forKey: "streamHeight")
@@ -62,13 +111,18 @@ final class AppSettings: ObservableObject {
         recordWithFrame = defaults.bool(forKey: "recordWithFrame")
         alwaysShowTools = defaults.bool(forKey: "alwaysShowTools")
         autoStartControl = defaults.bool(forKey: "autoStartControl")
+        translationLanguage = defaults.string(forKey: "translationLanguage") ?? "system"
+        translationEngine = defaults.string(forKey: "translationEngine") ?? "apple"
+        llmProvider = defaults.string(forKey: "llmProvider") ?? "openai"
+        llmModels = defaults.dictionary(forKey: "llmModels") as? [String: String] ?? [:]
+        llmBaseURLs = defaults.dictionary(forKey: "llmBaseURLs") as? [String: String] ?? [:]
         if let data = defaults.data(forKey: "style"), let stored = try? JSONDecoder().decode(FrameStyle.self, from: data) {
             style = stored
         } else {
             style = FrameStyle()
         }
 
-        let store = UserDefaults.standard
+        let store = defaults
         if let stored = store.string(forKey: "pin"), stored.count == 4 {
             pin = stored
         } else {
@@ -86,6 +140,11 @@ final class AppSettings: ObservableObject {
             let fresh = bytes.map { String(format: "%02X", $0) }.joined(separator: ":")
             store.set(fresh, forKey: "receiverDeviceID")
             receiverDeviceID = fresh
+        }
+
+        if let data = defaults.data(forKey: "knownDevices"),
+           let list = try? JSONDecoder().decode([KnownDevice].self, from: data) {
+            knownDevices = list
         }
     }
 
@@ -110,6 +169,26 @@ final class AppSettings: ObservableObject {
                 UserDefaults.standard.set([newValue], forKey: "AppleLanguages")
             }
         }
+    }
+
+    /// Language to translate into; "system" follows the app's language
+    var translationTarget: Locale.Language {
+        let identifier = translationLanguage == "system"
+            ? Locale.preferredLanguages.first ?? "en"
+            : translationLanguage
+        return Locale.Language(identifier: identifier)
+    }
+
+    /// Fires after anything changed that decides how the screen is translated
+    var translationSettingsChanged: AnyPublisher<Void, Never> {
+        Publishers.MergeMany([
+            $translationLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $translationEngine.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $llmProvider.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $llmModels.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $llmBaseURLs.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $llmKeyRevision.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+        ]).eraseToAnyPublisher()
     }
 
     /// relaunches the app (after quitting, so the AirPlay name is free)
@@ -142,11 +221,7 @@ final class AppSettings: ObservableObject {
         var lastSeen: Date
     }
 
-    @Published private(set) var knownDevices: [KnownDevice] = {
-        guard let data = UserDefaults.standard.data(forKey: "knownDevices"),
-              let list = try? JSONDecoder().decode([KnownDevice].self, from: data) else { return [] }
-        return list
-    }()
+    @Published private(set) var knownDevices: [KnownDevice] = []
 
     func remember(_ device: KnownDevice) {
         var list = knownDevices.filter { $0.id != device.id }

@@ -2,13 +2,17 @@
 import Foundation
 import os
 
-/// Logs to ~/Library/Logs/MirrorAct.log and the system log
+/// Logs to ~/Library/Logs/MirrorAct.log and the system log (only the latter while testing)
 enum Log {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "io.github.sopitz.MirrorAct", category: "app")
     private static let queue = DispatchQueue(label: "mirroract.log")
-    private static let handle: FileHandle? = {
-        let url = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+    /// nil while the app is the host of the tests: their scripted failures of translation
+    /// services would end up among the lines users read and attach to issues
+    static let fileURL: URL? = AppDelegate.isTesting ? nil
+        : FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/MirrorAct.log")
+    private static let handle: FileHandle? = {
+        guard let url = fileURL else { return nil }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
