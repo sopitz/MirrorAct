@@ -1186,6 +1186,18 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.coverageResting, 0.98, result.events.joined(separator: "\n"))
         XCTAssertLessThanOrEqual(result.misplaced, 2, result.events.joined(separator: "\n"))
     }
+    /// Seed 25 of roughLink: blocks a pass read while the page moved fast and that were never seen
+    /// since are forgotten without their guessed places (under the top bar) being read once more.
+    /// When they were, the extra passes shifted the later ones, and a paragraph stayed
+    /// untranslated at rest for 40 ticks: 66.9 with 298 half-read frames.
+    func testRoughLinkSeed25() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("roughLink", seed: 25)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertGreaterThanOrEqual(result.score, 70)
+        XCTAssertLessThanOrEqual(result.halfRead, 200)
+    }
     func testKeyboard() throws { try check("keyboard") }
     func testLateContent() throws { try check("lateContent") }
     func testZoom() throws { try check("zoom") }

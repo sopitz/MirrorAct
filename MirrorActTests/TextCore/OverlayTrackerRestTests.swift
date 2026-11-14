@@ -179,4 +179,83 @@ final class OverlayTrackerRestTests: XCTestCase {
             time += 3
         }
     }
+
+    /// The synthetic page with its lines 4…6 (one paragraph) drawn at `contrast` (1 = as they
+    /// are, less = paler, as the link sends dark text it blurs while the page moves)
+    private static func paleFrame(_ screen: SyntheticScreen, offset: Int, contrast: Double, seed: UInt64) -> LumaImage {
+        var frame = screen.thumbnail(offset: offset, noiseSeed: seed)
+        let top = SyntheticScreen.block(4, offset: offset, text: "").rect
+        let bottom = SyntheticScreen.block(6, offset: offset, text: "").rect
+        let scale = SyntheticScreen.scale
+        for y in max(0, Int(top.minY) / scale)..<min(frame.height, Int(bottom.maxY) / scale + 1) {
+            for x in 0..<frame.width {
+                frame[x, y] = UInt8(240 - Int((240 - Double(frame[x, y])) * contrast))
+            }
+        }
+        return frame
+    }
+
+    /// A translated paragraph on a page that scrolls: while the page moves, the link sends it so
+    /// blurred that it cannot be found, for longer than `lostLifetime`, and the recognizer is busy
+    /// elsewhere; once the page rests, it sharpens again a little in every frame (no change big
+    /// enough to be read). The block forgotten while it moved has its place read once everything
+    /// over it rests, and the paragraph is drawn again (its translation is known: nothing is
+    /// sent). Before, nothing read its place again, and it stayed untranslated at rest (the dark
+    /// paragraph d02 in a slow series on the phone).
+    func testAParagraphForgottenWhileThePageMovedIsReadAgainAtRest() {
+        let screen = SyntheticScreen(seed: 41)
+        let scale = SyntheticScreen.scale
+        let tracker = OverlayTracker()
+        let text = "alpha beta gamma delta epsilon zeta eta theta"
+        func paragraph(_ offset: Int) -> RecognizedBlock {
+            let rect = SyntheticScreen.block(4, offset: offset, text: "").rect
+                .union(SyntheticScreen.block(6, offset: offset, text: "").rect)
+            return RecognizedBlock(text: text, rect: rect, lineCount: 3)
+        }
+        var time = 0.0, seed: UInt64 = 100, offset = 0, contrast = 1.0
+        var pending: (request: RecognitionRequest, answer: [RecognizedBlock], at: TimeInterval)?
+        var regions: [CGRect] = [], sent: [String] = [], placed: [String] = []
+        func step(busy: Bool) {
+            time += 1.0 / 30
+            seed += 1
+            let frame = Self.paleFrame(screen, offset: offset, contrast: contrast, seed: seed)
+            placed = tracker.advance(frame, scale: scale, time: time).placed.map(\.text)
+            if let job = pending, time >= job.at {
+                tracker.finishRecognition(job.request, blocks: job.answer, time: time)
+                pending = nil
+            }
+            if !busy, pending == nil, let due = tracker.recognitionDue, due <= time,
+               let request = tracker.beginRecognition(time: time) {
+                regions.append(request.region)
+                // (the recognizer reads the paragraph when all of it lies in the region and shows clearly)
+                let shown = paragraph(offset)
+                let answer = contrast > 0.9 && request.region.contains(shown.rect) ? [shown] : []
+                pending = (request, answer, time + 0.3)
+            }
+            for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                sent.append(text)
+                tracker.setTranslation("T " + text, for: text)
+            }
+        }
+        while time < 2 { step(busy: false) }
+        XCTAssertEqual(placed, ["T " + text])
+        sent = []
+        // the page moves up 2 px a frame for 2 s, the paragraph pale; the recognizer is busy
+        contrast = 0.3
+        while time < 4 {
+            offset += 2
+            step(busy: true)
+        }
+        // at rest it sharpens again over a second
+        while contrast < 1 {
+            contrast = min(1, contrast + 0.7 / 30)
+            step(busy: true)
+        }
+        regions = []
+        while time < 8 { step(busy: false) }
+        XCTAssertTrue(regions.contains { $0.contains(paragraph(offset).rect) }, "\(regions)")
+        XCTAssertEqual(tracker.blocks.map(\.text).filter { $0 == text }, [text])
+        XCTAssertEqual(placed, ["T " + text])
+        XCTAssertEqual(sent, [])
+    }
 }

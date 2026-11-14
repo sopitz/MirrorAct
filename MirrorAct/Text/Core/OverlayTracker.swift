@@ -1164,9 +1164,29 @@ final class OverlayTracker {
             }
             tracked[index] = block
         }
+        // A block that could not be found for `lostLifetime` is forgotten. Where its place still
+        // lies in view (most of it in the frame and in its scrolling area), it may only have been
+        // lost to a picture the link damaged while it moved, or its text may have changed: that
+        // place is read once everything over it rests (`Kind.confirm`). (A pass that read the
+        // place at rest since it was lost removed it already, and one that read it while it moved
+        // asked for the same.) A block read while the picture moved fast and never seen since is
+        // left out: where it is, is only a guess, and the pass that read it asked for its own
+        // region to be confirmed.
         tracked.removeAll { block in
-            guard let lost = block.lostSince else { return false }
-            return time - lost > configuration.lostLifetime
+            guard let lost = block.lostSince, time - lost > configuration.lostLifetime else { return false }
+            // (one a pass read while the picture moved fast and that was never seen since: its place
+            // is a guess, and that pass asked for its region to be confirmed already)
+            guard lost != block.readAt else { return true }
+            let rect = thumbnailRect(of: block)
+            var place = rect.intersection(CGRect(x: 0, y: 0, width: current.width, height: current.height))
+            if let area = scrollArea(id: block.areaID) {
+                place = place.intersection(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
+                                                  height: area.rect.height))
+            }
+            if !place.isNull, place.width * place.height * 2 >= rect.width * rect.height {
+                plan.add(UnreadArea(rect: place, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
+            }
+            return true
         }
         // (a block found again where a later reading lies)
         dropOverlaps(attempts: 0, time: time)
