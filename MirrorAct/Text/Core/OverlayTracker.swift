@@ -349,7 +349,7 @@ final class OverlayTracker {
         /// two blocks whose visible parts share more than this share of the smaller one are
         /// readings of the same text: only one of them is kept, unless one pass read them apart
         var overlapLimit = 0.2
-        /// a digit of a block of one line fits the picture where the block lies when it differs
+        /// a digit of a block fits the picture where the block lies when it differs
         /// from it by at most this times the median of all its letters plus `numberFitSlack`
         /// (`numbersFit`). On rows that differ only in their numbers, gliding at the speeds and
         /// frame intervals of a phone's stream, a digit of a row placed right was never worse than
@@ -517,8 +517,10 @@ final class OverlayTracker {
         /// other text replaces it): a summary whose value ticked in place, a row of a list that
         /// looks alike but for its number and that a movement measured a row off put under
         /// another one. Its translation would show a number that is not there. Judged whenever it
-        /// is found (`moveBlocks`, `makeBlock`); its line is read again once everything over it
-        /// rests (`askToReadLine`).
+        /// is found (`moveBlocks`, `makeBlock`); its place is read again once everything over it
+        /// rests (`askToReadLine`: the whole line of a block of one line, the box of a
+        /// paragraph). When no place of the plan asks for it any more, it is dropped and its
+        /// place is read as new text (`dropHiddenBlocksNothingReads`).
         var numbersDifferSince: TimeInterval?
         /// It showed whole and stayed where it was while its scrolling area moved, outside of that
         /// area (`moveBlocks`): it lies over the content there (the title of a bar, a header that
@@ -1534,30 +1536,35 @@ final class OverlayTracker {
         return false
     }
 
-    /// The place of a block whose numbers changed is read once everything over it rests, as the
-    /// whole line it lies on (a block read without its last word – the edge of what a pass read
-    /// fell in the space before it – is read whole again)
+    /// The place of a block whose numbers changed is read once everything over it rests: a
+    /// block of one line as the whole line it lies on (a block read without its last word – the
+    /// edge of what a pass read fell in the space before it – is read whole again), one of
+    /// several lines as its box
     private func askToReadLine(of block: Block, in current: LumaImage, time: TimeInterval) {
-        let place = wholeLine(around: thumbnailRect(of: block), in: current)
+        let rect = thumbnailRect(of: block)
+        let place = (block.lineCount == 1 ? wholeLine(around: rect, in: current) : rect)
             .intersection(CGRect(x: 0, y: 0, width: current.width, height: current.height))
         guard !place.isNull, place.width >= 1, place.height >= 1 else { return }
         plan.add(UnreadArea(rect: place, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
     }
 
-    /// The numbers of a block of one line fit the picture where it lies now about as well as its
-    /// letters do: no digit differs from the picture (mean difference over its part, as
-    /// `letterParts` places it) by more than `numberFitFactor` × the median of all its letters,
-    /// digits included, + `numberFitSlack`. The rest of a line that looks alike fits while its
-    /// numbers differ – the same summary with another value, the next row of a list – and a digit
-    /// is a small part of a line: the whole block fits nearly as well as before. (Letters are compared
+    /// The numbers of a block fit the picture where it lies now about as well as its letters do:
+    /// no digit differs from the picture (mean difference over its part, as `letterParts` places
+    /// it, in a block of several lines on its own line) by more than `numberFitFactor` × the
+    /// median of all the block's letters, digits included, + `numberFitSlack`. The rest of a
+    /// text that looks alike fits while its numbers differ – the same summary with another
+    /// value, the next row of a list, a paragraph whose counter ticked – and a digit is a small
+    /// part of a text: the whole block fits nearly as well as before. (Letters are compared
     /// with letters: a block placed a fraction of a pixel off while the picture moves makes the
     /// strokes of all of them fit worse, far more than the plain space around them, and the dense
     /// strokes of a long number most: at the first frame of a slow scroll the eight digits of
     /// "Rechnung 20240142" differed by 9.6 to 11.6 where the median of the other letters was
     /// 6.3. Among all the letters of such a line the median is one of its digits; a number
-    /// that changed in one or two digits still stands out.) A block without digits, or of
-    /// several lines, fits.
+    /// that changed in one or two digits still stands out.) A block without digits fits.
     private func numbersFit(_ block: Block, in current: LumaImage) -> Bool {
+        // A text without a digit fits: its letters are not placed at all (a paragraph's
+        // `lineSpans` reads every pixel of its box).
+        guard block.text.contains(where: TextSimilarity.isDigit) else { return true }
         let parts = letterParts(of: block)
         guard parts.contains(where: \.isDigit) else { return true }
         var digits: [Double] = [], letters: [Double] = []
@@ -1573,23 +1580,86 @@ final class OverlayTracker {
         return worst <= configuration.numberFitFactor * median + configuration.numberFitSlack
     }
 
-    /// Where the letters of a block of one line lie in its patch, as far as it shows (`seen`):
-    /// each at its share of the line's letters, with half a letter more on either side (the
-    /// letters of a line are not all as wide), and whether it is a digit. Spaces are left out.
-    /// None for a block of several lines (where its lines break is not known).
+    /// Where the letters of a block lie in its patch, as far as it shows (`seen`): each at its
+    /// share of its line's letters, with half a letter more on either side (the letters of a line
+    /// are not all as wide), and whether it is a digit. Spaces are left out. A block of one line
+    /// spans its box. The lines of a block of several lines share its box's height equally, each
+    /// spans the columns of the patch where its rows show something (`lineSpans`), and its text
+    /// is split among them by those widths, at the space nearest to each share (the recognizer
+    /// joins the lines of a paragraph with a space): a letter placed a little off covers the
+    /// letters next to it, which fit as well as they do, so a misplaced digit hides no line.
     private func letterParts(of block: Block) -> [(rect: ThumbnailRect, isDigit: Bool)] {
-        guard block.lineCount == 1, let seen = block.seen else { return [] }
+        guard let seen = block.seen else { return [] }
         let letters = Array(block.text)
-        let letter = Double(block.inner.width) / Double(max(1, letters.count))
+        var lines: [(letters: ArraySlice<Character>, span: ThumbnailRect)] = []
+        if block.lineCount == 1 {
+            lines = [(letters[...], block.inner)]
+        } else {
+            let spans = lineSpans(of: block)
+            let total = spans.reduce(0) { $0 + $1.width }
+            guard total > 0 else { return [] }
+            var start = 0, covered = 0
+            for (line, span) in spans.enumerated() {
+                covered += span.width
+                var end = letters.count
+                if line < spans.count - 1 {
+                    // (the space nearest to this line's share of the letters; at the share itself
+                    // when there is none – a script without spaces)
+                    let share = min(letters.count,
+                                    max(start, Int((Double(letters.count * covered) / Double(total)).rounded())))
+                    end = share
+                    var best = Int.max
+                    for index in start..<letters.count where letters[index].isWhitespace && abs(index - share) < best {
+                        best = abs(index - share)
+                        end = index
+                    }
+                }
+                if span.width > 0, end > start { lines.append((letters[start..<end], span)) }
+                start = min(letters.count, end + (end < letters.count && letters[end].isWhitespace ? 1 : 0))
+            }
+        }
         var parts: [(rect: ThumbnailRect, isDigit: Bool)] = []
-        for index in letters.indices where !letters[index].isWhitespace {
-            let left = Int(floor(Double(block.inner.x) + (Double(index) - 0.5) * letter))
-            let right = Int(ceil(Double(block.inner.x) + (Double(index) + 1.5) * letter))
-            let part = ThumbnailRect(x: left, y: block.inner.y, width: right - left, height: block.inner.height)
-                .intersection(seen)
-            if !part.isEmpty { parts.append((part, TextSimilarity.isDigit(letters[index]))) }
+        for (line, span) in lines {
+            let letter = Double(span.width) / Double(max(1, line.count))
+            for (position, index) in line.indices.enumerated() where !letters[index].isWhitespace {
+                let left = Int(floor(Double(span.x) + (Double(position) - 0.5) * letter))
+                let right = Int(ceil(Double(span.x) + (Double(position) + 1.5) * letter))
+                let part = ThumbnailRect(x: left, y: span.y, width: right - left, height: span.height).intersection(seen)
+                if !part.isEmpty { parts.append((part, TextSimilarity.isDigit(letters[index]))) }
+            }
         }
         return parts
+    }
+
+    /// The lines of a block of several lines in its patch: its box split into `lineCount` bands
+    /// of equal height, each from the first to the last column of the box where its rows show
+    /// something (brighter and darker pixels further apart than `plainRange`); empty bands are
+    /// as wide as nothing
+    private func lineSpans(of block: Block) -> [ThumbnailRect] {
+        let inner = block.inner, patch = block.patch
+        let count = max(1, block.lineCount)
+        var spans: [ThumbnailRect] = []
+        for line in 0..<count {
+            let top = inner.y + inner.height * line / count, bottom = inner.y + inner.height * (line + 1) / count
+            var left = Int.max, right = Int.min
+            if bottom > top {
+                for column in inner.x..<inner.maxX {
+                    var low = UInt8.max, high = UInt8.min
+                    for row in top..<bottom {
+                        let value = patch.pixels[row * patch.width + column]
+                        low = min(low, value)
+                        high = max(high, value)
+                    }
+                    if Int(high) - Int(low) > configuration.plainRange {
+                        left = min(left, column)
+                        right = max(right, column + 1)
+                    }
+                }
+            }
+            spans.append(right > left ? ThumbnailRect(x: left, y: top, width: right - left, height: bottom - top)
+                                      : ThumbnailRect(x: inner.x, y: top, width: 0, height: bottom - top))
+        }
+        return spans
     }
 
     /// The line a block of one line lies on, as far as letters go on either side of it in
@@ -2008,6 +2078,24 @@ final class OverlayTracker {
             plan.add(UnreadArea(rect: bounds.intersection(CGRect(x: 0, y: 0, width: current.width, height: current.height)),
                                 kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
         }
+        dropHiddenBlocksNothingReads(bounds: bounds, time: time)
+    }
+
+    /// A block that is not drawn for its numbers (`Block.numbersDifferSince`) waits for a
+    /// reading of its place. When no place of the plan covers it any more (its readings came
+    /// back cut, in separate lines or not at all, and the rereads were used up), it would stay
+    /// hidden for good: it is dropped, and its place is read once as new text. (Once: a reading
+    /// that finds nothing there leaves nothing to wait for.)
+    private func dropHiddenBlocksNothingReads(bounds: CGRect, time: TimeInterval) {
+        var dropped: Set<Int> = []
+        for block in tracked where block.numbersDifferSince != nil && block.seen != nil {
+            let rect = thumbnailRect(of: block).intersection(bounds)
+            guard !rect.isNull, rect.width >= 1, rect.height >= 1,
+                  !plan.areas.contains(where: { $0.rect.intersects(rect) }) else { continue }
+            dropped.insert(block.id)
+            plan.add(UnreadArea(rect: rect, kind: .changed, since: time))
+        }
+        if !dropped.isEmpty { tracked.removeAll { dropped.contains($0.id) } }
     }
 
     /// The pass failed: its region still has to be read.

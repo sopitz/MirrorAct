@@ -34,9 +34,12 @@ final class OverlayTrackerNumbersTests: XCTestCase {
     /// and read what the lines showed when they started (`read`); what is asked for is translated
     /// at once ("T " + text), unless `translates` is false. `each` gets the frame's number, its
     /// lines and what was placed. Returns the texts sent for translation.
+    /// (`readAll`, when given, reads all lines of a frame at once instead of `read`: lines of a
+    /// paragraph come as one block; `noise` is how much each pixel may differ from the picture.)
     @discardableResult
     private func run(_ tracker: OverlayTracker, times: [TimeInterval], seed: UInt64, lines: (Int) -> [Line],
                      read: (Int, Line, CGRect) -> RecognizedBlock? = { _, line, region in line.reading(in: region) },
+                     readAll: ((Int, [Line], CGRect) -> [RecognizedBlock])? = nil, noise: Int = 2,
                      translates: Bool = true, each: (Int, [Line], [PlacedBlock]) -> Void = { _, _, _ in }) -> [String] {
         var sent: [String] = []
         var seed = seed
@@ -44,7 +47,7 @@ final class OverlayTrackerNumbersTests: XCTestCase {
         for (frame, time) in times.enumerated() {
             seed += 1
             let shown = lines(frame)
-            let picture = SyntheticPage.noisy(Self.picture(shown), amount: 2, seed: seed)
+            let picture = SyntheticPage.noisy(Self.picture(shown), amount: noise, seed: seed)
             let placed = tracker.advance(picture, scale: Self.scale, time: time).placed
             each(frame, shown, placed)
             if let job = pending, time >= job.at {
@@ -53,7 +56,8 @@ final class OverlayTrackerNumbersTests: XCTestCase {
             }
             if pending == nil, let due = tracker.recognitionDue, due <= time,
                let request = tracker.beginRecognition(time: time) {
-                pending = (request, shown.compactMap { read(frame, $0, request.region) }, time + 0.3)
+                let answer = readAll?(frame, shown, request.region) ?? shown.compactMap { read(frame, $0, request.region) }
+                pending = (request, answer, time + 0.3)
             }
             guard translates else { continue }
             for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
@@ -112,7 +116,224 @@ final class OverlayTrackerNumbersTests: XCTestCase {
         XCTAssertGreaterThan(right, 5 * 60, "\(right)")
     }
 
-    // MARK: Rows that look alike but for their numbers
+    // MARK: A paragraph whose number changes in place
+
+    /// What a recognizer reads of `lines` in `region`: the lines of `paragraph` (indices into
+    /// `lines`) that it reads, as one block of their texts joined with a space; every other line
+    /// on its own
+    /// (`apart`: each line of the paragraph as a block of its own, as Vision sometimes returns them)
+    private static func readings(of lines: [Line], paragraph: Range<Int>, in region: CGRect,
+                                 apart: Bool = false) -> [RecognizedBlock] {
+        var result: [RecognizedBlock] = []
+        var parts: [RecognizedBlock] = []
+        for (index, line) in lines.enumerated() {
+            guard let reading = line.reading(in: region) else { continue }
+            if paragraph.contains(index), !apart { parts.append(reading) } else { result.append(reading) }
+        }
+        if let first = parts.first {
+            result.append(RecognizedBlock(text: parts.map(\.text).joined(separator: " "),
+                                          rect: parts.dropFirst().reduce(first.rect) { $0.union($1.rect) },
+                                          lineCount: parts.count))
+        }
+        return result
+    }
+
+    /// A page with a title over a paragraph whose lines `paragraph(value)` gives, its number
+    /// showing each of `values` for `seconds` (30 frames a second), the page scrolled up by
+    /// `scroll` pixels a second during `moving` (by default from half a second before each change
+    /// of the number to half a second after it). Counts the frames that show a translation of the
+    /// paragraph with other numbers than those on the screen while the page rests (`wrong`,
+    /// examples) and while it moves, those that show it with the right ones, and the longest time
+    /// without that from its first translation on; returns what was sent. (`readApart`: from
+    /// when to when the recognizer returns the paragraph's lines each on its own; a line of it
+    /// then counts as right when it shows all the numbers on the screen, as wrong when its
+    /// numbers are not a run of them. `passesAfter`: how many passes began after that time.)
+    private func changingParagraph(_ paragraph: (Int) -> [Line], values: [Int], seconds: Double = 3,
+                                   scroll: Double = 0, moving: [ClosedRange<Double>]? = nil, noise: Int = 2,
+                                   seed: UInt64,
+                                   configuration: OverlayTracker.Configuration = OverlayTracker.Configuration(),
+                                   readApart: Range<Double>? = nil, passesAfter: Double = .infinity)
+        -> (wrong: [String], wrongMoving: Int, right: Int, longestWithout: Double, sent: [String], passes: Int) {
+        let perValue = Int(seconds * 30)
+        let shownValue = values.flatMap { Array(repeating: $0, count: perValue) }
+        let times = shownValue.indices.map { Double($0) / 30 }
+        let windows = moving ?? (1..<values.count).map { Double($0) * seconds - 0.5...Double($0) * seconds + 0.5 }
+        let offsets = times.map { time in
+            scroll * windows.reduce(0) { $0 + max(0, min(time, $1.upperBound) - $1.lowerBound) }
+        }
+        let title = Line(text: "Postfach", top: 640, fontSize: 58)
+        func lines(_ frame: Int) -> [Line] {
+            ([title] + paragraph(shownValue[frame])).map { line in
+                var moved = line
+                moved.top -= offsets[frame]
+                return moved
+            }
+        }
+        let count = paragraph(values[0]).count
+        var wrong: [String] = [], wrongMoving = 0, right = 0
+        var firstRight: Double?, lastRight = 0.0, longestWithout = 0.0, passes = 0
+        let sent = run(OverlayTracker(configuration: configuration), times: times, seed: seed, lines: lines,
+                       readAll: { frame, shown, region in
+                           if times[frame] > passesAfter { passes += 1 }
+                           return Self.readings(of: shown, paragraph: 1..<(1 + count), in: region,
+                                                apart: readApart?.contains(times[frame]) ?? false)
+                       },
+                       noise: noise) { frame, shown, placed in
+            let text = shown[1...].map(\.text).joined(separator: " ")
+            let isMoving = frame > 0 && offsets[frame] != offsets[frame - 1]
+            var isRight = false
+            for block in placed where block.text.hasPrefix("T ") && block.lineCount > 1 {
+                if TextSimilarity.numbers(of: block.text) == TextSimilarity.numbers(of: text) {
+                    isRight = true
+                } else if isMoving {
+                    wrongMoving += 1
+                } else if wrong.count < 5 {
+                    wrong.append(String(format: "%.2f s: ", times[frame]) + "\(block.text) over \(text)")
+                }
+            }
+            if readApart != nil {
+                let all = TextSimilarity.numbers(of: text)
+                for block in placed where block.text.hasPrefix("T ") && block.lineCount == 1 && block.text != "T Postfach" {
+                    let numbers = TextSimilarity.numbers(of: block.text)
+                    if !numbers.isEmpty, numbers == all { isRight = true; continue }
+                    let isRun = numbers.count <= all.count && (0...(all.count - numbers.count)).contains {
+                        Array(all[$0..<($0 + numbers.count)]) == numbers
+                    }
+                    if isRun { continue }
+                    if isMoving { wrongMoving += 1 } else if wrong.count < 5 {
+                        wrong.append(String(format: "%.2f s: ", times[frame]) + "\(block.text) over \(text)")
+                    }
+                }
+            }
+            if isRight {
+                right += 1
+                if firstRight == nil { firstRight = times[frame] }
+                lastRight = times[frame]
+            } else if firstRight != nil {
+                longestWithout = max(longestWithout, times[frame] - lastRight)
+            }
+        }
+        return (wrong, wrongMoving, right, longestWithout, sent, passes)
+    }
+
+    /// The lab's page change2.html: "Seit dem letzten Abgleich sind NN neue Nachrichten …" over
+    /// two lines, its number ticking every 3 s
+    private static func messages(_ count: Int) -> [Line] {
+        [Line(text: "Seit dem letzten Abgleich sind \(count) neue Nachrichten", top: 760, fontSize: 40, left: 40,
+              fontName: "Helvetica"),
+         Line(text: "im Postfach eingegangen. Bitte lesen Sie diese.", top: 828, fontSize: 40, left: 40,
+              fontName: "Helvetica")]
+    }
+
+    /// … over five lines, its number in the middle of the third
+    private static func folders(_ count: Int) -> [Line] {
+        ["Die Verbindung zum Server ist im Moment stabil,", "und die Übertragung der Dateien läuft weiter.",
+         "Bisher wurden \(count) von 40 Ordnern abgeglichen,", "die übrigen folgen in den nächsten Minuten.",
+         "Bitte schalten Sie das Gerät nicht aus."].enumerated().map { index, text in
+            Line(text: text, top: 760 + 68 * Double(index), fontSize: 40, left: 40, fontName: "Helvetica")
+        }
+    }
+
+    /// … over six lines of small text (26 points, a line every 40 pixels)
+    private static func smallFolders(_ count: Int) -> [Line] {
+        ["Die Verbindung zum Server ist im Moment stabil und schnell,",
+         "und die Übertragung der Dateien läuft weiter wie geplant.",
+         "Die Sicherung hält alle Fotos und alle Dokumente bereit.",
+         "Bisher wurden \(count) von 120 Ordnern sicher abgeglichen,",
+         "die übrigen folgen in den nächsten paar Minuten.",
+         "Bitte schalten Sie das Gerät nicht aus."].enumerated().map { index, text in
+            Line(text: text, top: 760 + 40 * Double(index), fontSize: 26, left: 40, fontName: "Helvetica")
+        }
+    }
+
+    /// … as `folders`, in a serif font
+    private static func serifFolders(_ count: Int) -> [Line] {
+        folders(count).map { line in
+            var serif = line
+            serif.fontName = "Georgia"
+            return serif
+        }
+    }
+
+    /// A paragraph of several lines whose number ticks in place (the lab's change.html and
+    /// change2.html: "… sind 22 neue Nachrichten …" became 27, 15 became 18): no frame shows its
+    /// translation with the old number, and the new text is translated again within two seconds,
+    /// each text sent once. Two lines and five, the number in the middle of a line, also when it
+    /// gains a digit (9 to 10). (Before, only blocks of one line were judged: the paragraph showed
+    /// the translation with the old number until its place was read again, on the phone for about
+    /// 4 s at every tick.)
+    func testAParagraphIsNeverDrawnWithAnotherNumber() {
+        for (name, paragraph, values) in [("two lines", Self.messages, [22, 27, 33]),
+                                          ("five lines", Self.folders, [15, 18, 22]),
+                                          ("a digit more", Self.messages, [8, 9, 10, 11])] as [(String, (Int) -> [Line], [Int])] {
+            let result = changingParagraph(paragraph, values: values, seed: 21)
+            XCTAssertEqual(result.wrong, [], name)
+            XCTAssertEqual(result.wrongMoving, 0, name)
+            XCTAssertLessThanOrEqual(result.longestWithout, 2, name)
+            XCTAssertGreaterThan(result.right, values.count * 90 / 2, name)
+            let texts = values.map { paragraph($0).map(\.text).joined(separator: " ") }
+            XCTAssertEqual(result.sent.filter { $0 != "Postfach" }, texts, name)
+        }
+    }
+
+    /// … and when the number ticks while the page scrolls slowly (60 pixels a second, from half a
+    /// second before the tick to half a second after it): no frame at rest shows the old number,
+    /// and the new text is translated within two seconds. (While the page moves, a block placed a
+    /// fraction of a pixel off, or read from a frame that sampled its letters at another phase,
+    /// fits worse with all its letters: a digit that changed into one that looks alike, "15"
+    /// into "18", or a number that gained a digit, need not stand out then, and its old
+    /// translation stays until its place is read again: a known limit.)
+    func testAParagraphThatScrollsIsNeverDrawnWithAnotherNumberAtRest() {
+        let result = changingParagraph(Self.messages, values: [22, 27, 33], scroll: 60, seed: 23)
+        XCTAssertEqual(result.wrong, [])
+        XCTAssertLessThanOrEqual(result.wrongMoving, 15 * 2)
+        XCTAssertLessThanOrEqual(result.longestWithout, 2)
+    }
+
+    /// A paragraph whose numbers do not change, at rest and while the page scrolls (60 and 150
+    /// pixels a second for 5 s, then at rest), on a link that adds noise of 2 and of 6 grey
+    /// levels: it is drawn in as many frames as without the rule, and only its one text is sent.
+    /// Also in small text and in a serif font (at rest and at 60 pixels a second, noise of 6).
+    func testAParagraphWhoseNumberStaysIsNotHidden() {
+        var withoutRule = OverlayTracker.Configuration()
+        withoutRule.numberFitFactor = 1e9
+        for (kind, paragraph, scrolls, noises) in [
+            ("five lines", Self.folders, [0.0, 60, 150], [2, 6]),
+            ("small text", Self.smallFolders, [0.0, 60], [6]),
+            ("serif", Self.serifFolders, [0.0, 60], [6])] as [(String, (Int) -> [Line], [Double], [Int])] {
+            for scroll in scrolls {
+                for noise in noises {
+                    let name = "\(kind), \(scroll) px/s, noise \(noise)"
+                    let with = changingParagraph(paragraph, values: [15], seconds: 9, scroll: scroll, moving: [2...7],
+                                                 noise: noise, seed: 31)
+                    let without = changingParagraph(paragraph, values: [15], seconds: 9, scroll: scroll, moving: [2...7],
+                                                    noise: noise, seed: 31, configuration: withoutRule)
+                    XCTAssertEqual(with.wrongMoving, 0, name)
+                    XCTAssertEqual(with.wrong, [], name)
+                    XCTAssertGreaterThanOrEqual(with.right, without.right, name)
+                    XCTAssertEqual(with.sent.filter { $0 != "Postfach" }, [paragraph(15).map(\.text).joined(separator: " ")],
+                                   name)
+                }
+            }
+        }
+    }
+
+    /// A paragraph hidden for its numbers whose reading comes back as separate lines after the
+    /// tick (for 3 s, and for good): the reading of its box never confirms it, its rereads are
+    /// used up, and nothing asks for its place any more. It is dropped and its place read as new
+    /// text: the number is right again within two seconds, never wrong at rest, and the page is
+    /// not read on without end. (Before, the paragraph stayed hidden for good, 9 s without its
+    /// translation to the end of the run, the passes stopped.)
+    func testAHiddenParagraphThatNothingReadsIsReadAsNewText() {
+        for apartUntil in [6.0, 99] {
+            let name = "apart until \(apartUntil)"
+            let result = changingParagraph(Self.messages, values: [22, 27, 27, 27], seed: 41,
+                                           readApart: 3..<apartUntil, passesAfter: 8)
+            XCTAssertEqual(result.wrong, [], name)
+            XCTAssertLessThanOrEqual(result.longestWithout, 2, name)
+            XCTAssertEqual(result.passes, 0, name)
+        }
+    }
 
     private static let months = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September",
                                  "Oktober", "November", "Dezember"]
