@@ -203,4 +203,45 @@ final class OverlayTrackerStillPictureTests: XCTestCase {
         XCTAssertNil(tracker.recognitionDue)
         XCTAssertEqual(Set(tracker.blocks.map(\.text)), Set(paragraphs.map { $0.map(\.text).joined(separator: " ") }))
     }
+
+    /// Whatever keeps asking for a place to be read: a picture that does not change is read
+    /// `maxPassesOnPicture` times and then not at all until it changes. Here the recognizer
+    /// fails on every pass (its region is asked for again each time); a change of the picture
+    /// is read again at once, and with a recognizer that works, read and translated.
+    func testAStillPictureIsReadABoundedNumberOfTimes() {
+        let title = [Line(text: "Netzwerk & Internet", box: CGRect(x: 54, y: 400, width: 600, height: 63), fontSize: 60)]
+        let tracker = OverlayTracker()
+        var seed: UInt64 = 3
+        let still = show(Self.picture([title]), [title], on: tracker, from: 0, seconds: 10, seed: &seed,
+                         answer: { _ in nil })
+        XCTAssertEqual(still.count, tracker.configuration.maxPassesOnPicture, "\(still)")
+        XCTAssertNil(tracker.recognitionDue)
+
+        let changed = [Line(text: "Netzwerk & Intranet", box: CGRect(x: 54, y: 400, width: 600, height: 63), fontSize: 60)]
+        let after = show(Self.picture([changed]), [changed], on: tracker, from: 10, seconds: 3, seed: &seed)
+        XCTAssertGreaterThanOrEqual(after.count, 1)
+        XCTAssertLessThanOrEqual(after.count, tracker.configuration.maxPassesOnPicture)
+        XCTAssertEqual(tracker.blocks.map(\.text), ["Netzwerk & Intranet"])
+        XCTAssertEqual(tracker.blocks.map(\.translation), ["T Netzwerk & Intranet"])
+    }
+
+    /// The bound holds back only reading that would go on without end: a still picture that
+    /// takes many passes to read (here the recognizer fails on the first 18, a little less than
+    /// the most a picture of the tracking bench needed) is still read and translated.
+    func testAStillPictureThatTakesManyPassesIsStillRead() {
+        let title = [Line(text: "Netzwerk & Internet", box: CGRect(x: 54, y: 400, width: 600, height: 63), fontSize: 60)]
+        let tracker = OverlayTracker()
+        var seed: UInt64 = 5
+        var failures = 18
+        let passes = show(Self.picture([title]), [title], on: tracker, from: 0, seconds: 10, seed: &seed,
+                          answer: { region in
+                              guard failures == 0 else { failures -= 1; return nil }
+                              return Self.recognize([title], in: region)
+                          })
+        XCTAssertGreaterThan(passes.count, 18, "\(passes)")
+        XCTAssertLessThanOrEqual(passes.count, tracker.configuration.maxPassesOnPicture)
+        XCTAssertEqual(tracker.blocks.map(\.text), ["Netzwerk & Internet"])
+        XCTAssertEqual(tracker.blocks.map(\.translation), ["T Netzwerk & Internet"])
+        XCTAssertNil(tracker.recognitionDue)
+    }
 }

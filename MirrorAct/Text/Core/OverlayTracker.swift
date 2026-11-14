@@ -280,6 +280,18 @@ final class OverlayTracker {
         /// a place is read again at most this many times: for being cut off, or for holding two
         /// blocks that may be one paragraph (`askToReadParagraphsTogether`)
         var maxRereads = 2
+        /// A picture that does not change is read by at most this many passes (those begun since
+        /// a frame last changed it); then nothing is due until a frame changes it, and what is
+        /// left to read waits for that. On the same picture a pass reads what the passes before it
+        /// read, so what they could not settle it cannot settle either. Every rule that asks for a
+        /// place to be read again at rest is bounded on its own (`maxRereads`, `Block.missedOnce`,
+        /// a place to read at rest asked for while its area rested already waits for its next
+        /// movement); this bounds them all together (on a picture that nothing changes: any change
+        /// anywhere, such as a blinking cursor, lets the next passes begin anew), also two of them
+        /// that keep starting each other anew, and a recognizer that keeps failing. A screen that
+        /// came to rest is read a few times; in the tracking bench (seeds 1-30) no picture needed
+        /// more than 19 passes, so the bound holds back only reading that would go on without end.
+        var maxPassesOnPicture = 24
         /// A paragraph read while the picture moves may go on beyond the edge of the view (the
         /// frame, its scrolling area) when that edge lies above or below it within this many of
         /// its lines (the gap before a line and most of that line, enough to read it): its next
@@ -611,6 +623,8 @@ final class OverlayTracker {
     /// the movements of the frame before: candidates for the next one
     private var priors: [FrameMotion] = []
     private var running: Pass?
+    /// passes begun since a frame last changed the picture (`Configuration.maxPassesOnPicture`)
+    private var passesOnPicture = 0
     private var lastChange: TimeInterval = 0
     private var lastMotion: TimeInterval = -1000
     /// the movements of the last frame that moved: where, and how far as a share of their area
@@ -686,6 +700,7 @@ final class OverlayTracker {
     /// A first picture, or one of a new size: all of it has to be read
     private func startOver(_ thumbnail: LumaImage, time: TimeInterval) {
         lastChange = time
+        passesOnPicture = 0
         plan.reset()
         plan.add(UnreadArea(rect: CGRect(x: 0, y: 0, width: thumbnail.width, height: thumbnail.height), kind: .changed,
                             since: time))
@@ -695,6 +710,7 @@ final class OverlayTracker {
     /// them): moves blocks, areas to read and the probes of a running pass
     private func follow(_ current: LumaImage, time: TimeInterval) -> (change: FrameChange, dx: Double, dy: Double) {
         lastChange = time
+        passesOnPicture = 0
         let motions = estimator.motions
         updateOverlays()
         updateScrollAreas(motions, in: current, time: time)
@@ -1604,9 +1620,10 @@ final class OverlayTracker {
     // MARK: Reading
 
     /// When `beginRecognition` should be called (same clock as `advance`; a time in the past
-    /// means now). nil = nothing to read, or a pass is running.
+    /// means now). nil = nothing to read, a pass is running, or the picture was read
+    /// `Configuration.maxPassesOnPicture` times since a frame last changed it.
     var recognitionDue: TimeInterval? {
-        guard previous != nil, running == nil else { return nil }
+        guard previous != nil, running == nil, passesOnPicture < configuration.maxPassesOnPicture else { return nil }
         return plan.due(lastMotion: lastMotion, isFullyVisible: isFullyVisible, areaMotion: areaMotion)
     }
 
@@ -1649,6 +1666,7 @@ final class OverlayTracker {
                                                                            height: region.height * factor),
                                          isFullFrame: isFullFrame)
         nextRequestID += 1
+        passesOnPicture += 1
         var startRects: [Int: CGRect] = [:]
         for block in tracked {
             startRects[block.id] = thumbnailRect(of: block)
