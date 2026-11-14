@@ -112,22 +112,26 @@ Teilen sind in Pixeln des Bildes, Ursprung oben links; die von `TextLayout` in 0
 Texterkennung `RecognizedLine.tone` gemessen hat; ohne das bewirkt diese Regel nichts.
 
 Einige Regeln von `OverlayTracker` gelten für jeden Fall und gehen durch eine Änderung an anderer
-Stelle leicht verloren. Eine Übersetzung wird nie über Texte mit anderen Zahlen hinweg weitergegeben
-oder gezeichnet: Eine Lesung mit anderen Ziffern zeigt nicht die alte Übersetzung, solange ihre
-eigene unterwegs ist (`TextSimilarity.hasOtherNumbers`), und ein Block aus einer Zeile, dessen
-Ziffern nicht mehr zum Bild darunter passen (`numbersFit`, gemessen am Median aller seiner Zeichen),
-wird nicht gezeichnet, bis eine Lesung eines späteren Durchgangs ihn bestätigt
-(`Block.numbersDifferSince`). Eine genau bekannte untere Kante eines Scrollbereichs wird auf dem
-ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr zeigen, was
-sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt (`dropBottomEdgesThatDoNotHold`);
-obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen ist und stehen bleibt, während sich
-sein Scrollbereich unter ihm bewegt, etwa der Titel einer Leiste, wird nicht an den Kanten dieses
-Bereichs abgeschnitten (`Block.staysOverArea`). Eine Stelle, an der ein Block abgeschnitten sein
-kann oder zwei Blöcke ein Absatz sein können, wird höchstens `maxRereads`-mal erneut gelesen, und
-ein Bild, an dem sich nichts ändert, von höchstens `maxPassesOnPicture` Durchgängen; was dann noch
-übrig ist, wartet auf die nächste Änderung. Der Prüfstand hat keine Zeilen, die sich nur in ihren
-Zahlen unterscheiden: Diese deckt `OverlayTrackerNumbersTests` ab, die Kanten
-`OverlayTrackerEdgeTests` und das ruhende Bild `OverlayTrackerStillPictureTests`.
+Stelle leicht verloren. Eine Übersetzung wird nie an einen Text mit anderen Zahlen weitergegeben:
+Ein neu gelesener Text mit anderen Ziffern zeigt nicht die alte Übersetzung, solange seine eigene
+unterwegs ist (`TextSimilarity.hasOtherNumbers`). Ein Block aus einer Zeile, dessen Ziffern nicht
+mehr zum Bild darunter passen (`numbersFit`, gemessen am Median aller seiner Zeichen, Ziffern
+eingeschlossen), wird nicht gezeichnet, bis ein späterer Lesedurchgang ihn bestätigt
+(`Block.numbersDifferSince`); ein Block aus mehreren Zeilen wird so nicht geprüft und behält seine
+Übersetzung, bis er neu gelesen ist, und während eine Liste, deren Zeilen sich nur in einer oder
+zwei Ziffern unterscheiden, schnell gleitet, kann die Übersetzung einer Zeile für ein oder zwei
+Bilder noch über der nächsten liegen. Eine genau bekannte untere Kante eines Scrollbereichs wird auf
+dem ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr zeigen,
+was sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt
+(`dropBottomEdgesThatDoNotHold`); obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen
+ist und stehen bleibt, während sich sein Scrollbereich unter ihm bewegt, etwa der Titel einer
+Leiste, wird nicht an den Kanten dieses Bereichs abgeschnitten (`Block.staysOverArea`). Eine Stelle,
+an der ein Block abgeschnitten sein kann oder zwei Blöcke ein Absatz sein können, wird höchstens
+`maxRereads`-mal erneut gelesen, und ein Bild, an dem sich nichts ändert, von höchstens
+`maxPassesOnPicture` Durchgängen; was dann noch übrig ist, wartet auf die nächste Änderung. Der
+Prüfstand hat keine Zeilen, die sich nur in ihren Zahlen unterscheiden: Diese deckt
+`OverlayTrackerNumbersTests` ab, die Kanten `OverlayTrackerEdgeTests` und das ruhende Bild
+`OverlayTrackerStillPictureTests`.
 
 ## Ohne Gerät testen
 

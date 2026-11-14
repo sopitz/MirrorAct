@@ -110,19 +110,21 @@ of the picture. `TextLayout` keeps a row's title apart from its summary only whe
 measured `RecognizedLine.tone`; without it that rule does nothing.
 
 Some rules of `OverlayTracker` hold for every case and are easily undone by a change elsewhere. A
-translation is never handed on, nor drawn, across texts with other numbers: a reading whose digits
-differ does not show the old translation while its own is on its way
-(`TextSimilarity.hasOtherNumbers`), and a block of one line whose digits no longer fit the picture
-under it (`numbersFit`, against the median of all its letters) is not drawn until a reading by a
-later pass confirms it (`Block.numbersDifferSince`). A refined bottom edge of a scrolling area is
-checked again on the picture at rest and dropped when the rows beyond it no longer show what they
-showed and the page's ground goes on in them (`dropBottomEdgesThatDoNotHold`); top edges are not
-checked. A block that shows whole and stays while its scrolling area moves under it, such as the
-title of a bar, is not cut at that area's edges (`Block.staysOverArea`). A place where a block may
-be cut off, or where two blocks may be one paragraph, is read again at most `maxRereads` times, and
-a picture that nothing changes is read by at most `maxPassesOnPicture` passes; what is left then
-waits for the next change. The bench has no rows that differ only in their numbers:
-`OverlayTrackerNumbersTests` covers them, `OverlayTrackerEdgeTests` the edges and
+translation is never handed on to a text with other numbers: a reading whose digits differ does not
+show the old translation while its own is on its way (`TextSimilarity.hasOtherNumbers`). A block of
+one line whose digits no longer fit the picture under it (`numbersFit`, against the median of all
+its letters, digits included) is not drawn until a reading by a later pass confirms it
+(`Block.numbersDifferSince`); a block of several lines is not checked this way and keeps its
+translation until it is read again, and while a list whose rows differ only in a digit or two moves
+fast, a row's translation can still lie over the next row for a frame or two. A refined bottom edge
+of a scrolling area is checked again on the picture at rest and dropped when the rows beyond it no
+longer show what they showed and the page's ground goes on in them (`dropBottomEdgesThatDoNotHold`);
+top edges are not checked. A block that shows whole and stays while its scrolling area moves under
+it, such as the title of a bar, is not cut at that area's edges (`Block.staysOverArea`). A place
+where a block may be cut off, or where two blocks may be one paragraph, is read again at most
+`maxRereads` times, and a picture that nothing changes is read by at most `maxPassesOnPicture`
+passes; what is left then waits for the next change. The bench has no rows that differ only in their
+numbers: `OverlayTrackerNumbersTests` covers them, `OverlayTrackerEdgeTests` the edges and
 `OverlayTrackerStillPictureTests` the still picture.
 
 ## Test without a device
