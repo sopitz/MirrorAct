@@ -421,7 +421,9 @@ extension ScreenTranslator {
 
     /// Debug builds: the translations drawn into the latest frame, with the text they replace,
     /// every paragraph the tracker knows (whether it shows, is lost or doubtful, its scrolling
-    /// area), and what the tracker still has to read and when (`OverlayTracker.readingState`).
+    /// area, since when it is held back for its numbers, relative to now, and whether it lies over
+    /// its area's content), and what the tracker still has to read and when
+    /// (`OverlayTracker.readingState`).
     /// Call inside `FrameSink.debugSnapshot`, so that no frame is processed meanwhile.
     func debugPlacement() -> (placed: [[String: Any]], tracked: [[String: Any]], reading: [String: Any]) {
         func rect(_ r: CGRect?) -> Any {
@@ -450,6 +452,8 @@ extension ScreenTranslator {
                     entry["isLost"] = more.isLost
                     entry["isDoubtful"] = more.isDoubtful
                     entry["areaID"] = more.areaID
+                    entry["numbersDifferSince"] = more.numbersDifferSince.map { $0 - clock() } ?? NSNull()
+                    entry["staysOverArea"] = more.staysOverArea
                 }
                 return entry
             }

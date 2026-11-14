@@ -393,7 +393,9 @@ final class OverlayTracker {
     /// it): each place of the reading plan with its kind, its rectangle in frame pixels, since
     /// when it is asked for, how often it was read again already, and when it is due (nil = not
     /// before the picture moves again); the passes begun since a frame last changed the picture;
-    /// and for each block whether it shows (all of it), is lost or doubtful, and its scrolling area
+    /// and for each block whether it shows (all of it), is lost or doubtful, its scrolling area,
+    /// since when it is not drawn for its numbers (`Block.numbersDifferSince`) and whether it
+    /// lies over the content of its area (`Block.staysOverArea`)
     var readingState: ReadingState {
         let factor = Double(scale)
         var places: [ReadingState.Place] = []
@@ -408,7 +410,8 @@ final class OverlayTracker {
         for block in tracked {
             blocks[block.id] = ReadingState.Block(isSeen: block.seen != nil, isWhole: block.seen == block.inner,
                                                   isLost: block.lostSince != nil, isDoubtful: block.isDoubtful,
-                                                  areaID: block.areaID)
+                                                  areaID: block.areaID, numbersDifferSince: block.numbersDifferSince,
+                                                  staysOverArea: block.staysOverArea)
         }
         return ReadingState(places: places, isReading: running != nil, passesOnPicture: passesOnPicture,
                             due: recognitionDue, blocks: blocks)
@@ -430,6 +433,8 @@ final class OverlayTracker {
             var isLost: Bool
             var isDoubtful: Bool
             var areaID: Int
+            var numbersDifferSince: TimeInterval?
+            var staysOverArea: Bool
         }
 
         var places: [Place]
