@@ -775,6 +775,9 @@ final class OverlayTracker {
     /// places where a movement of this frame replaced the picture (`moveBlocks`), added to the
     /// reading plan after the plan moved with the frame
     private var replacedPlaces: [CGRect] = []
+    /// where a movement replaced the picture (`moveBlocks`), and when a movement last brought more
+    /// of the new picture there (`follow`); nil when nothing was replaced, or that part rests
+    private var replacing: (rect: CGRect, at: TimeInterval)?
 
     init(configuration: Configuration = Configuration()) {
         self.configuration = configuration
@@ -856,6 +859,24 @@ final class OverlayTracker {
                   bounds: CGRect(x: 0, y: 0, width: current.width, height: current.height))
         for rect in replacedPlaces {
             plan.add(UnreadArea(rect: rect, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
+        }
+        // A replacement can take several frames (a page that slides up over the one before in
+        // steps): until nothing that moves over what was replaced has moved for `restDelay`,
+        // every movement there brings more of the new picture, and its part of the frame (its
+        // scrolling area) is read once everything over it rests as well. The place of the frame
+        // that replaced the picture moves with the content to where the new page begins, and the
+        // rows that come in below it after it were read only in the pieces that changed.
+        if let replacement = replacing, time - replacement.at > configuration.restDelay { replacing = nil }
+        if var replacement = replacing {
+            for region in regions where region.intersects(replacement.rect) {
+                plan.add(UnreadArea(rect: region, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
+                replacement.rect = replacement.rect.union(region)
+                replacement.at = time
+            }
+            replacing = replacement
+        }
+        for rect in replacedPlaces {
+            replacing = (replacing.map { $0.rect.union(rect) } ?? rect, time)
         }
         replacedPlaces = []
         // (what was known of a place is not known of the content that moved into it)
@@ -3233,6 +3254,8 @@ final class OverlayTracker {
         tileMovedVerticallyAt = []
         knownTiles = []
         unreadChangedTiles = []
+        replacedPlaces = []
+        replacing = nil
     }
 
     private func shownTranslation(for text: String) -> String? {

@@ -189,4 +189,14 @@ final class OverlayTrackerPageTransitionTests: XCTestCase {
             }
         }
     }
+
+    /// The new page slides up over the old one in six frames. The first of them replaces the
+    /// picture where it carries the old rows away; the rows that come in below in the frames
+    /// after are part of the same replacement and are read once it rests, whole.
+    func testAPageThatComesUpFromBelowInStepsIsReadWhole() {
+        let outcome = play(Self.fromBelowSteps, last: Self.connected)
+        XCTAssertEqual(Set(outcome.drawn), Set(Self.connected.map(\.text)), "lines not drawn")
+        XCTAssertTrue(outcome.places.allSatisfy { $0.due != nil }, "places that wait for a movement: \(outcome.places)")
+        XCTAssertLessThanOrEqual(outcome.mostPassesOnPicture, 20)
+    }
 }
