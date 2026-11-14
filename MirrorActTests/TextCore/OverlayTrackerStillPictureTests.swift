@@ -331,4 +331,114 @@ final class OverlayTrackerStillPictureTests: XCTestCase {
         }
         XCTAssertEqual(titleDrawn, frames, "the title drawn in \(titleDrawn) of \(frames) frames")
     }
+
+    /// As above, the screen slid in and the page scrolled under the bar, then rests: the title
+    /// lies over the page's content. Then the title changes in place ("Titel 3" becomes
+    /// "Titel 4", or "Titel" becomes "Titel neu": the bar of a list that counts its rows), and
+    /// the new reading took the old block's area but not its mark, so the area's top edge cut it
+    /// to nothing for as long as the page rested. A reading of other text in the place of a
+    /// block over the content takes the mark with the area.
+    func testTheTitleOfABarStaysDrawnWhenItsTextChangesInPlace() {
+        for (initial, changed) in [("Titel 3", "Titel 4"), ("Titel", "Titel neu")] {
+            let result = barTitleAtRest(initial: initial, changed: changed)
+            XCTAssertGreaterThanOrEqual(result.drawn, result.frames - 30,
+                                        "'\(changed)' drawn in \(result.drawn) of \(result.frames) frames")
+            XCTAssertEqual(result.stale, 0, "the translation of '\(initial)' drawn after the change")
+        }
+    }
+
+    /// As above, but the title does not change: something covers its right part for a third
+    /// of a second (the ripple of a touch), so it is not found where it is. It lost its mark
+    /// then, and once it was found again it was cut to nothing by the area's top edge for as
+    /// long as the page rested. A block that is not found where it is keeps the mark; one that a
+    /// movement carries while it is not found loses it.
+    func testTheTitleOfABarStaysDrawnAfterItWasCoveredForAMoment() {
+        let result = barTitleAtRest(initial: "Titel", changed: "Titel", coverFrames: 10)
+        XCTAssertGreaterThanOrEqual(result.drawn, result.frames - 30,
+                                    "the title drawn in \(result.drawn) of \(result.frames) frames")
+    }
+
+    /// The screen of `testTheTitleOfABarStaysDrawnAfterTheScreenSlidInAndThePageScrolls`; once
+    /// the page rests the title becomes `changed` (other pixels where it is) or its right part is
+    /// covered for `coverFrames` frames. Returns in how many of the 300 frames after that the
+    /// translation of `changed` is drawn, and in how many from the fourth on the old one is.
+    private func barTitleAtRest(initial: String, changed: String,
+                                coverFrames: Int = 0) -> (drawn: Int, frames: Int, stale: Int) {
+        let screen = SyntheticScreen(seed: 5)
+        let title = CGRect(x: 150, y: 20, width: 100, height: 20)
+        let tracker = OverlayTracker()
+        var time = 0.0, seed: UInt64 = 1
+        var pending: (request: RecognitionRequest, blocks: [RecognizedBlock], at: TimeInterval)?
+        var titleText = initial, hasChanged = false, covering = 0
+        func read(_ region: CGRect, shift: Int, offset: Int) -> [RecognizedBlock] {
+            var blocks: [RecognizedBlock] = []
+            let shown = title.offsetBy(dx: Double(shift), dy: 0)
+            // (a region that holds at least half of the title reads all of its text, in the box
+            // of what it holds of it)
+            let part = shown.intersection(region)
+            if !part.isNull, part.height >= shown.height, part.width * 2 >= shown.width {
+                blocks.append(RecognizedBlock(text: titleText, rect: part))
+            }
+            for index in 0..<50 {
+                var block = SyntheticScreen.block(index, offset: offset, text: "Zeile \(index)")
+                block.rect = block.rect.offsetBy(dx: Double(shift), dy: 0)
+                guard block.rect.minY >= Double(SyntheticScreen.topBar), block.rect.maxY <= Double(SyntheticScreen.bottomBar),
+                      region.contains(block.rect) else { continue }
+                blocks.append(block)
+            }
+            return blocks
+        }
+        func frame(shift: Int, offset: Int) -> [PlacedBlock] {
+            time += 1.0 / 30
+            seed += 1
+            var image = screen.thumbnail(offset: offset)
+            if shift > 0 {
+                let moved = shift / SyntheticScreen.scale
+                var pixels = [UInt8](repeating: 225, count: image.pixels.count)
+                for y in 0..<image.height {
+                    for x in moved..<image.width { pixels[y * image.width + x] = image.pixels[y * image.width + x - moved] }
+                }
+                image.pixels = pixels
+            }
+            if covering > 0 {
+                // (the right part of the title, from thumbnail x 100 on, under a grey patch that
+                // the recognizer reads through)
+                covering -= 1
+                for y in 5..<25 { for x in 100..<140 { image.pixels[y * image.width + x] = 120 } }
+            } else if hasChanged && initial != changed {
+                // (the changed letters at the title's end)
+                for y in 10..<20 { for x in 115..<125 { image.pixels[y * image.width + x] = (x + y) % 2 == 0 ? 30 : 225 } }
+            }
+            let placed = tracker.advance(SyntheticPage.noisy(image, amount: 2, seed: seed), scale: SyntheticScreen.scale,
+                                         time: time).placed
+            if let job = pending, time >= job.at {
+                tracker.finishRecognition(job.request, blocks: job.blocks, time: time)
+                pending = nil
+            }
+            if pending == nil, let due = tracker.recognitionDue, due <= time,
+               let request = tracker.beginRecognition(time: time) {
+                pending = (request, read(request.region, shift: shift, offset: offset), time + 0.1)
+            }
+            for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                tracker.setTranslation("T " + text, for: text)
+            }
+            return placed
+        }
+        for shift in stride(from: 200, through: 0, by: -20) { _ = frame(shift: shift, offset: 500) }
+        for _ in 0..<45 { _ = frame(shift: 0, offset: 500) }
+        for step in 1...10 { _ = frame(shift: 0, offset: 500 + 6 * step) }
+        for _ in 0..<60 { _ = frame(shift: 0, offset: 560) }
+        XCTAssertTrue(tracker.blocks.contains { $0.text == initial && $0.translation == "T " + initial })
+        hasChanged = true
+        covering = coverFrames
+        titleText = changed
+        var drawn = 0, stale = 0
+        let frames = 300
+        for index in 0..<frames {
+            let placed = frame(shift: 0, offset: 560)
+            if placed.contains(where: { $0.text == "T " + changed }) { drawn += 1 }
+            if initial != changed, index >= 3, placed.contains(where: { $0.text == "T " + initial }) { stale += 1 }
+        }
+        return (drawn, frames, stale)
+    }
 }

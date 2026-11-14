@@ -513,7 +513,11 @@ final class OverlayTracker {
         /// It showed whole and stayed where it was while its scrolling area moved, outside of that
         /// area (`moveBlocks`): it lies over the content there (the title of a bar, a header that
         /// sticks), and the area's edge does not cut it off (`placed`, `visibleRect`). That ends
-        /// once it no longer shows whole.
+        /// once it is found and does not show whole, or a movement carries it while it is not
+        /// found (it goes with the content); not while it is not found where it is (covered for
+        /// a moment, its text changed in place: nothing of it is drawn meanwhile). A reading
+        /// of other text in its place that takes its area takes the mark as well (`absorb`: the
+        /// title of the bar changed in place).
         var staysOverArea = false
     }
 
@@ -1383,7 +1387,13 @@ final class OverlayTracker {
                 block.seen = nil
                 block.lostSince = block.lostSince ?? time
             }
-            if block.seen != block.inner { block.staysOverArea = false }
+            // (one that is not found where it is keeps the mark: covered for a moment, its text
+            // changed in place; one that a movement carries goes with the content)
+            if let seen = block.seen, seen != block.inner { block.staysOverArea = false }
+            if !found, abs(block.x - tracked[index].x) >= configuration.restingShift
+                || abs(block.y - tracked[index].y) >= configuration.restingShift {
+                block.staysOverArea = false
+            }
             tracked[index] = block
         }
         // A block that could not be found for `lostLifetime` is forgotten. Where its place still
@@ -2569,7 +2579,11 @@ final class OverlayTracker {
             if let largest {
                 if !TextSimilarity.hasOtherNumbers(largest.text, block.text) { block.earlier = shownTranslation(of: largest) }
                 block.id = largest.id
-                if block.areaID < 0 { block.areaID = largest.areaID }
+                if block.areaID < 0 {
+                    // (in no area: it lies where the old one lay, over the content if that did)
+                    block.areaID = largest.areaID
+                    block.staysOverArea = largest.staysOverArea
+                }
                 if let place = tracked.firstIndex(where: { $0.id == largest.id }) {
                     tracked[place] = block
                     tracked.removeAll { old in
@@ -2678,7 +2692,11 @@ final class OverlayTracker {
             block.id = nextBlockID
             nextBlockID += 1
         }
-        if block.areaID < 0 { block.areaID = old.areaID }
+        if block.areaID < 0 {
+            // (in no area: it lies where the old one lay, over the content if that did)
+            block.areaID = old.areaID
+            block.staysOverArea = old.staysOverArea
+        }
         if !coversOld {
             // (the rest of the older block was not read: what is there now is read whole)
             askToReadPlace(oldRect.union(rect), attempts: attempts, time: time)
