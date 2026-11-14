@@ -102,13 +102,13 @@ Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/Mirr
 ## Text kopieren und übersetzen
 
 «Text» (⌥⌘T) kopiert den Text auf dem Gerätebildschirm in die Zwischenablage, einen Absatz pro
-Zeile. «Übersetzen» (⇧⌘T) zeigt den Bildschirm in einer anderen Sprache, bis man es wieder
-ausschaltet: Die Übersetzung wird über den Text gezeichnet, in der Grösse des Textes, den sie
-ersetzt, bleibt beim Scrollen auf ihm und erscheint auch in Screenshots, Aufnahmen und beim
-Präsentieren. Beide gibt es in der Werkzeugleiste und, als «Text auf dem Bildschirm kopieren» und
-«Text auf dem Bildschirm übersetzen», im Kontextmenü und im Menü «Gerät». Beide lassen die
-Statusleiste weg, auch im Querformat, und ein Zeichen wie «€» oder «#», das weit vor seinem Text
-steht. Unter Einstellungen → Text:
+Zeile: den eigenen Text des Geräts, auch wenn «Übersetzen» an ist. «Übersetzen» (⇧⌘T) zeigt den
+Bildschirm in einer anderen Sprache, bis man es wieder ausschaltet: Die Übersetzung wird über den
+Text gezeichnet, in der Grösse des Textes, den sie ersetzt, bleibt beim Scrollen auf ihm und
+erscheint auch in Screenshots, Aufnahmen und beim Präsentieren. Beide gibt es in der Werkzeugleiste
+und, als «Text auf dem Bildschirm kopieren» und «Text auf dem Bildschirm übersetzen», im Kontextmenü
+und im Menü «Gerät». Beide lassen die Statusleiste weg, auch im Querformat, und ein Zeichen wie «€»
+oder «#», das weit vor seinem Text steht. Unter Einstellungen → Text:
 
 - **Übersetzen nach:** die Systemsprache oder eine andere aus der Liste. Gibt es eine Sprache in
   mehreren Formen, nennt die Liste die Region, etwa «Deutsch (Schweiz)» oder «Englisch
@@ -127,12 +127,13 @@ steht. Unter Einstellungen → Text:
   «Übersetzen» auszuschalten schliesst auch einen offenen Dialog von macOS, ausser ein anderes
   Spiegelfenster übersetzt dieselben Sprachen. macOS wird jeweils nur nach einem Sprachpaar
   gefragt, und nur, wenn ein guter Teil des Textes auf dem Bildschirm in der Sprache ist: Ein Name,
-  eine Seriennummer oder ein einzelnes Wort allein bringt die Frage nie. Einzelne Wörter wie «Ein»
-  und «Aus» geraten unter Umständen falsch oder lauten von Bildschirm zu Bildschirm anders
-  («Airplane mode» auf dem einen, «Flight mode» auf dem anderen). Einige Sprachen und regionale
-  Formen, in der Liste markiert, brauchen Apple Intelligence; MirrorAct sagt es, wenn sie aus ist
-  oder dieser Mac sie nicht unterstützt. Braucht die Sprache, in die übersetzt wird, Apple
-  Intelligence, geht «Übersetzen» aus; Text in einer Sprache, die sie braucht, bleibt stehen.
+  eine Seriennummer oder ein einzelnes Wort allein bringt die Frage nie. Einzelne Wörter und kurze
+  Beschriftungen geraten unter Umständen falsch oder seltsam oder lauten von Bildschirm zu
+  Bildschirm anders («Airplane mode» auf dem einen, «Flight mode» auf dem anderen). Einige
+  Sprachen und regionale Formen, in der Liste markiert, brauchen Apple Intelligence; MirrorAct
+  sagt es, wenn sie aus ist oder dieser Mac sie nicht unterstützt. Braucht die Sprache, in die
+  übersetzt wird, Apple Intelligence, geht «Übersetzen» aus; Text in einer Sprache, die sie
+  braucht, bleibt stehen.
 - **Sprachmodell-Dienst (eigener API-Schlüssel):** den Dienst wählen, den eigenen API-Schlüssel
   eintragen («Schlüssel holen» öffnet die Seite des Dienstes dafür) und ein Modell; «Testen»
   übersetzt damit «Hello». Fehlen Adresse, ein nötiger API-Schlüssel oder ein Modell, geht
@@ -144,12 +145,14 @@ steht. Unter Einstellungen → Text:
   eine Minute für eine Antwort (fünf Minuten für einen Server unter einer Adresse auf dem Mac oder
   im eigenen Netzwerk), sagt MirrorAct das und sendet weniger Texte pro Anfrage. Meldet der Dienst
   Fehler oder ist er nicht erreichbar, versucht MirrorAct es nach 5, 10, 20 und 40 Sekunden wieder
-  und dann jede Minute, und das Spiegelfenster sagt es; sobald der Dienst wieder antwortet, wird
-  der Bildschirm mit dem nächsten Versuch übersetzt, und «Übersetzen» aus- und wieder einschalten
-  versucht es sofort. Eine Pause, um die der Dienst bittet (zu viele Anfragen), wird eingehalten,
-  höchstens 15 Minuten. Antwortet das Modell in einer Form, die MirrorAct nicht brauchen kann, sagt
-  das Fenster das und schlägt ein anderes Modell vor; «Übersetzen» bleibt an und versucht es nach
-  denselben Wartezeiten wieder, zuerst mit einem einzelnen Text, bis das Modell richtig antwortet.
+  und dann jede Minute; das Spiegelfenster nennt den Fehler und, sobald die Wartezeit eine Minute
+  beträgt, wann es wieder versucht wird. Sobald der Dienst wieder antwortet, wird der Bildschirm
+  mit dem nächsten Versuch übersetzt, also bis zu einer Minute später, und «Übersetzen» aus- und
+  wieder einschalten versucht es sofort. Eine Pause, um die der Dienst bittet (zu viele Anfragen),
+  wird eingehalten, höchstens 15 Minuten. Antwortet das Modell in einer Form, die MirrorAct nicht
+  brauchen kann, sagt das Fenster das und schlägt ein anderes Modell vor; «Übersetzen» bleibt an
+  und versucht es nach denselben Wartezeiten wieder, zuerst mit einem einzelnen Text, bis das
+  Modell richtig antwortet.
   «Übersetzen» geht aus, wenn der API-Schlüssel nicht angenommen wird oder dafür nicht verwendet
   werden darf, kein Guthaben mehr da ist, das Modell oder die Adresse falsch ist oder das Modell
   alles ablehnt, was es übersetzen soll.
@@ -182,27 +185,49 @@ grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner
 - «Text» kopiert alles, was es liest; so kann das Symbol eines Listeneintrags als ein oder zwei
   verirrte Buchstaben mitkommen. «Übersetzen» lässt solche Symbole in Ruhe und damit auch ein
   kurzes Wort an ihrer Stelle, etwa einen Wochentag vor zwei Zeilen Öffnungszeiten oder die
-  Initialen in einem Profilbild: Es bleibt unübersetzt.
+  Initialen in einem Profilbild: Es bleibt unübersetzt. Ein kurzes Wort, das in einer eigenen
+  Spalte steht, etwa ein Wochentag vor einem Termin, wird auf eine eigene Zeile kopiert und für
+  sich übersetzt.
 - Mit «Dieser Mac» bleibt ein einzelnes Wort in der Sprache des Geräts zwischen Text, der schon in
   der eigenen Sprache ist, unter Umständen stehen: Ein Wort allein verrät seine Sprache nicht.
+- Ändert sich eine Zahl in einer kurzen Zeile, etwa ein Zähler oder eine Angabe zum Speicherplatz,
+  verschwindet die Übersetzung der Zeile kurz, bis die Zeile neu gelesen ist, statt die alte Zahl
+  zu zeigen; in einem Absatz aus mehreren Zeilen kann die alte Übersetzung etwa eine Sekunde lang
+  stehen bleiben. Eine Zahl, die sich jede Sekunde oder öfter ändert, ist darum einen guten Teil
+  der Zeit unübersetzt zu sehen, und in einer Liste, deren Zeilen sich nur in einer Zahl
+  unterscheiden, können Übersetzungen beim schnellen Scrollen verschwinden und wiederkommen,
+  sobald die Liste steht. Ab und zu bleibt eine Zeile mit einer Zahl unübersetzt, nachdem sie sich
+  geändert hat oder eine Liste stehen geblieben ist, bis sich die Seite bewegt oder sich der
+  Bildschirm ändert.
+- Ist der Bildschirm zur Ruhe gekommen, wird er noch einige Male gelesen und dann nicht mehr, bis
+  sich etwas auf ihm ändert; was sich laufend ändert, etwa eine Uhr mit Sekunden, wird bei jeder
+  Änderung neu gelesen. Ein blinkender Cursor in einem Textfeld lässt seine Zeile etwa bei jedem
+  Blinken neu lesen.
 - Text über einem laufenden Video, etwa Untertitel, wird nicht übersetzt, solange das Video läuft,
   und Text, der sich von selbst weiterbewegt, etwa ein Ticker oder ein Karussell, bleibt unter
-  Umständen unübersetzt, solange er sich bewegt.
+  Umständen unübersetzt, solange er sich bewegt, und hält den Mac beschäftigt (etwa einen halben
+  Prozessorkern), solange er läuft.
 - Text, der sich ändert, während sich der Bildschirm bewegt, bekommt seine neue Übersetzung,
   sobald der Bildschirm zur Ruhe kommt. Eine Zeile, die eine Leiste oder der Bildschirmrand
   abschneidet, wird übersetzt, sobald sie ganz zu sehen ist, oder, unter einer Leiste, die stehen
   bleibt, so weit sie zu sehen ist, sobald der Bildschirm ruht; «Text» lässt eine Zeile weg, die
-  der obere oder untere Bildschirmrand abschneidet.
+  der obere oder untere Bildschirmrand abschneidet. Gleitet eine Tastatur oder ein Blatt weg, kann
+  eine Zeile, die darunter lag, unübersetzt bleiben, bis sich die Seite bewegt.
+- Ab und zu bleibt ein Absatz nach schnellem Scrollen Zeile für Zeile oder in zwei Stücken
+  übersetzt, bis sich die Seite bewegt.
 - Solange ein Seitenpanel oder eine Schublade einen Teil der Seite verdeckt, werden die Wortenden
   daneben unter Umständen als kleine Beschriftungen übersetzt, und eine Zeile, die zur Hälfte
   hinter einer Leiste liegt, kann in «Text» und «Übersetzen» als einige verstümmelte Buchstaben
   erscheinen.
 - Eine Übersetzung, die nicht an den Platz ihres Textes passt, wird kleiner gesetzt, und eine, die
-  auch dann nicht passt, endet mit Auslassungspunkten.
+  auch dann nicht passt, endet mit Auslassungspunkten. Eine kurze Beschriftung kann auch etwas
+  kleiner geraten als der Text daneben.
 - In sehr kleiner Schrift, etwa bei einem Telefon, das in niedriger Auflösung gespiegelt wird, wird
   eine fette, eine in Grossbuchstaben oder eine arabische Zeile unter Umständen vom Rest ihres
   Absatzes getrennt: «Übersetzen» übersetzt sie für sich, «Text» kopiert sie auf eine eigene
   Zeile.
+- Bleibt auf einem ruhenden Bildschirm eine Zeile unübersetzt, lässt ein wenig Scrollen oder
+  «Übersetzen» aus- und wieder einschalten sie neu lesen.
 
 Trennt sich das Gerät, geht «Übersetzen» aus und muss wieder eingeschaltet werden. Wechselt
 MirrorAct ein Android-Fenster selbst auf die andere Verbindung (Kabel abgezogen bei bestehendem

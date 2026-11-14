@@ -99,13 +99,13 @@ Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct
 
 ## Copying and translating text
 
-"Text" (⌥⌘T) copies the text on the device screen to the clipboard, one paragraph per line.
-"Translate" (⇧⌘T) shows the screen in another language until you turn it off: the translation is
-drawn over the text, in the size of the text it replaces, stays on it while you scroll, and shows
-in screenshots, recordings and the presentation too. Both are in the tool rail, and in the context
-menu and the Device menu as "Copy Text on Screen" and "Translate Text on Screen". Both leave out
-the status bar, in landscape too, and a sign such as "€" or "#" set far apart in front of its
-text. Under Settings → Text:
+"Text" (⌥⌘T) copies the text on the device screen to the clipboard, one paragraph per line: the
+device's own text, also while "Translate" is on. "Translate" (⇧⌘T) shows the screen in another
+language until you turn it off: the translation is drawn over the text, in the size of the text it
+replaces, stays on it while you scroll, and shows in screenshots, recordings and the presentation
+too. Both are in the tool rail, and in the context menu and the Device menu as "Copy Text on Screen"
+and "Translate Text on Screen". Both leave out the status bar, in landscape too, and a sign such as
+"€" or "#" set far apart in front of its text. Under Settings → Text:
 
 - **Translate into:** the system language or another one from the list. Where a language comes in
   several forms, the list names the region, such as "German (Switzerland)" or "English (United
@@ -122,10 +122,10 @@ text. Under Settings → Text:
   turn "Translate" off and on to bring the question back. Turning "Translate" off also closes an
   open panel, unless another mirror window is translating the same languages. macOS is asked about
   one pair at a time, and only when a fair amount of the text on the screen is in the language: a
-  name, a serial number or a single word alone never brings up the question. Single words such as
-  "On" and "Off" may come out wrong, or differently from one screen to the next ("Airplane mode" on
-  one, "Flight mode" on another). Some languages and regional forms, marked in the list, need
-  Apple Intelligence; MirrorAct says so when it is off or this Mac does not support it. If the
+  name, a serial number or a single word alone never brings up the question. Single words and
+  short labels may come out wrong or odd, or differently from one screen to the next ("Airplane
+  mode" on one, "Flight mode" on another). Some languages and regional forms, marked in the list,
+  need Apple Intelligence; MirrorAct says so when it is off or this Mac does not support it. If the
   language you translate into needs it, "Translate" turns off; text in a language that needs it
   stays as it is.
 - **Language model service (own API key):** choose the service, enter your API key ("Get a key"
@@ -137,14 +137,15 @@ text. Under Settings → Text:
   or Return stores the API key in your keychain, and so does a Test that works. If the model takes
   longer than a minute to answer (five minutes for a server at an address on your Mac or in your
   network), MirrorAct says so and sends fewer texts per request. If the service reports errors or
-  cannot be reached, MirrorAct tries again after 5, 10, 20 and 40 seconds and then every minute,
-  and the mirror window says so; once the service answers again, the screen is translated with the
-  next try, and turning "Translate" off and on tries at once. A pause the service asks for (too
-  many requests) is kept, up to 15 minutes. If the model answers in a form MirrorAct cannot use,
-  the window says so and suggests another model; "Translate" stays on and tries again after the
-  same waits, starting with a single text, until the model answers properly. "Translate" turns off
-  when the API key is not accepted or may not be used for this, the account has no credit left,
-  the model or the address is wrong, or the model declines everything it is asked to translate.
+  cannot be reached, MirrorAct tries again after 5, 10, 20 and 40 seconds and then every minute;
+  the mirror window names the error and, once the wait is a minute, when it tries again. Once the
+  service answers again, the screen is translated with the next try, so up to a minute later, and
+  turning "Translate" off and on tries at once. A pause the service asks for (too many requests) is
+  kept, up to 15 minutes. If the model answers in a form MirrorAct cannot use, the window says so
+  and suggests another model; "Translate" stays on and tries again after the same waits, starting
+  with a single text, until the model answers properly. "Translate" turns off when the API key is
+  not accepted or may not be used for this, the account has no credit left, the model or the
+  address is wrong, or the model declines everything it is asked to translate.
 - **A server of your own** (Ollama, LM Studio or Custom): plain `http://` works for this Mac
   (`localhost`, `127.0.0.1`), for private IP addresses (`192.168.…`, `10.…`, `172.16.…` to
   `172.31.…`), `.local` names and names without a dot; any other address needs `https://`. An
@@ -173,24 +174,41 @@ unless it lies farther away or is clearly smaller.
 - Text copies everything it reads, so the icon of a list row can come along as a stray letter or
   two. Translate leaves such icons alone, and with them a short word in their place, such as a
   weekday in front of two lines of opening hours or the initials in an avatar, which stays
-  untranslated.
+  untranslated. A short word set apart in a column of its own, such as a weekday before an
+  appointment, is copied on a line of its own and translated on its own.
 - With "This Mac", a single word in the device's language among text already in your language may
   stay as it is: one word alone does not tell its language.
+- When a number changes in a short line, such as a counter or a storage summary, the line's
+  translation disappears for a moment until the line has been read again, instead of showing the
+  old number; in a paragraph of several lines the old translation can stay for about a second. A
+  number that changes every second or faster therefore shows untranslated much of the time, and
+  in a list whose rows differ only by a number, translations can vanish while the list scrolls
+  fast and come back when it stops. Now and then a line with a number stays untranslated after it
+  changed or after a list stopped, until the page moves or the screen changes.
+- Once the screen has come to rest, it is read a few more times and then not again until
+  something on it changes; what keeps changing, such as a clock with seconds, is read again with
+  each change. A blinking cursor in a text field has its line read again at about every blink.
 - Text over a playing video, such as subtitles, is not translated while the video plays, and text
   that keeps moving by itself, such as a ticker or a carousel, may stay untranslated while it
-  moves.
+  moves and keeps the Mac busy (about half a processor core) for as long as it runs.
 - Text that changes while the screen moves gets its new translation once the screen comes to rest.
   A line that a bar or the edge of the screen cuts off is translated once all of it shows, or,
   under a bar that stays, as far as it shows once the screen rests; "Text" leaves out a line cut
-  off at the top or bottom edge of the screen.
+  off at the top or bottom edge of the screen. When a keyboard or a sheet slides away, a line it
+  covered can stay untranslated until the page moves.
+- Now and then, after fast scrolling, a paragraph stays translated line by line or in two pieces
+  until the page moves.
 - While a side panel or drawer covers part of a page, the ends of words that show beside it may be
   translated as small labels, and a line half hidden behind a bar can come out as a few garbled
   letters in Text and in Translate.
 - A translation that does not fit in the place of its text is set smaller, and one that still
-  does not fit ends with an ellipsis.
+  does not fit ends with an ellipsis. A short label can also come out a little smaller than the
+  text beside it.
 - In very small text, such as a phone mirrored at a low resolution, a bold, an all-caps or an
   Arabic line may be taken apart from the rest of its paragraph: Translate translates it on its
   own, and Text copies it on a line of its own.
+- Where a line stays untranslated on a still screen, scrolling a little, or turning "Translate" off
+  and on, has it read again.
 
 When the device disconnects, "Translate" turns off; turn it on again. When MirrorAct itself moves
 an Android window to the other connection (the cable unplugged while Wi-Fi is there or the other
