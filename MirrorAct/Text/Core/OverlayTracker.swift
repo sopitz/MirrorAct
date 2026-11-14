@@ -290,7 +290,8 @@ final class OverlayTracker {
         /// for a place to be read again at rest is bounded on its own (`maxRereads`,
         /// `Block.missedOnce`, a place to read at rest asked for while its area rested already
         /// waits for its next movement, a line whose numbers no longer fit is read once more,
-        /// `askToReadLine`, which needs a frame that changed the picture); this bounds them all
+        /// `askToReadLine`, which needs a frame that changed the picture; the place where lines
+        /// are no longer left out is read once, `linesNoLongerLeftOut`); this bounds them all
         /// together (on a picture that nothing changes: any change anywhere, such as a blinking
         /// cursor, lets the next passes begin anew), also two of them that keep starting each
         /// other anew, and a recognizer that keeps failing. A screen that came to rest is read a
@@ -312,7 +313,10 @@ final class OverlayTracker {
         /// it changed or that went away, where the block was and where it is (a text that changed
         /// may come back to an older picture; the rest of the pass's region keeps what is known
         /// of it, so the caret beside a counter that ticks stays known), for the tiles of a
-        /// scrolling area that moves, and all of it with a new picture or `reset`. At most
+        /// scrolling area that moves, and all of it with a new picture or `reset`. Where the
+        /// caller stops leaving lines out of its readings (`linesNoLongerLeftOut`: an on-screen
+        /// keyboard went), what was known there is forgotten and the place is read once: passes
+        /// over lines it left out brought nothing new only because they were not given them. At most
         /// `knownTilePictures` pictures, the oldest go first; a pass whose changed places hold
         /// more than `knownTilesPerPass` tiles leaves none known (what blinks is small).
         var knownTilePictures = 64
@@ -3139,6 +3143,21 @@ final class OverlayTracker {
         for index in tracked.indices {
             tracked[index].earlier = nil
         }
+    }
+
+    /// The caller no longer leaves the lines in `rect` (frame pixels) out of what it hands to
+    /// `finishRecognition` (an on-screen keyboard was taken to lie there): the passes over that
+    /// place said nothing of what it shows. What they left known there is forgotten
+    /// (`Configuration.knownTilePictures`), and the place is read once it has stopped changing.
+    func linesNoLongerLeftOut(in rect: CGRect, time: TimeInterval) {
+        guard let current = previous else { return }
+        let factor = Double(scale)
+        let place = CGRect(x: rect.minX / factor, y: rect.minY / factor, width: rect.width / factor,
+                           height: rect.height / factor)
+            .intersection(CGRect(x: 0, y: 0, width: current.width, height: current.height))
+        guard !place.isNull, place.width >= 1, place.height >= 1 else { return }
+        forgetKnownTiles(in: place)
+        plan.add(UnreadArea(rect: place, kind: .changed, since: time))
     }
 
     /// Forget everything, as before the first frame. A pass that is running is dropped: the

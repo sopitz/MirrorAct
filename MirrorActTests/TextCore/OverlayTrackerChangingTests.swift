@@ -346,4 +346,63 @@ final class OverlayTrackerChangingTests: XCTestCase {
         XCTAssertLessThanOrEqual(counts.minute, 6)
         if let tenMinutes = counts.tenMinutes { XCTAssertLessThanOrEqual(tenMinutes, 6) }
     }
+
+    // MARK: Lines left out of the readings
+
+    /// When the field and a value below it lie under a keyboard whose top was placed too high,
+    /// the caller leaves their lines out of the readings while the keyboard shows (here for
+    /// 4 s, its keys a bar at the bottom). The keyboard goes, the page does not move, and
+    /// nothing changes in those lines afterwards. Passes over them had brought nothing new,
+    /// so nothing read them again: they are read within 1.5 s once the caller says that they
+    /// are no longer left out (`linesNoLongerLeftOut`, at the end of the first reading begun
+    /// after the keyboard went, as `ScreenTranslator` does), and never without it. 10 frames a
+    /// second, 3 s after the keyboard.
+    func testLinesLeftOutUnderAKeyboardAreReadOnceItHasGone() {
+        let gone: TimeInterval = 4, leftOutBelow = 950.0
+        let field = Self.field("Wasserkocher")
+        let value = Line(text: "Noch 28 Zeichen", top: 1100, fontSize: 42, fontName: "Helvetica")
+        let lines = [Self.heading, field.line, value]
+        let keys = ThumbnailRect(x: 0, y: 500, width: 360, height: 300)
+        func drawn(sayingSo: Bool) -> (field: Double?, value: Double?) {
+            let tracker = OverlayTracker()
+            var pending: (request: RecognitionRequest, answer: [RecognizedBlock], at: TimeInterval, begun: TimeInterval)?
+            var seed: UInt64 = 5, said = false
+            var result: (field: Double?, value: Double?) = (nil, nil)
+            for frame in 0..<70 {
+                let time = Double(frame) / 10, shown = time < gone
+                seed += 1
+                let scene = Scene(lines: lines, carets: shown ? [field.caret] : [], bars: shown ? [keys] : [])
+                let image = SyntheticPage.noisy(picture(scene), amount: 2, seed: seed)
+                let placed = tracker.advance(image, scale: Self.scale, time: time).placed.map(\.text)
+                if !shown {
+                    if result.field == nil, placed.contains("T " + field.line.text) { result.field = time - gone }
+                    if result.value == nil, placed.contains("T " + value.text) { result.value = time - gone }
+                }
+                if let job = pending, time >= job.at {
+                    if sayingSo, !said, job.begun >= gone {
+                        said = true
+                        tracker.linesNoLongerLeftOut(in: CGRect(x: 0, y: leftOutBelow, width: Double(Self.width),
+                                                                height: Double(Self.height) - leftOutBelow), time: time)
+                    }
+                    tracker.finishRecognition(job.request, blocks: job.answer, time: time)
+                    pending = nil
+                }
+                if pending == nil, let due = tracker.recognitionDue, due <= time,
+                   let request = tracker.beginRecognition(time: time) {
+                    let read = lines.filter { !shown || $0.top < leftOutBelow }
+                    pending = (request, read.compactMap { $0.reading(in: request.region) }, time + 0.3, time)
+                }
+                for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                    tracker.setTranslation(text.contains(where: \.isLetter) ? "T " + text : text, for: text)
+                }
+            }
+            return result
+        }
+        let with = drawn(sayingSo: true), without = drawn(sayingSo: false)
+        print("CHANGING left out: field \(with.field ?? -1) value \(with.value ?? -1) s after the keyboard went; "
+              + "without saying so field \(without.field ?? -1) value \(without.value ?? -1)")
+        XCTAssertLessThan(with.field ?? .infinity, 1.5)
+        XCTAssertLessThan(with.value ?? .infinity, 1.5)
+        XCTAssertNil(without.field)
+    }
 }

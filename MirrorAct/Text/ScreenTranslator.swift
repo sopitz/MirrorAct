@@ -262,6 +262,11 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
                                               known: known.0, knownKeys: known.1)
         let areas = locked { () -> [ScrollingArea] in
             if isCurrent(turn) {
+                // (what was left out of the readings under the keyboard is read now that it has gone)
+                if let gone = keyboard, shown.keyboard == nil {
+                    tracker.linesNoLongerLeftOut(in: CGRect(x: 0, y: gone.top, width: gone.imageSize.width,
+                                                            height: gone.imageSize.height - gone.top), time: clock())
+                }
                 keyboard = shown.keyboard
                 keyboardKeys = shown.keys
             }
