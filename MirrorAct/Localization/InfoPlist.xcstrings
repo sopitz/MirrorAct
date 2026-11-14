@@ -16,6 +16,12 @@
             "state" : "new",
             "value" : "MirrorAct"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MirrorAct"
+          }
         }
       }
     },
@@ -32,6 +38,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "MirrorAct"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "MirrorAct"
           }
         }
@@ -52,6 +64,12 @@
             "state" : "new",
             "value" : "MirrorAct shows the screen of an iPhone or iPad connected by cable."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MirrorAct 用于显示通过线缆连接的 iPhone 或 iPad 屏幕。"
+          }
         }
       }
     },
@@ -68,6 +86,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "GPL-3.0-or-later"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "GPL-3.0-or-later"
           }
         }
@@ -88,6 +112,12 @@
             "state" : "new",
             "value" : "MirrorAct can be reached as an AirPlay receiver for Screen Mirroring."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MirrorAct 可作为用于屏幕镜像的 AirPlay 接收器在本地网络中被发现。"
+          }
         }
       }
     },
@@ -105,6 +135,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "MirrorAct plays the sound of an iPhone or iPad connected by cable."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MirrorAct 用于播放通过线缆连接的 iPhone 或 iPad 声音。"
           }
         }
       }

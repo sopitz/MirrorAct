@@ -93,8 +93,12 @@ final class AppSettings: ObservableObject {
 
     // MARK: Language
 
-    /// "system", "en" or "de"; takes effect after a restart (the app's AppleLanguages)
-    static let languages: [(id: String, name: String)] = [("en", "English"), ("de", "Deutsch")]
+    /// Supported app languages; takes effect after a restart (the app's AppleLanguages)
+    static let languages: [(id: String, name: String)] = [
+        ("en", "English"),
+        ("de", "Deutsch"),
+        ("zh-Hans", "简体中文"),
+    ]
 
     var appLanguage: String {
         get {

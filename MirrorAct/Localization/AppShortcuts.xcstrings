@@ -21,6 +21,15 @@
               "${applicationName} recording"
             ]
           }
+        },
+        "zh-Hans" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "使用 ${applicationName} 录制",
+              "${applicationName} 录制"
+            ]
+          }
         }
       }
     },
@@ -42,6 +51,15 @@
             "values" : [
               "Take a screenshot with ${applicationName}",
               "${applicationName} screenshot"
+            ]
+          }
+        },
+        "zh-Hans" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "使用 ${applicationName} 截图",
+              "${applicationName} 截图"
             ]
           }
         }
