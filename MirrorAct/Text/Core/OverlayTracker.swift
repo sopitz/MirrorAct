@@ -282,15 +282,17 @@ final class OverlayTracker {
         var maxRereads = 2
         /// A picture that does not change is read by at most this many passes (those begun since
         /// a frame last changed it); then nothing is due until a frame changes it, and what is
-        /// left to read waits for that. On the same picture a pass reads what the passes before it
-        /// read, so what they could not settle it cannot settle either. Every rule that asks for a
-        /// place to be read again at rest is bounded on its own (`maxRereads`, `Block.missedOnce`,
-        /// a place to read at rest asked for while its area rested already waits for its next
-        /// movement); this bounds them all together (on a picture that nothing changes: any change
-        /// anywhere, such as a blinking cursor, lets the next passes begin anew), also two of them
-        /// that keep starting each other anew, and a recognizer that keeps failing. A screen that
-        /// came to rest is read a few times; in the tracking bench (seeds 1-30) no picture needed
-        /// more than 19 passes, so the bound holds back only reading that would go on without end.
+        /// left to read waits for that. A recognizer that failed on a picture may still read it
+        /// on a later pass, so the bound lies above what the bench needed. Every rule that asks
+        /// for a place to be read again at rest is bounded on its own (`maxRereads`,
+        /// `Block.missedOnce`, a place to read at rest asked for while its area rested already
+        /// waits for its next movement, a line whose numbers no longer fit is read once more,
+        /// `askToReadLine`, which needs a frame that changed the picture); this bounds them all
+        /// together (on a picture that nothing changes: any change anywhere, such as a blinking
+        /// cursor, lets the next passes begin anew), also two of them that keep starting each
+        /// other anew, and a recognizer that keeps failing. A screen that came to rest is read a
+        /// few times; in the tracking bench (seeds 1-30) no picture needed more than 19 passes, so
+        /// the bound holds back only reading that would go on without end.
         var maxPassesOnPicture = 24
         /// A paragraph read while the picture moves may go on beyond the edge of the view (the
         /// frame, its scrolling area) when that edge lies above or below it within this many of
