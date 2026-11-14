@@ -213,6 +213,11 @@ enum TextLayout {
     ///   reach into the one above by up to `overlap` of the higher box),
     /// - their left edges or their centres are within `alignment` of the height of a line (or their
     ///   right edges, when either is written from right to left: `isRightToLeft`),
+    /// - when the paragraph has a single line so far, the new line lies on its ground: when the
+    ///   recognizer measured the background of both (`RecognizedLine.tone`), they are within
+    ///   `sameGround` of each other (the title of a bar is not joined with a row of the page
+    ///   passing right under the bar; a paragraph of more lines is not cut where the ground of a
+    ///   gradient behind it has moved by a step),
     /// - its letters are as bright as those of the line above, when the recognizer measured both
     ///   on the same background (`RecognizedLine.tone`: backgrounds within `sameBackground` of each
     ///   other, letters within `sameTone`) and neither line's letters are coloured (less than
@@ -395,6 +400,13 @@ enum TextLayout {
         guard !last.isPart, !line.isPart, !(line.startsListItem && startsItem(line, after: paragraph)) else {
             return false
         }
+        // a line on a ground of other brightness does not continue a paragraph of one line: the
+        // title of a bar and a row of the page right below it (a paragraph of several lines goes
+        // on: its ground may run as a gradient behind it)
+        if paragraph.block.lineCount == 1, let upper = last.tone, let lower = line.tone,
+           abs(upper.background - lower.background) > sameGround {
+            return false
+        }
         // a grey summary under a black title is not part of it; a line in the colour of a link
         // measures as bright as the link and may still be part of its paragraph
         if let upper = last.tone, let lower = line.tone, abs(upper.background - lower.background) <= sameBackground,
@@ -513,6 +525,22 @@ enum TextLayout {
     /// is kept apart from the lines around it.
     static let sameTone = 14.0
     static let sameBackground = 12.0
+    /// The first two lines of a paragraph lie on one ground: when the recognizer measured the
+    /// backgrounds of both (`RecognizedLine.Tone.background`, in steps of 4) and they differ by
+    /// more than this, a line does not continue a paragraph of one line (whatever their letters).
+    /// A plain ground measures the same or one step apart; the bar of Android's settings, tinted
+    /// once the list scrolled under it, measured 8 darker than the list (214 and 222 in video
+    /// range, 230 and 238 as BGRA), so its title is kept apart from a row passing right under it
+    /// even when no scrolling area is known (Translate turned on over a still list). On a picture
+    /// or a steep gradient no background is measured, and nothing is said. Behind running text on
+    /// a moderate gradient each line measures a plain ground of its own, a step or two from its
+    /// neighbours (a paragraph of six lines on a ground from 0.99 to 0.84: 250, 246, 242, 234,
+    /// 230, 226); a paragraph that already has two lines is therefore not put to this test, so
+    /// it is not cut in the middle of a sentence. Over 1169 frames of the lab's Android screens
+    /// (settings light and dark, at font scales 1 and 1.3, in landscape, web pages with
+    /// paragraphs on white and on a dark ground, read as 4:2:0 frames) it split only that title
+    /// from the row under it and the strip of a keyboard's suggestions from its keys.
+    static let sameGround = 4.0
     /// A line counts as coloured when at least this share of its letters' pixels is
     /// (`RecognizedLine.Tone.colour`); its brightness then says nothing about whether it belongs
     /// to the line above or below. Measured on 849 Android frames, each read as BGRA and as

@@ -187,8 +187,9 @@ final class TextLayoutTests: XCTestCase {
 
     /// The letters of the lines of one paragraph measure a little differently: up to 6 apart on
     /// real screens (here a wrapped summary of the main list at font scale 1.3 with that spread,
-    /// and a paragraph of a web page, 28 to 32). Lines whose tone was not measured, or measured
-    /// on different backgrounds, are joined by their boxes alone, as before.
+    /// and a paragraph of a web page, 28 to 32). Lines whose tone was not measured are joined by
+    /// their boxes alone, as before; lines measured on different backgrounds lie on different
+    /// grounds and are kept apart (`sameGround`).
     func testLinesAreComparedByBrightnessOnlyWhenBothWereMeasuredOnTheSameBackground() {
         let summary = [
             line("Dunkles Design, Schriftgröße,", 213, 2281, 641, 56, tone: (80, 250, 0)),
@@ -207,7 +208,52 @@ final class TextLayoutTests: XCTestCase {
         XCTAssertEqual(TextLayout.blocks(unmeasured, imageSize: phone).map(\.text), ["VPN Kein VPN"])
         let otherBackground = [line("VPN", 188, 1566, 108, 45, tone: (28, 238, 0)),
                                line("Kein VPN", 188, 1635, 157, 36, tone: (80, 200, 0))]
-        XCTAssertEqual(TextLayout.blocks(otherBackground, imageSize: phone).map(\.text), ["VPN Kein VPN"])
+        XCTAssertEqual(TextLayout.blocks(otherBackground, imageSize: phone).map(\.text), ["VPN", "Kein VPN"])
+    }
+
+    /// All apps, light, Translate turned on over the still list after a fling: the row "Kontakte"
+    /// stands right under the app bar, cut by a few pixels. The bar's title and the row are of
+    /// about one size (their boxes are 60 and 45 pixels high), lie as close as lines of a
+    /// paragraph (34 pixels) and their centres line up, and no scrolling area is known yet to
+    /// keep them apart. The bar, tinted once the list scrolled under it, measured 8 darker than
+    /// the list: they lie on different grounds. (A frame in video range as Android sends it;
+    /// read as BGRA the backgrounds measured 230 and 238.)
+    func testTheTitleOfABarIsNotJoinedWithARowPassingRightUnderIt() {
+        let lines = [
+            line("Alle Apps", 150, 111, 272, 60, tone: (41, 214, 0)),
+            line(":", 979, 105, 45, 70, tone: (85, 214, 0)),
+            line("Kontakte", 188, 206, 219, 45, tone: (41, 222, 0)),
+            line("65,54 kB", 188, 268, 143, 39, tone: (85, 222, 0)),
+            line("Maps", 192, 401, 132, 56, tone: (41, 222, 0)),
+            line("65,54 kB", 188, 467, 143, 39, tone: (85, 222, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: phone).map(\.text),
+                       ["Alle Apps", ":", "Kontakte", "65,54 kB", "Maps", "65,54 kB"])
+        // by their boxes alone they were one paragraph
+        let boxes = lines.map { RecognizedLine(text: $0.text, rect: $0.rect) }
+        XCTAssertTrue(TextLayout.blocks(boxes, imageSize: phone).contains { $0.text.hasPrefix("Alle Apps Kontakte") })
+        // a title of two lines in the bar stays one
+        let title = [line("Display &", 59, 342, 415, 126, tone: (28, 214, 0)),
+                     line("Touchbedienung", 58, 479, 700, 105, tone: (28, 214, 0))]
+        XCTAssertEqual(TextLayout.blocks(title, imageSize: phone).map(\.text), ["Display & Touchbedienung"])
+    }
+
+    /// A paragraph of six lines on a vertical gradient (0.99 to 0.84 over 600 pixels), read by
+    /// Vision: each line measures a plain ground of its own, and the third and fourth lie 8 apart.
+    /// The paragraph is not cut there, in the middle of a sentence: only its second line is
+    /// held to the ground of the first.
+    func testAParagraphOnAGradientIsNotCutWhereItsGroundMovesByAStep() {
+        let lines = [
+            line("Die Pakete werden werktags zwischen acht und", 59, 1033, 934, 45, tone: (28, 250, 0)),
+            line("achtzehn Uhr zugestellt. Wer nicht zu Hause", 59, 1102, 867, 46, tone: (28, 246, 0)),
+            line("ist, findet eine Karte im Briefkasten und kann", 52, 1164, 879, 58, tone: (28, 242, 0)),
+            line("das Paket am nächsten Tag in der Filiale holen.", 59, 1242, 930, 45, tone: (28, 234, 0)),
+            line("Die Abholung ist bis zu sieben Tage möglich,", 59, 1312, 878, 49, tone: (28, 230, 0)),
+            line("danach geht das Paket zurück an den Absender.", 59, 1381, 955, 46, tone: (28, 226, 0)),
+        ]
+        let blocks = TextLayout.blocks(lines, imageSize: phone)
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks.first?.lineCount, 6)
     }
 
     /// A post with black text and blue mentions, a link and a hashtag, text of 30 pixels on a
