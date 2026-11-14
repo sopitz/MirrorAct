@@ -335,9 +335,9 @@ final class OverlayTrackerRestTests: XCTestCase {
         var dimmedTitle = title, dimmedRow = row
         dimmedTitle.readAs = "Speicherpltz"
         dimmedRow.readAs = "Mobilfunknet"
-        let during = show([dimmedTitle, dimmedRow], on: tracker, from: 3, seconds: 4, seed: &seed) { frame in
+        let during = show([dimmedTitle, dimmedRow], on: tracker, from: 3, seconds: 4, seed: &seed, alter: { frame in
             for index in frame.pixels.indices { frame.pixels[index] = UInt8(Double(frame.pixels[index]) * 0.5) }
-        }
+        })
         XCTAssertGreaterThanOrEqual(during.read.filter { $0 == "Speicherpltz" || $0 == "Mobilfunknet" }.count, 1,
                                     "the dimmed lines are read: \(during.regions)")
         XCTAssertEqual(during.sent, [])
