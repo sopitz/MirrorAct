@@ -174,28 +174,31 @@ unless it lies farther away or is clearly smaller.
 - Text copies everything it reads, so the icon of a list row can come along as a stray letter or
   two. Translate leaves such icons alone, and with them a short word in their place, such as a
   weekday in front of two lines of opening hours or the initials in an avatar, which stays
-  untranslated. A short word set apart in a column of its own, such as a weekday before an
-  appointment, is copied on a line of its own and translated on its own.
+  untranslated. A short word set apart in a column of its own beside its text, such as a quantity
+  in front of an item, is copied on a line of its own and translated on its own.
 - With "This Mac", a single word in the device's language among text already in your language may
   stay as it is: one word alone does not tell its language.
 - When a number changes in a short line, such as a counter or a storage summary, the line's
-  translation disappears for a moment until the line has been read again, instead of showing the
-  old number; in a paragraph of several lines the old translation can stay for about a second. A
-  number that changes every second or faster therefore shows untranslated much of the time, and
-  in a list whose rows differ only by a number, translations can vanish while the list scrolls
-  fast and come back when it stops. Now and then a line with a number stays untranslated after it
-  changed or after a list stopped, until the page moves or the screen changes.
+  translation disappears for a moment until the line has been read and translated again, instead
+  of showing the old number; in a paragraph of several lines the old translation can stay for
+  about a second. A number that changes every second or faster therefore shows untranslated much
+  of the time, and with a language model service every new value is sent to be translated. In a
+  list whose rows differ only by a number, translations can vanish while the list scrolls fast and
+  come back when it stops. Now and then a line with a number stays untranslated after it changed
+  or after a list stopped, until the page moves or the screen changes.
 - Once the screen has come to rest, it is read a few more times and then not again until
   something on it changes; what keeps changing, such as a clock with seconds, is read again with
   each change. A blinking cursor in a text field has its line read again at about every blink.
 - Text over a playing video, such as subtitles, is not translated while the video plays, and text
   that keeps moving by itself, such as a ticker or a carousel, may stay untranslated while it
-  moves and keeps the Mac busy (about half a processor core) for as long as it runs.
+  moves; a ticker that never stops keeps the Mac busy (about half a processor core) for as long as
+  it runs.
 - Text that changes while the screen moves gets its new translation once the screen comes to rest.
   A line that a bar or the edge of the screen cuts off is translated once all of it shows, or,
   under a bar that stays, as far as it shows once the screen rests; "Text" leaves out a line cut
   off at the top or bottom edge of the screen. When a keyboard or a sheet slides away, a line it
-  covered can stay untranslated until the page moves.
+  covered can stay untranslated until the page moves, and so can the first paragraph under a title
+  bar after the page was pulled past its top end.
 - Now and then, after fast scrolling, a paragraph stays translated line by line or in two pieces
   until the page moves.
 - While a side panel or drawer covers part of a page, the ends of words that show beside it may be
@@ -207,8 +210,8 @@ unless it lies farther away or is clearly smaller.
 - In very small text, such as a phone mirrored at a low resolution, a bold, an all-caps or an
   Arabic line may be taken apart from the rest of its paragraph: Translate translates it on its
   own, and Text copies it on a line of its own.
-- Where a line stays untranslated on a still screen, scrolling a little, or turning "Translate" off
-  and on, has it read again.
+- Where a line that should be translated stays untranslated on a still screen, scrolling a little,
+  or turning "Translate" off and on, has it read and translated again.
 
 When the device disconnects, "Translate" turns off; turn it on again. When MirrorAct itself moves
 an Android window to the other connection (the cable unplugged while Wi-Fi is there or the other
