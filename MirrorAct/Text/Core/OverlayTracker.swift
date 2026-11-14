@@ -1318,6 +1318,24 @@ final class OverlayTracker {
 
     // MARK: Drawing
 
+    /// What of `rect` (thumbnail pixels) the view of its scrolling area leaves: cut at the area's
+    /// top and bottom where they were found to the pixel (`ScrollArea.refinedEdges`), where the
+    /// content goes under a bar. Not at an edge that was not refined, and never at its left and
+    /// right: those are only as far as content was seen to move there (columns are never refined
+    /// to the pixel, `MotionEstimator`, and an area only grows sideways), so they say nothing about
+    /// what covers the content. The area of a panel that slid in from the side over a still page
+    /// outlasts the panel, a small part that moved once gives an area narrower than the paragraphs
+    /// around it, and a card that slid sideways over a paragraph leaves an area only as tall as
+    /// itself; cut at such an edge, the page's translations would show only in part, the rest of
+    /// their lines left in the original. What covers a block from the side is found by its patch
+    /// (`Block.seen`); the frame ends the view sideways.
+    private static func cut(_ rect: CGRect, toViewOf area: ScrollArea) -> CGRect {
+        let top = area.refinedEdges & FrameMotion.top != 0 ? max(rect.minY, Double(area.rect.y)) : rect.minY
+        let bottom = area.refinedEdges & FrameMotion.bottom != 0 ? min(rect.maxY, Double(area.rect.maxY)) : rect.maxY
+        guard bottom > top else { return .null }
+        return CGRect(x: rect.minX, y: top, width: rect.width, height: bottom - top)
+    }
+
     private func placed() -> [PlacedBlock] {
         guard let previous else { return [] }
         var result: [PlacedBlock] = []
@@ -1331,10 +1349,7 @@ final class OverlayTracker {
                 visible = visible.intersection(CGRect(x: block.x + Double(seen.x), y: block.y + Double(seen.y),
                                                       width: Double(seen.width), height: Double(seen.height)))
             }
-            if let area = scrollArea(id: block.areaID) {
-                visible = visible.intersection(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
-                                                      height: area.rect.height))
-            }
+            if let area = scrollArea(id: block.areaID) { visible = OverlayTracker.cut(visible, toViewOf: area) }
             visible = visible.intersection(bounds)
             guard !visible.isNull, let clear = avoidingOverlays(visible),
                   // (what an overlay leaves of it must be a good part of it)
@@ -1880,10 +1895,7 @@ final class OverlayTracker {
             visible = visible.intersection(CGRect(x: block.x + Double(seen.x), y: block.y + Double(seen.y),
                                                   width: Double(seen.width), height: Double(seen.height)))
         }
-        if let area = scrollArea(id: block.areaID) {
-            visible = visible.intersection(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
-                                                  height: area.rect.height))
-        }
+        if let area = scrollArea(id: block.areaID) { visible = OverlayTracker.cut(visible, toViewOf: area) }
         visible = visible.intersection(CGRect(x: 0, y: 0, width: previous.width, height: previous.height))
         guard !visible.isNull, visible.width > 0, visible.height > 0 else { return nil }
         return visible

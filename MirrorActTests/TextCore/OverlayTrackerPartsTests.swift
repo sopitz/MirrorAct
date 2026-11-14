@@ -1089,4 +1089,173 @@ extension OverlayTrackerFollowingTests {
             }
         }
     }
+
+    /// A panel three quarters as wide as the screen slides in from the left over a page that
+    /// never moves, stays, and slides out again (a drawer). Its movement gives it a scrolling
+    /// area that lasts after it has gone; the page's lines, read again at rest, reach beyond that
+    /// area's right edge. Their translations are drawn whole: an area's left and right edges are
+    /// only as far as content was seen to move there, nothing that covers the page. While the
+    /// panel is open, nothing of the page is drawn over it.
+    func testAPanelThatSlidOverAStillPageLeavesItsParagraphsWhole() throws {
+        let screen = SyntheticScreen(seed: 31), other = SyntheticScreen(seed: 77)
+        let page = screen.thumbnail(offset: 0), panelPage = other.thumbnail(offset: 0)
+        // the panel's right edge in thumbnail pixels (0: gone); its content ends 10 pixels before
+        // the edge, and a shadow of 4 pixels follows it
+        let width = 150
+        func frame(edge: Int) -> LumaImage {
+            var image = page
+            guard edge > 0 else { return image }
+            for y in 30..<370 {
+                for x in 0..<min(edge, image.width) {
+                    let column = x - (edge - width)
+                    image[x, y] = column >= 0 && column < width - 10 ? panelPage[column, y] : 245
+                }
+                for (index, darker) in [24, 16, 10, 5].enumerated() where edge + index < image.width {
+                    image[edge + index, y] = UInt8(max(0, Int(image[edge + index, y]) - darker))
+                }
+            }
+            return image
+        }
+        // what a reading of `region` finds when the panel ends at `edge`: the panel's labels, and
+        // of the page what shows beside it
+        func truth(edge: Int, region: CGRect) -> [RecognizedBlock] {
+            var result: [RecognizedBlock] = []
+            let side = Double(scale * (edge + 4))
+            for index in 0..<10 {
+                var line = SyntheticScreen.block(index, offset: 0, text: "Page \(index)")
+                if edge > 0 {
+                    guard side < line.rect.maxX - 20 else { continue }
+                    if side > line.rect.minX {
+                        line = RecognizedBlock(text: "Piece \(index)", rect: CGRect(x: side, y: line.rect.minY,
+                            width: line.rect.maxX - side, height: line.rect.height))
+                    }
+                    let label = CGRect(x: Double(scale * (edge - width) + 16), y: line.rect.minY, width: 240,
+                                       height: line.rect.height)
+                    if label.minX >= 0, region.contains(label) {
+                        result.append(RecognizedBlock(text: "Panel \(index)", rect: label))
+                    }
+                }
+                if region.contains(line.rect) { result.append(line) }
+            }
+            return result
+        }
+        var edges = [Int](repeating: 0, count: 60)
+        edges += stride(from: 15, through: width, by: 15)
+        edges += [Int](repeating: width, count: 90)
+        edges += stride(from: width - 15, through: 0, by: -15)
+        edges += [Int](repeating: 0, count: 150)
+        let tracker = OverlayTracker()
+        var running: (request: RecognitionRequest, start: TimeInterval, edge: Int)?
+        var last: FrameUpdate?
+        for (tick, edge) in edges.enumerated() {
+            let time = Double(tick) / 30
+            let update = tracker.advance(frame(edge: edge), scale: scale, time: time)
+            if let pass = running, time - pass.start >= 0.15 {
+                tracker.finishRecognition(pass.request, blocks: truth(edge: pass.edge, region: pass.request.region),
+                                          time: time)
+                for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                    tracker.setTranslation("T " + text, for: text)
+                }
+                running = nil
+            }
+            if running == nil, let due = tracker.recognitionDue, due <= time,
+               let request = tracker.beginRecognition(time: time) {
+                running = (request, time, edge)
+            }
+            for placed in update.placed where edge == width && !placed.text.hasPrefix("T Panel") {
+                let drawn = placed.visibleRect ?? placed.rect
+                XCTAssertGreaterThanOrEqual(drawn.minX, Double(scale * width) - 1,
+                                            "nothing of the page over the panel: \(placed.text) at tick \(tick)")
+            }
+            last = update
+        }
+        let drawnPage = try XCTUnwrap(last).placed.filter { $0.text.hasPrefix("T Page") }
+        XCTAssertEqual(drawnPage.count, 10, "the page is translated again: \(drawnPage.map(\.text))")
+        for placed in drawnPage {
+            XCTAssertNil(placed.visibleRect, "\(placed.text) is drawn whole, not cut at \(placed.visibleRect.map { $0.maxX } ?? 0)")
+        }
+    }
+
+    /// A card as tall as a line and a half (a toast, a swiped row) slides in from the left over
+    /// the middle of a paragraph of four lines on a page that never moves, stays, and slides out
+    /// again. Its movement leaves a scrolling area only as tall as the card, with a top and bottom
+    /// that were never found to the pixel; the paragraph, read again at rest, takes that area. Its
+    /// translation is drawn whole: an edge of an area that was not refined is only as far as
+    /// content was seen to move there, nothing that covers the page.
+    func testACardThatSlidSidewaysOverAParagraphLeavesItWhole() throws {
+        let screen = SyntheticScreen(seed: 31), other = SyntheticScreen(seed: 77)
+        let page = screen.thumbnail(offset: 0), cardPage = other.thumbnail(offset: 0)
+        // the card's right edge in thumbnail pixels (0: gone); it spans thumbnail y 136..176
+        let top = 136, height = 40, width = 200
+        func frame(edge: Int) -> LumaImage {
+            var image = page
+            guard edge > 0 else { return image }
+            for y in top..<(top + height) {
+                for x in 0..<min(edge, image.width) {
+                    let column = x - (edge - width)
+                    image[x, y] = column >= 4 && column < cardPage.width - 4 ? cardPage[column, y] : 245
+                }
+            }
+            return image
+        }
+        // lines 2 to 5 are one paragraph (frame y 220..424); while the card is there, what shows
+        // of a covered line beside it is read as a piece of its own
+        let first = SyntheticScreen.block(2, offset: 0, text: ""), lastLine = SyntheticScreen.block(5, offset: 0, text: "")
+        let paragraph = RecognizedBlock(text: "Page paragraph", rect: first.rect.union(lastLine.rect), lineCount: 4)
+        func truth(edge: Int, region: CGRect) -> [RecognizedBlock] {
+            var result: [RecognizedBlock] = []
+            let card = CGRect(x: -8, y: Double(scale * top - 8), width: Double(scale * edge + 16),
+                              height: Double(scale * height + 16))
+            for index in [0, 1, 6, 7, 8, 9] {
+                let line = SyntheticScreen.block(index, offset: 0, text: "Page \(index)")
+                if region.contains(line.rect) { result.append(line) }
+            }
+            if edge == 0 {
+                if region.contains(paragraph.rect) { result.append(paragraph) }
+                return result
+            }
+            for index in 2...5 {
+                let line = SyntheticScreen.block(index, offset: 0, text: "Page \(index)")
+                var rect = line.rect, text = line.text
+                if rect.intersects(card) {
+                    rect = CGRect(x: card.maxX, y: rect.minY, width: max(0, rect.maxX - card.maxX), height: rect.height)
+                    guard rect.width > 20 else { continue }
+                    text = "Piece \(index)"
+                }
+                if region.contains(rect) { result.append(RecognizedBlock(text: text, rect: rect)) }
+            }
+            return result
+        }
+        var edges = [Int](repeating: 0, count: 60)
+        edges += stride(from: 20, through: width, by: 20)
+        edges += [Int](repeating: width, count: 60)
+        edges += stride(from: width - 20, through: 1, by: -20)
+        edges += [Int](repeating: 0, count: 150)
+        let tracker = OverlayTracker()
+        var running: (request: RecognitionRequest, start: TimeInterval, edge: Int)?
+        var last: FrameUpdate?
+        for (tick, edge) in edges.enumerated() {
+            let time = Double(tick) / 30
+            let update = tracker.advance(frame(edge: edge), scale: scale, time: time)
+            if let pass = running, time - pass.start >= 0.15 {
+                tracker.finishRecognition(pass.request, blocks: truth(edge: pass.edge, region: pass.request.region),
+                                          time: time)
+                for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                    tracker.setTranslation("T " + text, for: text)
+                }
+                running = nil
+            }
+            if running == nil, let due = tracker.recognitionDue, due <= time,
+               let request = tracker.beginRecognition(time: time) {
+                running = (request, time, edge)
+            }
+            last = update
+        }
+        let drawn = try XCTUnwrap(last).placed
+        let drawnParagraph = try XCTUnwrap(drawn.first { $0.text == "T Page paragraph" },
+                                           "the paragraph is translated again: \(drawn.map(\.text))")
+        XCTAssertNil(drawnParagraph.visibleRect,
+                     "the paragraph is drawn whole, not cut to \(drawnParagraph.visibleRect.map { "\($0)" } ?? "")")
+        XCTAssertEqual(drawn.filter { $0.text.hasPrefix("T Page") }.count, 7, "\(drawn.map(\.text))")
+    }
 }
