@@ -297,6 +297,26 @@ final class OverlayTracker {
         /// few times; in the tracking bench (seeds 1-30) no picture needed more than 19 passes, so
         /// the bound holds back only reading that would go on without end.
         var maxPassesOnPicture = 24
+        /// A pass that read at rest (everything over its changed places had rested for
+        /// `restDelay` when it began, and nothing moved since) and brought nothing new – no block
+        /// made, none whose text changed or that went away – leaves the pictures of the tiles of
+        /// its changed places known: what they show holds nothing that is not read already. (A
+        /// line it read cut off by the edge of its region is read again whole by a later pass,
+        /// whose region holds those tiles too: when that one finds the text changed, they are
+        /// forgotten.) A later change of which every tile shows again one
+        /// of the pictures known for it (it differs from it by no more than a tile that has not
+        /// changed, `tileChangeDifference`, `tileChangeShift`) is not read: the caret of a field
+        /// that blinks, two pictures taking turns, is read twice and then no more. Anything else
+        /// that changes is read as before, a tile of it unknown makes the whole change unknown.
+        /// What is known is forgotten for the tiles under each block that a pass made, whose text
+        /// it changed or that went away, where the block was and where it is (a text that changed
+        /// may come back to an older picture; the rest of the pass's region keeps what is known
+        /// of it, so the caret beside a counter that ticks stays known), for the tiles of a
+        /// scrolling area that moves, and all of it with a new picture or `reset`. At most
+        /// `knownTilePictures` pictures, the oldest go first; a pass whose changed places hold
+        /// more than `knownTilesPerPass` tiles leaves none known (what blinks is small).
+        var knownTilePictures = 64
+        var knownTilesPerPass = 16
         /// A paragraph read while the picture moves may go on beyond the edge of the view (the
         /// frame, its scrolling area) when that edge lies above or below it within this many of
         /// its lines (the gap before a line and most of that line, enough to read it): its next
@@ -391,7 +411,7 @@ final class OverlayTracker {
     /// bounded; tracking does not depend on it.
     var heldItemCount: Int {
         tracked.count + areas.count + plan.areas.count + plan.inFlight.count + translations.count + requested.count
-            + failures.count
+            + failures.count + knownTiles.count
     }
 
     /// What is still to be read, for looking at a running tracker (reading does not depend on
@@ -680,6 +700,9 @@ final class OverlayTracker {
         var startTime: TimeInterval
         /// the frames have a new size since: nothing of it fits
         var isObsolete = false
+        /// the tiles that had changed since they were last read and that it reads
+        /// (`Configuration.knownTilePictures`)
+        var changedTiles: [Int] = []
     }
 
     private var previous: LumaImage?
@@ -717,9 +740,15 @@ final class OverlayTracker {
     private var overlayHits: [UInt8] = []
     /// … and for each overlay tile the pixels where it shows (`MotionEstimator.stayBoxes`)
     private var overlayBoxes: [ThumbnailRect] = []
+    /// pictures of tiles that hold nothing that is not read already, oldest first
+    /// (`Configuration.knownTilePictures`)
+    private var knownTiles: [(tile: Int, pixels: [UInt8])] = []
+    /// tiles that changed in place since a pass last began to read them
+    private var unreadChangedTiles = Set<Int>()
     // scratch for the changed parts of a frame
     private var visited: [Bool] = []
     private var stack: [Int] = []
+    private var group: [Int] = []
     /// places where a movement of this frame replaced the picture (`moveBlocks`), added to the
     /// reading plan after the plan moved with the frame
     private var replacedPlaces: [CGRect] = []
@@ -803,8 +832,10 @@ final class OverlayTracker {
             plan.add(UnreadArea(rect: rect, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
         }
         replacedPlaces = []
+        // (what was known of a place is not known of the content that moved into it)
+        for region in regions { forgetKnownTiles(in: region, unreadChanges: true) }
         addEnteredStrips(motions, time: time)
-        addChangedAreas(time: time)
+        addChangedAreas(in: current, time: time)
 
         priors = motions
         guard let dominant = motions.max(by: { $0.tiles < $1.tiles }) else { return (.changed, 0, 0) }
@@ -1890,6 +1921,14 @@ final class OverlayTracker {
         running = Pass(request: request, region: pixels, picture: previous,
                        probes: probes, startRects: startRects,
                        whileMovingFast: isFast, rereadAttempts: plan.rereadAttemptsInFlight, startTime: time)
+        // (the tiles that changed and that it reads: what it finds there tells whether their
+        // pictures hold anything new, `Configuration.knownTilePictures`)
+        let reads = unreadChangedTiles.filter { tile in
+            let rect = estimator.tileRect(tile)
+            return rect.x >= pixels.x && rect.y >= pixels.y && rect.maxX <= pixels.maxX && rect.maxY <= pixels.maxY
+        }
+        unreadChangedTiles.subtract(reads)
+        running?.changedTiles = reads.sorted()
         return request
     }
 
@@ -1968,6 +2007,21 @@ final class OverlayTracker {
         guard !pass.isObsolete, let current = previous else {
             plan.finishPass(succeeded: false)
             return
+        }
+        // (what it read that had changed, and the texts known before it and where they lie:
+        // whether it brought anything new, and where, `Configuration.knownTilePictures`)
+        var textsBefore: [String: CGRect] = [:]
+        for block in tracked { textsBefore["\(block.id) \(block.text)"] = thumbnailRect(of: block) }
+        defer {
+            let region = CGRect(x: pass.region.x, y: pass.region.y, width: pass.region.width, height: pass.region.height)
+            var textsAfter: [String: CGRect] = [:]
+            for block in tracked { textsAfter["\(block.id) \(block.text)"] = thumbnailRect(of: block) }
+            if Set(textsAfter.keys) != Set(textsBefore.keys) {
+                for (key, rect) in textsAfter where textsBefore[key] == nil { forgetKnownTiles(in: rect) }
+                for (key, rect) in textsBefore where textsAfter[key] == nil { forgetKnownTiles(in: rect) }
+            } else if !pass.whileMovingFast, restedThrough(pass, area: -1, around: region) {
+                rememberTiles(pass.changedTiles, in: pass.picture)
+            }
         }
         plan.finishPass(succeeded: true)
         let factor = Double(scale)
@@ -2874,8 +2928,9 @@ final class OverlayTracker {
         }
     }
 
-    /// Parts of the picture that changed in place: one area per group of touching tiles
-    private func addChangedAreas(time: TimeInterval) {
+    /// Parts of the picture that changed in place: one area per group of touching tiles, unless
+    /// every tile of it shows a picture known to hold nothing new (`Configuration.knownTilePictures`)
+    private func addChangedAreas(in current: LumaImage, time: TimeInterval) {
         let columns = estimator.columns, count = estimator.kinds.count
         if visited.count != count {
             visited = [Bool](repeating: false, count: count)
@@ -2887,11 +2942,13 @@ final class OverlayTracker {
             var box = ThumbnailRect.empty
             var tiles = 0
             stack.removeAll(keepingCapacity: true)
+            group.removeAll(keepingCapacity: true)
             stack.append(start)
             visited[start] = true
             while let tile = stack.popLast() {
                 box = box.union(estimator.tileRect(tile))
                 tiles += 1
+                group.append(tile)
                 let column = tile % columns
                 let neighbours = [column > 0 ? tile - 1 : -1, column + 1 < columns ? tile + 1 : -1, tile - columns,
                                   tile + columns]
@@ -2906,6 +2963,9 @@ final class OverlayTracker {
             if tiles < configuration.minChangedTilesWhileMoving, movingArea(atX: center.x, y: center.y) != nil {
                 continue
             }
+            // (a picture that was read there already and held nothing new: the caret that blinks)
+            if !knownTiles.isEmpty, group.allSatisfy({ isKnown($0, in: current) }) { continue }
+            unreadChangedTiles.formUnion(group)
             var area = UnreadArea(rect: CGRect(x: box.x, y: box.y, width: box.width, height: box.height), kind: .changed,
                                   since: time)
             // (a change in a known line of its own, or at its end, about as high as that line, on
@@ -2924,6 +2984,62 @@ final class OverlayTracker {
             }
             plan.add(area)
         }
+    }
+
+    /// The pixels of a tile, row by row
+    private func pixels(ofTile tile: Int, in picture: LumaImage) -> [UInt8] {
+        let rect = estimator.tileRect(tile)
+        var result: [UInt8] = []
+        result.reserveCapacity(rect.area)
+        for y in rect.y..<min(rect.maxY, picture.height) {
+            for x in rect.x..<min(rect.maxX, picture.width) {
+                result.append(picture[x, y])
+            }
+        }
+        return result
+    }
+
+    /// The tile shows one of the pictures known for it: it differs from it by no more than a tile
+    /// that has not changed (`MotionEstimator`'s measure: the mean difference and the mean shift)
+    private func isKnown(_ tile: Int, in picture: LumaImage) -> Bool {
+        let now = pixels(ofTile: tile, in: picture)
+        guard !now.isEmpty else { return false }
+        for known in knownTiles where known.tile == tile && known.pixels.count == now.count {
+            var absolute = 0, signed = 0
+            for index in now.indices {
+                let difference = Int(now[index]) - Int(known.pixels[index])
+                absolute += abs(difference)
+                signed += difference
+            }
+            let count = Double(now.count)
+            if Double(absolute) / count <= configuration.tileChangeDifference,
+               abs(Double(signed)) / count <= configuration.tileChangeShift {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The tiles show in `picture` what holds nothing new (`Configuration.knownTilePictures`)
+    private func rememberTiles(_ tiles: [Int], in picture: LumaImage) {
+        guard configuration.knownTilePictures > 0, !tiles.isEmpty,
+              tiles.count <= configuration.knownTilesPerPass else { return }
+        for tile in tiles where tile < estimator.kinds.count && !isKnown(tile, in: picture) {
+            knownTiles.append((tile, pixels(ofTile: tile, in: picture)))
+        }
+        if knownTiles.count > configuration.knownTilePictures {
+            knownTiles.removeFirst(knownTiles.count - configuration.knownTilePictures)
+        }
+    }
+
+    /// What was known of the tiles that `rect` (thumbnail pixels) touches no longer holds (nor,
+    /// with `unreadChanges`, that they changed: what is there now moved in)
+    private func forgetKnownTiles(in rect: CGRect, unreadChanges: Bool = false) {
+        guard estimator.columns > 0 else { return }
+        let range = estimator.tileRange(of: rect), columns = estimator.columns
+        func inside(_ tile: Int) -> Bool { range.rows.contains(tile / columns) && range.columns.contains(tile % columns) }
+        if !knownTiles.isEmpty { knownTiles.removeAll { inside($0.tile) } }
+        if unreadChanges, !unreadChangedTiles.isEmpty { unreadChangedTiles = unreadChangedTiles.filter { !inside($0) } }
     }
 
     // MARK: Translations
@@ -3053,6 +3169,8 @@ final class OverlayTracker {
         lastSpeeds = []
         tileMovedAt = []
         tileMovedVerticallyAt = []
+        knownTiles = []
+        unreadChangedTiles = []
     }
 
     private func shownTranslation(for text: String) -> String? {
