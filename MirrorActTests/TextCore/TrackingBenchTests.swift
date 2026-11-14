@@ -1053,6 +1053,20 @@ final class TrackingBenchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.score, 75)
     }
 
+    /// Seed 10 of keyboard: the edge the page's area learned while the keyboard slid in is
+    /// dropped at rest (it does not hold), which left the area's bottom not known to the pixel.
+    /// The last frame of the keyboard sliding out found an edge through a paragraph near the
+    /// bottom, and with no known edge to compare with it was taken from that single frame; the
+    /// rows beyond it then stayed as that frame showed them, so it held at rest, and the
+    /// paragraph was taken for cut off and never translated (77 frames at rest).
+    func testKeyboardSeed10() throws {
+        if TrackingBenchTests.isQuickRun {
+            throw XCTSkip("debug build: only the quick scenarios run; for all: TRACKING_ALL=1 scripts/test.sh TrackingBenchTests")
+        }
+        let result = TrackingBenchTests.bench(try scenario("keyboard", seed: 10)).run(OverlayTrackerSubject(), name: "tracker")
+        XCTAssertGreaterThanOrEqual(result.coverageResting, 0.99, result.events.joined(separator: "\n"))
+    }
+
     /// Seed 19 of alikeRows: at the slow end of the flick the list crept by half a thumbnail pixel
     /// a frame. Its rows lie at a pitch of an even number of pixels, and the fit on every other row
     /// measured one step 0.15 instead of 0.5; the step failed its check, and a movement of a row

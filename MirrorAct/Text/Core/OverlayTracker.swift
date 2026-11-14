@@ -142,6 +142,10 @@ final class OverlayTracker {
         /// a refined edge of a scrolling area that moves by more than this (thumbnail pixels)
         /// replaces the known one only when two frames in a row find it
         var edgeJitter = 2
+        /// rows beyond a refined bottom edge that must show on a picture at rest what they showed
+        /// when the edge was found, or else not continue the page's ground
+        /// (`dropBottomEdgesThatDoNotHold`)
+        var edgeHoldRows = 2
 
         // MARK: Following blocks (PatchMatcher)
 
@@ -464,6 +468,19 @@ final class OverlayTracker {
         /// can pass for the edge of a bar in a single frame)
         var pendingTop: Int?
         var pendingBottom: Int?
+        /// when its refined bottom edge was last checked against a picture at rest, the rows
+        /// beyond it (the whole width of the frame) as the last frame that found it showed them,
+        /// and the row of the edge then (`dropBottomEdgesThatDoNotHold`)
+        var checkedAt: TimeInterval = -1000
+        var beyondBottom: [UInt8] = []
+        var beyondBottomEdge = -1
+        /// the lowest bottom it ever had (how far down its content was seen to reach), and whether
+        /// it was found to the pixel there
+        var reachBottom = Int.min
+        var reachBottomRefined = false
+        /// its bottom edge was dropped for one that no longer held: the next edge found there is
+        /// taken only when two frames in a row find it, as when it was known to the pixel
+        var bottomDropped = false
     }
 
     /// Points on a grid over the region of a pass that move with the picture until it ends
@@ -655,6 +672,7 @@ final class OverlayTracker {
             change = .first
         }
         previous = thumbnail
+        dropBottomEdgesThatDoNotHold(in: thumbnail, time: time)
         return FrameUpdate(change: change, scrollX: scrollX, scrollY: scrollY, placed: placed(),
                            recognitionDue: recognitionDue)
     }
@@ -921,17 +939,115 @@ final class OverlayTracker {
                 areas[index].rect = OverlayTracker.merged(areas[index].rect, refinedEdges: areas[index].refinedEdges,
                                                           with: seen.area, refined: seen.refined)
                 areas[index].refinedEdges |= motion.refinedEdges
+                rememberBeyond(&areas[index], found: seen.refined, in: current)
                 areas[index].lastMoved = time
                 if vertical { areas[index].lastMovedVertically = time }
                 areas[index].movesVertically = vertical
                 motionAreaIDs.append(areas[index].id)
             } else {
-                areas.append(ScrollArea(id: nextAreaID, rect: motion.area, refinedEdges: motion.refinedEdges,
-                                        lastMoved: time, lastMovedVertically: vertical ? time : -1000,
-                                        movesVertically: vertical))
+                var area = ScrollArea(id: nextAreaID, rect: motion.area, refinedEdges: motion.refinedEdges,
+                                      lastMoved: time, lastMovedVertically: vertical ? time : -1000,
+                                      movesVertically: vertical)
+                rememberBeyond(&area, found: motion.refinedEdges, in: current)
+                areas.append(area)
                 motionAreaIDs.append(nextAreaID)
                 nextAreaID += 1
             }
+        }
+    }
+
+    /// How far the content of an area was seen to reach down, and the rows beyond its refined
+    /// bottom edge when this frame found it (`found`), as this frame shows them
+    /// (`dropBottomEdgesThatDoNotHold`)
+    private func rememberBeyond(_ area: inout ScrollArea, found: Int, in picture: LumaImage) {
+        if area.rect.maxY >= area.reachBottom {
+            area.reachBottom = area.rect.maxY
+            area.reachBottomRefined = area.refinedEdges & FrameMotion.bottom != 0
+        }
+        guard found & FrameMotion.bottom != 0, area.refinedEdges & FrameMotion.bottom != 0 else { return }
+        let rows = area.rect.maxY..<(area.rect.maxY + configuration.edgeHoldRows)
+        guard rows.clamped(to: 0..<picture.height) == rows else {
+            area.beyondBottom = []
+            return
+        }
+        area.beyondBottom = Array(picture.pixels[(rows.lowerBound * picture.width)..<(rows.upperBound * picture.width)])
+        area.beyondBottomEdge = area.rect.maxY
+    }
+
+    /// A refined bottom edge of a scrolling area is where something stays while the content moves
+    /// above it: a bar, which shows the same on a still screen. An edge that lies above where the
+    /// area's content was seen to reach before (by more than `edgeJitter`) is checked on the
+    /// picture at rest: once the area has rested for `restDelay`, and again whenever the picture
+    /// changes while it rests. It does not hold when the `edgeHoldRows` rows beyond it no longer
+    /// show what they showed in the last frame that found it (a row across the area differs by
+    /// more than `matchBase` on average) and the ground of the rows above it goes on in them (the
+    /// median of each row within `plainRange` of theirs: no bar of another shade, no separator),
+    /// unless those rows lie in or within `edgeJitter` of another scrolling area (the page that
+    /// goes on gliding below a banner that came to rest). Then the area reaches down as far as its
+    /// content was seen again, with the edge known there as it was known there: nothing cuts
+    /// translations at the edge that did not hold, and readings there are not taken for cut off
+    /// by it (`cut(_:toViewOf:)`, `cutEdges`). Such edges are learned from frames that do not hold
+    /// at rest: Android stretches a page pulled past its end, its last lines move less than the
+    /// rest, and the movement seems to end above them in two frames in a row; the handle of the
+    /// navigation bar stays while a screen slides in sideways; a banner comes and goes. Only
+    /// bottom edges are checked: the top edge of a page lies under a title bar whose own content
+    /// changes as the page moves (a large title that shrinks, the spinner of a pull to refresh),
+    /// and its rows need not stay. The next movement finds an edge again where there is one, and
+    /// after a drop that edge is taken only when two frames in a row find it, as when the bottom
+    /// was known to the pixel (`confirmedEdges`): the last frame of a movement alone would set an
+    /// edge whose rows beyond then stay as that frame showed them, so it would hold at rest.
+    /// Known limit: a bar that slides away (a keyboard, a sheet) leaves an area of its own right
+    /// beyond the edge, which is not forgotten on a still screen, so the edge is not checked and
+    /// stays until the page moves again.
+    private func dropBottomEdgesThatDoNotHold(in picture: LumaImage, time: TimeInterval) {
+        let rows = configuration.edgeHoldRows
+        /// the median brightness of each of the rows `range` in `columns`
+        func medians(_ range: Range<Int>, _ columns: Range<Int>) -> [Int] {
+            var result: [Int] = []
+            var values: [UInt8] = []
+            for y in range {
+                values.removeAll(keepingCapacity: true)
+                for x in columns { values.append(picture[x, y]) }
+                values.sort()
+                result.append(Int(values[values.count / 2]))
+            }
+            return result
+        }
+        for index in areas.indices {
+            let area = areas[index]
+            let beyond = area.rect.maxY..<(area.rect.maxY + rows), inside = (area.rect.maxY - rows)..<area.rect.maxY
+            let columns = area.rect.x..<area.rect.maxX
+            guard area.refinedEdges & FrameMotion.bottom != 0, area.beyondBottomEdge == area.rect.maxY,
+                  area.rect.maxY < area.reachBottom - configuration.edgeJitter,
+                  time - area.lastMoved >= configuration.restDelay,
+                  area.checkedAt < max(area.lastMoved, lastChange),
+                  beyond.clamped(to: 0..<picture.height) == beyond, inside.clamped(to: 0..<picture.height) == inside,
+                  columns.clamped(to: 0..<picture.width) == columns, !columns.isEmpty,
+                  area.beyondBottom.count == rows * picture.width else { continue }
+            areas[index].checkedAt = time
+            // (in or next to another scrolling area: content of its own)
+            let band = ThumbnailRect(x: area.rect.x, y: beyond.lowerBound - configuration.edgeJitter,
+                                     width: area.rect.width, height: rows + 2 * configuration.edgeJitter)
+            guard !areas.contains(where: { $0.id != area.id && !$0.rect.intersection(band).isEmpty }) else { continue }
+            var stays = true
+            for (row, y) in beyond.enumerated() {
+                var sum = 0
+                for x in columns {
+                    sum += abs(Int(picture[x, y]) - Int(area.beyondBottom[row * picture.width + x]))
+                }
+                if Double(sum) / Double(columns.count) > configuration.matchBase { stays = false }
+            }
+            let ground = medians(inside, columns).sorted()
+            let shade = ground[ground.count / 2]
+            guard !stays, medians(beyond, columns).allSatisfy({ abs($0 - shade) <= configuration.plainRange })
+            else { continue }
+            // (as far down as its content was seen, as it was known there)
+            areas[index].rect = ThumbnailRect(x: area.rect.x, y: area.rect.y, width: area.rect.width,
+                                              height: area.reachBottom - area.rect.y)
+            if !area.reachBottomRefined { areas[index].refinedEdges &= ~FrameMotion.bottom }
+            areas[index].beyondBottom = []
+            areas[index].pendingBottom = nil
+            areas[index].bottomDropped = true
         }
     }
 
@@ -968,7 +1084,9 @@ final class OverlayTracker {
 
     /// The movement's area with a refined top or bottom edge left out (as not refined) when it
     /// moved by more than `edgeJitter` from the known refined edge and was not seen there in the
-    /// frame before as well
+    /// frame before as well. A bottom edge dropped at rest (`dropBottomEdgesThatDoNotHold`) counts
+    /// as known to the pixel for this until an edge is confirmed: an edge from a single frame (the
+    /// last of a movement) would otherwise be taken and hold at rest.
     private func confirmedEdges(of motion: FrameMotion, in area: inout ScrollArea) -> (area: ThumbnailRect, refined: Int) {
         var refined = motion.refinedEdges
         let jitter = configuration.edgeJitter
@@ -983,16 +1101,19 @@ final class OverlayTracker {
         } else if refined & FrameMotion.top != 0 {
             area.pendingTop = nil
         }
-        if refined & FrameMotion.bottom != 0, area.refinedEdges & FrameMotion.bottom != 0,
+        if refined & FrameMotion.bottom != 0,
+           area.refinedEdges & FrameMotion.bottom != 0 || area.bottomDropped,
            abs(motion.area.maxY - area.rect.maxY) > jitter {
             if let pending = area.pendingBottom, abs(pending - motion.area.maxY) <= jitter {
                 area.pendingBottom = nil
+                area.bottomDropped = false
             } else {
                 area.pendingBottom = motion.area.maxY
                 refined &= ~FrameMotion.bottom
             }
         } else if refined & FrameMotion.bottom != 0 {
             area.pendingBottom = nil
+            area.bottomDropped = false
         }
         guard refined != motion.refinedEdges else { return (motion.area, refined) }
         // (an edge not taken leaves the known one as it is, and may only make the area grow)
