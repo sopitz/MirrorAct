@@ -81,7 +81,9 @@ struct FrameMotion: Equatable {
 /// row and column sums (projection profiles) of the changed part in a few bands, plus the
 /// movements of the frame before; each is checked on real pixels of a sample of tiles, the best
 /// is refined to a fraction of a pixel, and then every changed tile is checked against it. What
-/// it does not explain may be a second moving part; what is left in the end has changed.
+/// it does not explain may be a second moving part; what is left in the end has changed. A new
+/// step of less than a pixel over a handful of tiles must fit them clearly better than standing
+/// still (`explainsCreep`): digits that change in their line are a change, not a movement.
 /// Buffers are kept from frame to frame.
 final class MotionEstimator {
     private let configuration: OverlayTracker.Configuration
@@ -661,10 +663,12 @@ final class MotionEstimator {
             // a second one is most of what shows where it is, not a few tiles strewn over another;
             // a movement of more than a pixel in what is left of a picture that came to rest is as
             // many tiles as another moving part is looked for in: a few tiles the codec repairs
-            // there may fit a row that looks alike a row away)
+            // there may fit a row that looks alike a row away; a step of less than a pixel over a
+            // handful of tiles must explain them, `explainsCreep`)
             guard moved >= configuration.minMotionTiles, movedBox.width > tileSize, movedBox.height > tileSize,
                   index == 0 || Double(moved) >= configuration.minMotionDensity * Double(texturedTiles(in: movedBox)),
-                  !rests || abs(dx) <= 1 && abs(dy) <= 1 || moved >= configuration.minSecondMotionTiles
+                  !rests || abs(dx) <= 1 && abs(dy) <= 1 || moved >= configuration.minSecondMotionTiles,
+                  explainsCreep(index, dx: dx, dy: dy, tiles: moved, box: movedBox, priors: priors, previous, current)
             else {
                 // (it explains too little: undo)
                 for tile in kinds.indices where motionIndex[tile] == Int8(index) {
@@ -678,6 +682,39 @@ final class MotionEstimator {
             let refined = refineEdges(&area, dx: dx, dy: dy, previous, current)
             motions.append(FrameMotion(dx: dx, dy: dy, area: area, tiles: moved, refinedEdges: refined))
         }
+    }
+
+    /// A step of less than a pixel (both ways) over fewer than `minSecondMotionTiles` tiles,
+    /// where no movement of the frame before lay that it differs from by less than a pixel, is
+    /// a movement only when it explains its tiles: their difference to where it says they came
+    /// from is at most `maxCreepResidual` of their difference in place. Otherwise they changed
+    /// in place. A step that small fits whatever stays as well as standing still does, so the
+    /// check on the tiles that stayed (`contradictingStillTiles`) cannot turn it down, and the
+    /// tiles that changed, the strokes of digits that were replaced and the codec's fringe
+    /// around them, fit it within their allowance for texture: a value that ticks in its line
+    /// (49 to 50 %) was taken for a line that moved by a twelfth of a pixel. It became a
+    /// scrolling area of one line, and a reading of the line at rest was waited for, or cut at
+    /// that area's edge, for as long as the screen stood still. A line that really moves (the
+    /// end of a fling, a slow drag, a ticker) fits the step far better than standing still,
+    /// and one that went on moving from the frame before is not checked.
+    private func explainsCreep(_ index: Int, dx: Double, dy: Double, tiles: Int, box: ThumbnailRect,
+                               priors: [FrameMotion], _ previous: LumaImage, _ current: LumaImage) -> Bool {
+        guard abs(dx) < 1, abs(dy) < 1, tiles < configuration.minSecondMotionTiles,
+              !priors.contains(where: { abs($0.dx - dx) < 1 && abs($0.dy - dy) < 1 && !$0.area.intersection(box).isEmpty })
+        else { return true }
+        let shift = BilinearShift(dx: dx, dy: dy), still = BilinearShift(dx: 0, dy: 0)
+        let width = width
+        var moved = 0.0, inPlace = 0.0
+        previous.pixels.withUnsafeBufferPointer { before in
+            current.pixels.withUnsafeBufferPointer { now in
+                for tile in kinds.indices where motionIndex[tile] == Int8(index) {
+                    let rect = tileRect(tile)
+                    moved += tileDifference(rect, shift: shift, before, now, width: width)
+                    inPlace += tileDifference(rect, shift: still, before, now, width: width)
+                }
+            }
+        }
+        return moved <= configuration.maxCreepResidual * inPlace
     }
 
     /// The movement a candidate leads to, to a fraction of a pixel, when it explains at least

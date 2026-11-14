@@ -136,6 +136,11 @@ final class OverlayTracker {
         var minMotionDensity = 0.4
         /// parts of a pixel below this are taken as none (no sideways movement from noise)
         var subpixelSnap = 0.08
+        /// a step of less than a pixel over fewer than `minSecondMotionTiles` tiles that no
+        /// movement of the frame before leads up to is a movement only when its tiles differ from
+        /// where it says they came from by at most this share of how much they differ in place
+        /// (`MotionEstimator`: a value that changes its digits is a change in place)
+        var maxCreepResidual = 0.9
         /// a row is where something that does not move begins when it differs from the frame
         /// before by at most `matchBase` and by `edgeMargin` less than from where it would have
         /// come from, and differs from the row inside of it by `edgeContrast` (a separator, a
