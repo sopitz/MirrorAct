@@ -206,6 +206,134 @@ final class ScreenTranslatorTests: XCTestCase {
         XCTAssertEqual(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: []).count, 1)
     }
 
+    /// With Android's keyboard up (Vision's lines of a web page with a search field, the keys,
+    /// the strip of suggestions and the bottom row), nothing of the keyboard goes to the tracker,
+    /// so nothing of it is sent or drawn: not from a reading of the whole picture, and not from a
+    /// reading of the strip of suggestions alone, which changes with every key typed. The word
+    /// typed into the field and the page above the keyboard are translated.
+    func testNothingOfAnOnScreenKeyboardIsSentForTranslation() throws {
+        let phone = TextLayoutKeyboardTests.phone
+        let lines = TextLayoutKeyboardTests.webPage
+        let frame = try TestFrames.blank(width: 1080, height: 2400, format: kCVPixelFormatType_32BGRA)
+        let keyboard = TextLayout.keyboard(in: lines, imageSize: phone, region: nil, known: nil)
+        let texts = ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: [], statusBar: .longerSide,
+                                                      keyboard: keyboard).map(\.text)
+        XCTAssertEqual(texts, [
+            "Eingabe", "Suche im Katalog", "Wasserkocher", "Geben Sie oben ein Wort ein, nach dem gesucht werden soll.",
+            "Ein ruhiger Absatz",
+            "Dieser Absatz ändert sich nie. Er steht als Vergleich neben den Texten, die sich bewegen oder ändern, "
+                + "und muss nach kurzer Zeit übersetzt sein und übersetzt bleiben.",
+            "Hinweise zur Lieferung", "Pakete werden werktags zwischen acht und",
+        ])
+        // the strip read alone, after the keyboard was found
+        let strip = lines.filter { $0.text.hasPrefix("Wasserkocher Washer") }
+        let region = CGRect(x: 0, y: 1520, width: 1080, height: 110)
+        let kept = TextLayout.keyboard(in: strip, imageSize: phone, region: region, known: keyboard)
+        XCTAssertTrue(ScreenTranslator.recognizedBlocks(from: strip, in: frame, areas: [], statusBar: .longerSide,
+                                                        keyboard: kept).isEmpty)
+        // (before, the keys and the suggestions were sent)
+        XCTAssertTrue(ScreenTranslator.recognizedBlocks(from: lines, in: frame, areas: [], statusBar: .longerSide)
+            .contains { $0.text.contains("asdf") || $0.text.contains("Washer") })
+    }
+
+    /// The coarse picture of a keyboard's keys (`keySignature`): light keys with dark letters on a
+    /// grey ground, the same with one key pressed (darker), and the page of the keyboard's ground
+    /// that is left when the keyboard slid away, in BGRA and in 4:2:0
+    func testTheKeysOfAKeyboardAreSeenToLeaveThePicture() throws {
+        let width = 1080, height = 2400
+        let keys = CGRect(x: 0, y: 1652, width: 1080, height: 402)
+        for format in [kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange] {
+            let up = try XCTUnwrap(ScreenTranslator.keySignature(
+                of: TestFrames.frame(from: Self.keyboardPicture(pressed: false, keyboard: true), width: width, height: height, format: format),
+                keys: keys))
+            let typing = try XCTUnwrap(ScreenTranslator.keySignature(
+                of: TestFrames.frame(from: Self.keyboardPicture(pressed: true, keyboard: true), width: width, height: height, format: format),
+                keys: keys))
+            let gone = try XCTUnwrap(ScreenTranslator.keySignature(
+                of: TestFrames.frame(from: Self.keyboardPicture(pressed: false, keyboard: false), width: width, height: height, format: format),
+                keys: keys))
+            XCTAssertEqual(up.count, 2 * TextLayout.keyCells)
+            XCTAssertFalse(TextLayout.keysChanged(from: up, to: typing))
+            XCTAssertTrue(TextLayout.keysChanged(from: up, to: gone))
+        }
+    }
+
+    /// A phone's picture of 1080 × 2400 in gray: a ground of the keyboard's colour, and when
+    /// `keyboard`, light keys with dark letters over y 1652 to 2054, one of them pressed (darker)
+    /// when `pressed`
+    private static func keyboardPicture(pressed: Bool, keyboard: Bool) -> [UInt8] {
+        let width = 1080, height = 2400
+        var gray = [UInt8](repeating: 215, count: width * height)
+        guard keyboard else { return gray }
+        for y in 1652..<2054 {
+            for x in 0..<width {
+                let inKey = x % 108 > 8 && (y - 1652) % 134 > 10
+                let letter = inKey && (40..<68).contains(x % 108) && (40..<90).contains((y - 1652) % 134)
+                var level: UInt8 = letter ? 40 : (inKey ? 235 : 215)
+                if pressed, inKey, x / 108 == 3, (y - 1652) / 134 == 1 { level = letter ? 40 : 150 }
+                gray[y * width + x] = level
+            }
+        }
+        return gray
+    }
+
+    /// The keyboard from one reading to the next, as the translator keeps it
+    /// (`keyboardAfterReading`): found in a reading of the whole web page; kept through a reading
+    /// of the strip of suggestions alone, of the two upper rows of letters alone (where it does
+    /// not begin higher), of a band over most of the keys read in pieces, and while a key is
+    /// pressed; ended by a reading of a part once the keys have left the picture, and by a reading
+    /// of the whole picture that finds none. The picture of the keys is kept from the reading
+    /// that found them.
+    func testTheTranslatorKeepsTheKeyboardFromOneReadingToTheNext() throws {
+        let width = 1080, height = 2400
+        let format = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        let up = try TestFrames.frame(from: Self.keyboardPicture(pressed: false, keyboard: true),
+                                      width: width, height: height, format: format)
+        let typing = try TestFrames.frame(from: Self.keyboardPicture(pressed: true, keyboard: true),
+                                          width: width, height: height, format: format)
+        let gone = try TestFrames.frame(from: Self.keyboardPicture(pressed: false, keyboard: false),
+                                        width: width, height: height, format: format)
+        let page = TextLayoutKeyboardTests.webPage
+        let pageBottom = 1504.0  // "Pakete werden werktags zwischen acht und"
+        // the whole picture
+        let first = ScreenTranslator.keyboardAfterReading(page, in: up, region: nil, known: nil, knownKeys: nil)
+        let found = try XCTUnwrap(first.keyboard)
+        let keys = try XCTUnwrap(first.keys)
+        XCTAssertGreaterThan(found.top, pageBottom)
+        // the strip alone
+        let strip = page.filter { $0.text.hasPrefix("Wasserkocher Washer") }
+        let afterStrip = ScreenTranslator.keyboardAfterReading(strip, in: up, region: CGRect(x: 0, y: 1520, width: 1080, height: 110),
+                                                               known: found, knownKeys: keys)
+        XCTAssertEqual(afterStrip.keyboard, found)
+        XCTAssertEqual(afterStrip.keys, keys)
+        // the two upper rows alone
+        let afterRows = ScreenTranslator.keyboardAfterReading(TextLayoutKeyboardTests.upperRowsOfWebPage, in: up,
+                                                              region: TextLayoutKeyboardTests.upperRowsRegion,
+                                                              known: found, knownKeys: keys)
+        let rows = try XCTUnwrap(afterRows.keyboard)
+        XCTAssertGreaterThan(rows.top, pageBottom)
+        XCTAssertNotNil(afterRows.keys)
+        // most of the keys, read in pieces, while a key is pressed
+        let afterPieces = ScreenTranslator.keyboardAfterReading(TextLayoutKeyboardTests.webPageAndKeysInPieces, in: typing,
+                                                                region: TextLayoutKeyboardTests.piecesRegion,
+                                                                known: rows, knownKeys: afterRows.keys)
+        XCTAssertEqual(afterPieces.keyboard, rows)
+        XCTAssertEqual(afterPieces.keys, afterRows.keys)
+        XCTAssertTrue(ScreenTranslator.recognizedBlocks(from: TextLayoutKeyboardTests.webPageAndKeysInPieces, in: typing,
+                                                        areas: [], statusBar: .longerSide, keyboard: afterPieces.keyboard)
+            .allSatisfy { Double($0.rect.maxY) <= pageBottom + 1 })
+        // the keys have left: a line that came out from under them, read alone
+        let revealed = [RecognizedLine(text: "achtzehn Uhr zugestellt. Wenn niemand zu",
+                                       rect: CGRect(x: 52.0 / 1080, y: 1524.0 / 2400, width: 900.0 / 1080, height: 52.0 / 2400))]
+        let afterGone = ScreenTranslator.keyboardAfterReading(revealed, in: gone, region: CGRect(x: 0, y: 1500, width: 1080, height: 100),
+                                                              known: afterPieces.keyboard, knownKeys: afterPieces.keys)
+        XCTAssertNil(afterGone.keyboard)
+        XCTAssertNil(afterGone.keys)
+        // a reading of the whole picture that finds none ends it, however the keys look
+        let page2 = page.filter { $0.rect.maxY * CGFloat(height) < 1510 }
+        XCTAssertNil(ScreenTranslator.keyboardAfterReading(page2, in: up, region: nil, known: found, knownKeys: keys).keyboard)
+    }
+
     /// Android in landscape: the status bar has the height it has in portrait, so it is left out
     /// with a band in the longer side of the picture, and the content below it is translated
     func testTheStatusBarOfAndroidInLandscapeIsNotTranslated() throws {

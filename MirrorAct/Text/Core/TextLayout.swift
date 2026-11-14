@@ -42,6 +42,17 @@ struct RecognizedLine: Equatable {
     }
 }
 
+/// An on-screen keyboard found in the lines of a reading (`TextLayout.keyboard`), in pixels of
+/// the picture it was found in
+struct OnScreenKeyboard: Equatable {
+    /// Everything from here down to the bottom edge of the picture belongs to the keyboard: its
+    /// keys, the strip of suggestions above them and the row with the space bar below them
+    var top: Double
+    /// its rows of keys, across the whole width of the picture
+    var keys: CGRect
+    var imageSize: CGSize
+}
+
 /// Lines that belong together (a paragraph); `rect` like `RecognizedLine.rect`
 struct TextBlock: Equatable {
     var text: String
@@ -134,14 +145,255 @@ enum TextLayout {
     /// icons of rows read as characters (`isRowIcon`). `.copying`, the default, keeps those: the
     /// icon of such a row can come along as a stray character, and no short word or initials
     /// before a row of two lines are lost.
+    /// For `.translating`, the lines of an on-screen `keyboard` (those whose middle lies below its
+    /// top) are left out as well.
     static func content(_ lines: [RecognizedLine], imageSize: CGSize, statusBar: StatusBar = .heightOfPicture,
-                        for purpose: Purpose = .copying) -> [RecognizedLine] {
+                        for purpose: Purpose = .copying, keyboard: OnScreenKeyboard? = nil) -> [RecognizedLine] {
         let side = statusBar == .longerSide ? max(imageSize.width, imageSize.height) : imageSize.height
         let limit = Double(side) * statusBarShare
         let shown = lines.filter { Double($0.rect.maxY * imageSize.height) > limit }
         guard purpose == .translating else { return shown }
-        return shown.filter { !isRowIcon($0, among: shown, imageSize: imageSize) }
+        let page = shown.filter { line in
+            guard let keyboard, keyboard.imageSize == imageSize else { return true }
+            return Double(line.rect.midY * imageSize.height) <= keyboard.top
+        }
+        return page.filter { !isRowIcon($0, among: page, imageSize: imageSize) }
     }
+
+    // MARK: On-screen keyboard
+
+    /// The on-screen keyboard in the lines of a reading, nil when there is none. Its keys are no
+    /// text to translate, and neither are the strip of suggestions above them and the row with the
+    /// space bar below them: everything from `OnScreenKeyboard.top` down to the bottom edge of the
+    /// picture belongs to it.
+    ///
+    /// What tells a row of keys from text is how far apart its characters stand: one in each key.
+    /// The lines are taken in rows (`readingOrder`; Vision reads a row of keys as one line, as a
+    /// few, or one line per key). A row is spread like keys when it holds at least
+    /// `keyRowCharacters` letters or digits, its width (from its leftmost to its rightmost box) per
+    /// letter or digit is at least `keySpacing` of its highest box, and none of its lines of more
+    /// than one letter is set like text (its own width per letter less than `keySpacing` of its
+    /// box: a row of a list with a title on the left and a value on the right, the words of a row
+    /// of tabs or the cells of a table). Text has about half the height of its box per character,
+    /// all capitals at most about 0.85. A row of keys is one that is spread like keys, reaches
+    /// across at least `keyRowSpan` of the width of the picture, holds at least
+    /// `keyRowCharacters` letters, and whose size of text measured from its width (`textSize`, as
+    /// if its width were set in one line) is at least `keySize` times its highest box: a line of
+    /// text measures 0.8 to 1.25 times its box, a row of keys twice or more. (The top row of a
+    /// keyboard that shows a digit in the corner of each key, read as "a'w' e rt°", has boxes as
+    /// high as two rows of text and measures only about 1.2, and Vision may read only half of it;
+    /// it is found as a row spread like keys above the others, see below.)
+    ///
+    /// A keyboard is a stack of at least two rows of keys, one right below the other (no other
+    /// row between them, the gap between their boxes less than `keyRowGap` of the higher one),
+    /// whose lowest row ends no further than `keyboardBottom` times the distance between its rows
+    /// (from the top of one to the top of the next: the pitch) above the bottom edge of the
+    /// picture. Rows spread like keys directly above it, each a pitch higher (within
+    /// `pitchTolerance` of it), belong to it as well: the top row with the digits in its keys, a
+    /// row of digits. The suggestions lie closer above the keys than that. The keyboard begins
+    /// `stripShare` of a pitch above the middle of its highest row (measured from the middles of
+    /// the rows here: where a box begins depends on whether the digits in the corners of the keys
+    /// were read with the letters), which takes in the strip of suggestions and leaves out the
+    /// line of the page right above it. A keyboard of letters has `rowsOfLetters` rows of them
+    /// (QWERTY and its kin, Cyrillic, Greek, Arabic, Hebrew, Korean; a pad of kana has four);
+    /// when fewer were found and they are the lowest rows of letters, the row that was not read
+    /// lies above them (Vision does not always read the top row, whose keys show digits in their
+    /// corners), and the keyboard begins a pitch higher for each one missing. They are the lowest
+    /// when the row read right below them is the one with the space bar (a row that is not a row
+    /// of at least `keyRowCharacters` letters spread like keys), or, when nothing was read below
+    /// them (a part of the picture that ends under them), when the lowest of them ends no more
+    /// than `lowestRowBottom` pitches above the bottom edge of the picture. Otherwise the row
+    /// missing may lie below them: a row of letters below that is no row of keys (Vision read a
+    /// part of it), or a part of the picture that ends under the second row and finds the two
+    /// upper rows alone; a pitch more would leave out the line of the page right above the
+    /// keyboard (the field being typed into). Of several such stacks the lowest one counts.
+    ///
+    /// Measured on Android's keyboard (Gboard; light and dark, portrait 1080 × 2400 and landscape)
+    /// over the settings' search and a web page: rows of keys measured 1.9 to 2.8 times their box
+    /// when read as one line, more when read key by key; the top row 1.2, spread 0.9 to 1.0 of
+    /// its box per character; the gaps between the rows 0.7 to 1.6 of a box; the lowest row ended
+    /// about 2.1 pitches above the bottom edge. The text of the suggestions lay 0.82 to 0.93 of a
+    /// pitch above the middle of the top row, the lines of the page right above the keyboard 1.44
+    /// and more. Nothing in the rule depends on that keyboard's layout: iOS sets its keys in
+    /// capitals, without digits in their corners, and its rows measure like the lower rows here.
+    ///
+    /// Also taken for a keyboard, where its rows stand at the bottom of the screen: a table of at
+    /// least two rows of single letters spread across the screen right above each other, and two
+    /// such rows that Vision read as one line each over gaps (a row of tabs read as one line
+    /// right under a letter-spaced heading); their text, a little more than a row above it (two
+    /// rows more when there are only two rows and nothing below them), and whatever lies below
+    /// it are not translated. Not taken for one: a single row of weekday
+    /// initials or of tabs (rows of keys come at least in twos), the weekdays over the days of
+    /// a month (rows of digits do not start a stack), words in a row of cells or tabs, the
+    /// letters of a dial pad ("ABC", set like a word), a letter-spaced heading alone, an index
+    /// of letters down the side of a list (it is not wide), rows of words in capitals (they
+    /// measure like text), and rows of keys higher up on the screen than a keyboard stands.
+    static func keyboard(in lines: [RecognizedLine], imageSize: CGSize) -> OnScreenKeyboard? {
+        let width = Double(imageSize.width), height = Double(imageSize.height)
+        guard width > 0, height > 0 else { return nil }
+        struct Row {
+            var top = Double.infinity, bottom = -Double.infinity, left = Double.infinity, right = -Double.infinity
+            var box = 0.0, letters = 0, characters = 0, units = 0.0
+            var setLikeText = false
+        }
+        let rows: [Row] = readingOrder(lines).map { row in
+            var measured = Row()
+            for line in row {
+                let rect = CGRect(x: line.rect.minX * imageSize.width, y: line.rect.minY * imageSize.height,
+                                  width: line.rect.width * imageSize.width, height: line.rect.height * imageSize.height)
+                measured.top = min(measured.top, Double(rect.minY))
+                measured.bottom = max(measured.bottom, Double(rect.maxY))
+                measured.left = min(measured.left, Double(rect.minX))
+                measured.right = max(measured.right, Double(rect.maxX))
+                measured.box = max(measured.box, Double(rect.height))
+                let letters = line.text.filter(\.isLetter).count
+                measured.letters += letters
+                measured.characters += line.text.filter { $0.isLetter || $0.isNumber }.count
+                measured.units += widthUnits(of: line.text)
+                if letters > 1, Double(rect.width) < keySpacing * Double(letters) * Double(rect.height) {
+                    measured.setLikeText = true
+                }
+            }
+            return measured
+        }
+        func spreadLikeKeys(_ row: Row) -> Bool {
+            let span = row.right - row.left
+            return !row.setLikeText && row.characters >= keyRowCharacters
+                && span >= keySpacing * Double(row.characters) * row.box
+        }
+        func isKeys(_ row: Row) -> Bool {
+            spreadLikeKeys(row) && row.right - row.left >= keyRowSpan * width && row.letters >= keyRowCharacters
+                && row.units > 0 && (row.right - row.left) / row.units >= keySize * row.box
+        }
+        var found: OnScreenKeyboard?
+        var index = 0
+        while index < rows.count {
+            guard isKeys(rows[index]) else {
+                index += 1
+                continue
+            }
+            var last = index
+            while last + 1 < rows.count, isKeys(rows[last + 1]),
+                  rows[last + 1].top - rows[last].bottom < keyRowGap * max(rows[last].box, rows[last + 1].box) {
+                last += 1
+            }
+            defer { index = last + 1 }
+            guard last > index else { continue }
+            let pitch = (rows[last].top - rows[index].top) / Double(last - index)
+            guard pitch > 0, height - rows[last].bottom <= keyboardBottom * pitch else { continue }
+            var first = index
+            while first > 0, spreadLikeKeys(rows[first - 1]),
+                  abs(rows[first].top - rows[first - 1].top - pitch) <= pitchTolerance * pitch {
+                first -= 1
+            }
+            // (from the middles of the rows: where a box begins depends on whether the digits in
+            // the corners of the keys were read with their letters)
+            let middle = { (row: Row) in (row.top + row.bottom) / 2 }
+            let rowPitch = (middle(rows[last]) - middle(rows[index])) / Double(last - index)
+            // (a row of letters that was not read lies above the others when the rows found are
+            // the lowest rows of letters: the row read below them is no row of letters (the row
+            // with the space bar), or, when nothing was read below them, they end as close to
+            // the bottom edge as the lowest row of letters does; a row of letters below them that
+            // was not taken in, or rows that end higher up (a part of the picture that ends under
+            // the second row), say the row missing may be below)
+            let lowestFound: Bool
+            if last + 1 < rows.count {
+                let below = rows[last + 1]
+                lowestFound = !(spreadLikeKeys(below) && below.letters >= keyRowCharacters)
+            } else {
+                lowestFound = height - rows[last].bottom <= lowestRowBottom * pitch
+            }
+            let missing = lowestFound ? Double(max(0, rowsOfLetters - (last - first + 1))) : 0
+            let keys = CGRect(x: 0, y: rows[first].top, width: width, height: rows[last].bottom - rows[first].top)
+            found = OnScreenKeyboard(top: middle(rows[first]) - (stripShare + missing) * rowPitch, keys: keys,
+                                     imageSize: imageSize)
+        }
+        return found
+    }
+
+    /// The keyboard after a reading of `lines` in `region` (frame pixels; nil = the whole
+    /// picture), when `known` was on the screen before: a keyboard stays while the picture is read
+    /// in parts. A reading that finds one takes in the keyboard known where their rows of keys
+    /// overlap, unless its keys have changed (a part may hold only some of its rows, and Vision
+    /// reads the top row in one picture and not in the next); a reading that finds none ends it
+    /// when it read the whole picture, when the picture where its keys were has changed since
+    /// they were found (`keysChanged`, see `keysChanged(from:to:)`: the keyboard slid away, and
+    /// what came out from under it may be read in parts that hold none of its place), or when the
+    /// picture changed its size. A reading of a part that finds none keeps it, however much of
+    /// the keys it holds: in a part Vision often reads the rows of keys in pieces ("sa f",
+    /// "ghi k", single digits) that are no rows of keys, and its picture tells when the keyboard
+    /// has left. So the strip of suggestions, which changes with every key typed and is read
+    /// alone, and pieces of keys stay out of what is translated.
+    static func keyboard(in lines: [RecognizedLine], imageSize: CGSize, region: CGRect?,
+                         known: OnScreenKeyboard?, keysChanged: Bool = false) -> OnScreenKeyboard? {
+        keyboard(found: keyboard(in: lines, imageSize: imageSize), imageSize: imageSize, region: region,
+                 known: known, keysChanged: keysChanged)
+    }
+
+    /// `keyboard(in:imageSize:region:known:keysChanged:)` for a reading in which
+    /// `keyboard(in:imageSize:)` found `found`
+    static func keyboard(found: OnScreenKeyboard?, imageSize: CGSize, region: CGRect?,
+                         known: OnScreenKeyboard?, keysChanged: Bool = false) -> OnScreenKeyboard? {
+        let known = known?.imageSize == imageSize ? known : nil
+        if var found {
+            if let known, !keysChanged, found.keys.intersects(known.keys) {
+                found.top = min(found.top, known.top)
+                found.keys = found.keys.union(known.keys)
+            }
+            return found
+        }
+        guard let known, !keysChanged, region != nil else { return nil }
+        return known
+    }
+
+    /// Whether the keys of a keyboard have gone from the picture: `before` and `now` hold, for each
+    /// of `keyCells` cells over its rows of keys (`keyColumns` across, `keyRows` down, row by
+    /// row), the mean brightness (luma) of its pixels and how far they spread around it (their
+    /// standard deviation), when the keys were found and in the picture of a later reading. They
+    /// have gone when the two differ by more than `keysGone` per cell on average, the means and
+    /// the spreads added up. The spread tells the keys from a blank page of the same colour: the
+    /// letters and the edges of the keys spread, a plain ground does not. Measured on Android
+    /// (Gboard, light and dark, over the settings' search and over a white web page; luma of the
+    /// RGB pictures): while keys were typed the pictures read differed by less than 0.1 per cell (a
+    /// key's pop-up covers about one of the 72 cells for a moment); once the keyboard had slid
+    /// away, by 37 to 58 (the means alone by only 5.5 where the page behind it was blank and of
+    /// the keyboard's own colour).
+    static func keysChanged(from before: [Double], to now: [Double]) -> Bool {
+        guard before.count == now.count, before.count == 2 * keyCells else { return true }
+        let difference = zip(before, now).reduce(0.0) { $0 + abs($1.0 - $1.1) } / Double(keyCells)
+        return difference > keysGone
+    }
+
+    /// `keysChanged`: the cells over a keyboard's rows of keys …
+    static let keyColumns = 12
+    static let keyRows = 6
+    static var keyCells: Int { keyColumns * keyRows }
+    /// … differ by more than this per cell on average when its keys have gone
+    static let keysGone = 10.0
+
+    /// `keyboard`: a row of keys reaches across at least this share of the width of the picture …
+    static let keyRowSpan = 0.5
+    /// … holds at least this many letters (or letters and digits, above the rows of keys) …
+    static let keyRowCharacters = 3
+    /// … with at least this share of its highest box between one character and the next …
+    static let keySpacing = 0.8
+    /// … and measures at least this many times its highest box (`textSize`)
+    static let keySize = 1.7
+    /// the gap between two rows of keys is less than this share of the higher box
+    static let keyRowGap = 3.0
+    /// the lowest row of keys ends no further than this many pitches above the bottom edge
+    static let keyboardBottom = 3.0
+    /// a row above the keys belongs to them when it lies a pitch higher within this share of it
+    static let pitchTolerance = 0.2
+    /// the keyboard begins this share of a pitch above the middle of its highest row …
+    static let stripShare = 1.15
+    /// … and a pitch higher for every row it has fewer than this many, when the rows found are the
+    /// lowest: the row below them was read and holds no letters, or nothing was read below them
+    /// and the lowest ends at most `lowestRowBottom` pitches above the bottom edge. Measured on
+    /// Gboard: the lowest row of letters ended 2.1 pitches above the bottom edge in portrait and
+    /// 2.2 in landscape, the second row 2.8 and 3.1 (a part of the picture ending under it).
+    static let rowsOfLetters = 3
+    static let lowestRowBottom = 2.5
 
     /// Whether `line` is the icon of a row of two lines (a title and a line below it, as on a
     /// settings screen) that Vision read as a character or a few, which `content` leaves out for

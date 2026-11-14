@@ -43,6 +43,11 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     /// (`TranslationFailure.retryAfter`, `TranslationWait`). No text is offered meanwhile; a
     /// wake-up is due when the wait is over.
     private var engineWaitsUntil: TimeInterval = 0
+    /// The on-screen keyboard of the readings so far (`TextLayout.keyboard`): it stays while the
+    /// picture is read in parts, and nothing of it is translated …
+    private var keyboard: OnScreenKeyboard?
+    /// … and how its keys looked when they were last found (`keySignature`)
+    private var keyboardKeys: [Double]?
 
     private var tasks: [Task<Void, Never>] = []
     private var engine: TranslationEngine?
@@ -137,6 +142,8 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             source = nil
             running = true
             engineWaitsUntil = 0
+            keyboard = nil
+            keyboardKeys = nil
             self.turn += 1
             self.wakeRecognition = wakeRecognition
             self.wakeTranslation = wakeTranslation
@@ -250,8 +257,18 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
             try? await Task.sleep(nanoseconds: 500_000_000)
             return true
         }
-        let areas = locked { tracker.scrollingAreas }
-        let blocks = Self.recognizedBlocks(from: lines, in: frame, areas: areas, statusBar: statusBar)
+        let known = locked { isCurrent(turn) ? (keyboard, keyboardKeys) : (nil, nil) }
+        let shown = Self.keyboardAfterReading(lines, in: frame, region: request.isFullFrame ? nil : request.region,
+                                              known: known.0, knownKeys: known.1)
+        let areas = locked { () -> [ScrollingArea] in
+            if isCurrent(turn) {
+                keyboard = shown.keyboard
+                keyboardKeys = shown.keys
+            }
+            return tracker.scrollingAreas
+        }
+        let blocks = Self.recognizedBlocks(from: lines, in: frame, areas: areas, statusBar: statusBar,
+                                           keyboard: shown.keyboard)
         let finished: (wake: AsyncStream<Void>.Continuation?, known: [TrackedBlock])? = locked {
             guard isCurrent(turn) else { return nil }
             tracker.finishRecognition(request, blocks: blocks, time: clock())
@@ -267,12 +284,66 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         return true
     }
 
+    /// The on-screen keyboard after a reading of `lines` in `region` of `frame` (frame pixels; nil
+    /// = the whole frame), when `known` was shown before and its keys looked like `knownKeys`
+    /// (`keySignature`) when they were last found: `TextLayout.keyboard(found:imageSize:region:known:keysChanged:)`,
+    /// told whether the picture where the keys known were has changed since. Also returns the
+    /// picture of the keys to keep for the next reading: taken from this frame when this reading
+    /// found the keys itself, the one kept before when the keyboard stays by memory, nil when
+    /// there is no keyboard.
+    static func keyboardAfterReading(_ lines: [RecognizedLine], in frame: CVPixelBuffer, region: CGRect?,
+                                     known: OnScreenKeyboard?, knownKeys: [Double]?)
+        -> (keyboard: OnScreenKeyboard?, keys: [Double]?) {
+        let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
+        var keysChanged = false
+        if let known, let knownKeys, let now = keySignature(of: frame, keys: known.keys) {
+            keysChanged = TextLayout.keysChanged(from: knownKeys, to: now)
+        }
+        let found = TextLayout.keyboard(in: lines, imageSize: size)
+        let shown = TextLayout.keyboard(found: found, imageSize: size, region: region, known: known,
+                                        keysChanged: keysChanged)
+        guard let shown else { return (nil, nil) }
+        let keys = found == nil ? nil : keySignature(of: frame, keys: shown.keys)
+        return (shown, keys ?? knownKeys)
+    }
+
+    /// A coarse picture of the rows of keys of a keyboard (`OnScreenKeyboard.keys`, frame pixels)
+    /// for `TextLayout.keysChanged`: for each of `TextLayout.keyColumns` × `TextLayout.keyRows`
+    /// cells, row by row, the mean brightness and the standard deviation of every second pixel of
+    /// every second row. nil when the frame cannot be read there.
+    static func keySignature(of frame: CVPixelBuffer, keys: CGRect) -> [Double]? {
+        let columns = TextLayout.keyColumns, rows = TextLayout.keyRows
+        guard let raster = LumaRaster(of: frame, in: keys), raster.width >= 2 * columns, raster.height >= 2 * rows else {
+            return nil
+        }
+        var cells: [Double] = []
+        cells.reserveCapacity(2 * columns * rows)
+        for row in 0..<rows {
+            for column in 0..<columns {
+                var sum = 0, squares = 0, count = 0
+                for y in stride(from: raster.height * row / rows, to: raster.height * (row + 1) / rows, by: 2) {
+                    for x in stride(from: raster.width * column / columns, to: raster.width * (column + 1) / columns, by: 2) {
+                        let value = Int(raster.values[y * raster.width + x])
+                        sum += value
+                        squares += value * value
+                        count += 1
+                    }
+                }
+                let mean = Double(sum) / Double(max(1, count))
+                cells.append(mean)
+                cells.append(max(0, Double(squares) / Double(max(1, count)) - mean * mean).squareRoot())
+            }
+        }
+        return cells
+    }
+
     /// Paragraphs worth translating, in frame pixels, with the colors to draw them in, of the lines
-    /// below the status bar that are no icons of rows (`TextLayout.content`). No paragraph reaches
-    /// across a known edge of a scrolling area: what lies on the other side is a bar that stays, or
-    /// other content.
+    /// below the status bar that are no icons of rows and not part of an on-screen `keyboard`
+    /// (`TextLayout.content`). No paragraph reaches across a known edge of a scrolling area: what
+    /// lies on the other side is a bar that stays, or other content.
     static func recognizedBlocks(from lines: [RecognizedLine], in frame: CVPixelBuffer, areas: [ScrollingArea],
-                                 statusBar: TextLayout.StatusBar = .heightOfPicture) -> [RecognizedBlock] {
+                                 statusBar: TextLayout.StatusBar = .heightOfPicture,
+                                 keyboard: OnScreenKeyboard? = nil) -> [RecognizedBlock] {
         let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
         var edges: [(y: CGFloat, from: CGFloat, to: CGFloat)] = []
         for area in areas {
@@ -282,7 +353,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
         // lines with the same known edges above them lie between the same edges
         var keys: [[Int]] = []
         var groups: [[Int]: [RecognizedLine]] = [:]
-        for line in TextLayout.content(lines, imageSize: size, statusBar: statusBar, for: .translating) {
+        for line in TextLayout.content(lines, imageSize: size, statusBar: statusBar, for: .translating, keyboard: keyboard) {
             let x = line.rect.midX * size.width, y = line.rect.midY * size.height
             let above = edges.indices.filter { edges[$0].y < y && edges[$0].from <= x && x <= edges[$0].to }
             if groups[above] == nil { keys.append(above) }
