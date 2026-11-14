@@ -181,7 +181,7 @@ unless it lies farther away or is clearly smaller.
 - When a number changes in a short line, such as a counter or a storage summary, the line's
   translation disappears for a moment until the line has been read and translated again, instead
   of showing the old number; in a paragraph of several lines the old translation can stay for
-  about a second. A number that changes every second or faster therefore shows untranslated much
+  a few seconds. A number that changes every second or faster therefore shows untranslated much
   of the time, and with a language model service every new value is sent to be translated. In a
   list whose rows differ only by a number, translations can vanish while the list scrolls fast and
   come back when it stops. Now and then a line with a number stays untranslated after it changed

@@ -192,8 +192,8 @@ grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner
   der eigenen Sprache ist, unter Umständen stehen: Ein Wort allein verrät seine Sprache nicht.
 - Ändert sich eine Zahl in einer kurzen Zeile, etwa ein Zähler oder eine Angabe zum Speicherplatz,
   verschwindet die Übersetzung der Zeile kurz, bis die Zeile neu gelesen und übersetzt ist, statt
-  die alte Zahl zu zeigen; in einem Absatz aus mehreren Zeilen kann die alte Übersetzung etwa eine
-  Sekunde lang stehen bleiben. Eine Zahl, die sich jede Sekunde oder öfter ändert, ist darum einen
+  die alte Zahl zu zeigen; in einem Absatz aus mehreren Zeilen kann die alte Übersetzung einige
+  Sekunden lang stehen bleiben. Eine Zahl, die sich jede Sekunde oder öfter ändert, ist darum einen
   guten Teil der Zeit unübersetzt zu sehen, und mit einem Sprachmodell-Dienst wird jeder neue Wert
   zum Übersetzen gesendet. In einer Liste, deren Zeilen sich nur in einer Zahl unterscheiden,
   können Übersetzungen beim schnellen Scrollen verschwinden und wiederkommen, sobald die Liste
