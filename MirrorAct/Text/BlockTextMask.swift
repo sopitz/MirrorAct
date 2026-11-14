@@ -34,6 +34,18 @@ struct BlockTextMask {
     static let smallestFontShare: CGFloat = 0.28
     static let smallestFontSize: CGFloat = 9
 
+    /// Font sizes are taken in steps of this many pixels. Core Text keeps every font it was
+    /// asked for in each size, with the outlines of its letters (some 20 KB a size), and does not
+    /// give them back: sizes as they come from the boxes of the text recognition differ for every
+    /// block and every reading, and some 2500 of them held tens of megabytes after ten minutes of
+    /// scrolling, also once Translate was off. A quarter of a pixel is not to be seen.
+    static let fontSizeStep: CGFloat = 0.25
+
+    /// The size of `fontSizeStep`s at or below `size` (at least one step)
+    static func fontStep(below size: CGFloat) -> CGFloat {
+        max(fontSizeStep, (size / fontSizeStep).rounded(.down) * fontSizeStep)
+    }
+
     /// The rectangle of a line of text that the text recognition gives is as high as its
     /// letters reach above the baseline times `lineBoxPerTop`, plus as deep as they reach below
     /// it times `lineBoxPerBottom`, both in the size of the font (`originalFontSize`): "Aus" (a
@@ -82,7 +94,8 @@ struct BlockTextMask {
         // at which the lines fit the block and no more words are broken than at the smallest
         // size: so that it is no smaller than it has to be, and breaks no word it need not.
         func set(_ fontSize: CGFloat) -> Layout {
-            Layout(text, fontSize: fontSize, in: box, lineEnds: lineEnds, rightToLeft: rightToLeft, language: language)
+            Layout(text, fontSize: BlockTextMask.fontStep(below: fontSize), in: box, lineEnds: lineEnds,
+                   rightToLeft: rightToLeft, language: language)
         }
         let first = set(largest)
         var layout = first

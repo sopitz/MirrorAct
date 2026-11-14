@@ -310,13 +310,28 @@ final class TranslationCompositorTests: XCTestCase {
 
     // MARK: Fitting
 
+    /// Font sizes come in steps of a quarter of a pixel, the largest step at or below the size
+    /// asked for: Core Text keeps every font in every size it was asked for
+    func testFontSizesComeInSteps() throws {
+        XCTAssertEqual(BlockTextMask.fontStep(below: 37.49), 37.25)
+        XCTAssertEqual(BlockTextMask.fontStep(below: 37.5), 37.5)
+        XCTAssertEqual(BlockTextMask.fontStep(below: 0.1), BlockTextMask.fontSizeStep)
+        for height in stride(from: 40, through: 80, by: 3) {
+            let mask = try XCTUnwrap(BlockTextMask(text: "Two words", width: 600, height: height, lineCount: 1,
+                                                   original: "Zwei Wörter"))
+            XCTAssertEqual(mask.fontSize, (mask.fontSize / BlockTextMask.fontSizeStep).rounded() * BlockTextMask.fontSizeStep,
+                           "\(height)")
+        }
+    }
+
     func testShortTextKeepsTheSizeOfTheOriginalOnOneLine() throws {
         let mask = try XCTUnwrap(BlockTextMask(text: "Two words", width: 600, height: 60, lineCount: 1))
         XCTAssertEqual(mask.lineCount, 1, "text that fits is not broken")
         XCTAssertTrue(mask.fits)
         // the size of a line of the original whose letters are not known
+        // (font sizes come in steps of `fontSizeStep`)
         XCTAssertEqual(mask.fontSize, BlockTextMask.originalFontSize(width: 600, height: 60, lineCount: 1, original: nil),
-                       accuracy: 0.001)
+                       accuracy: BlockTextMask.fontSizeStep)
         XCTAssertGreaterThan(mask.fontSize, 55)
         XCTAssertEqual(mask.width, 600)
         XCTAssertEqual(mask.height, 60)
@@ -324,7 +339,7 @@ final class TranslationCompositorTests: XCTestCase {
         let known = try XCTUnwrap(BlockTextMask(text: "Two words", width: 600, height: 60, lineCount: 1, original: "Zwei Wörter"))
         XCTAssertEqual(known.fontSize,
                        BlockTextMask.originalFontSize(width: 600, height: 60, lineCount: 1, original: "Zwei Wörter"),
-                       accuracy: 0.001)
+                       accuracy: BlockTextMask.fontSizeStep)
     }
 
     /// The size of the original follows from the box the text recognition gave and from the
@@ -365,7 +380,7 @@ final class TranslationCompositorTests: XCTestCase {
             // a translation that fits is set in that size (small letters fit any of these boxes)
             let mask = try XCTUnwrap(BlockTextMask(text: "no", width: width, height: height, lineCount: item.lineCount,
                                                    original: item.original))
-            XCTAssertEqual(mask.fontSize, size, accuracy: 0.001, item.label)
+            XCTAssertEqual(mask.fontSize, size, accuracy: BlockTextMask.fontSizeStep, item.label)
         }
         // what the letters say
         let capital = try XCTUnwrap(BlockTextMask.letters(of: "Aus")), below = try XCTUnwrap(BlockTextMask.letters(of: "gut"))
@@ -463,13 +478,13 @@ final class TranslationCompositorTests: XCTestCase {
         let chinese = try XCTUnwrap(BlockTextMask(text: "设置与隐私：翻译后的文字", width: 300, height: 120, lineCount: 2))
         XCTAssertEqual(chinese.lineCount, 2)
         XCTAssertEqual(chinese.fontSize, BlockTextMask.originalFontSize(width: 300, height: 120, lineCount: 2, original: nil),
-                       accuracy: 0.001)
+                       accuracy: BlockTextMask.fontSizeStep)
 
         // a word too long even for the smallest font is still drawn, broken where it has to be
         let endless = try XCTUnwrap(BlockTextMask(text: "Donaudampfschifffahrtsgesellschaftskapitänsmütze",
                                                   width: 120, height: 40, lineCount: 1))
         XCTAssertTrue(endless.fits)
-        XCTAssertGreaterThanOrEqual(endless.fontSize, BlockTextMask.smallestFontShare * 40 - 0.001)
+        XCTAssertGreaterThanOrEqual(endless.fontSize, BlockTextMask.smallestFontShare * 40 - BlockTextMask.fontSizeStep)
         XCTAssertGreaterThan(endless.lineCount, 1)
         XCTAssertGreaterThan(endless.pixels.filter { $0 > 127 }.count, 100)
         // Such a word is broken at any size, so it gets the largest size at which its lines fit
