@@ -426,8 +426,9 @@ final class OverlayTracker {
 
     /// What is still to be read, for looking at a running tracker (reading does not depend on
     /// it): each place of the reading plan with its kind, its rectangle in frame pixels, since
-    /// when it is asked for, how often it was read again already, and when it is due (nil = not
-    /// before the picture moves again); the passes begun since a frame last changed the picture;
+    /// when it is asked for, how often it was read again already, when it is due (nil = not
+    /// before the picture moves again) and the line it is read with; the passes begun since a
+    /// frame last changed the picture; how many pictures of tiles are known to hold nothing new;
     /// and for each block whether it shows (all of it), is lost or doubtful, its scrolling area,
     /// since when it is not drawn for its numbers (`Block.numbersDifferSince`) and whether it
     /// lies over the content of its area (`Block.staysOverArea`)
@@ -436,10 +437,13 @@ final class OverlayTracker {
         var places: [ReadingState.Place] = []
         for area in plan.areas {
             let due = plan.due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible, areaMotion: areaMotion)
-            places.append(ReadingState.Place(kind: "\(area.kind)",
-                                             rect: CGRect(x: area.rect.minX * factor, y: area.rect.minY * factor,
-                                                          width: area.rect.width * factor, height: area.rect.height * factor),
-                                             since: area.since, attempts: area.attempts, due: due))
+            func scaled(_ rect: CGRect) -> CGRect {
+                CGRect(x: rect.minX * factor, y: rect.minY * factor, width: rect.width * factor,
+                       height: rect.height * factor)
+            }
+            places.append(ReadingState.Place(kind: "\(area.kind)", rect: scaled(area.rect),
+                                             since: area.since, attempts: area.attempts, due: due,
+                                             readWith: area.readWith.map(scaled)))
         }
         var blocks: [Int: ReadingState.Block] = [:]
         for block in tracked {
@@ -449,7 +453,7 @@ final class OverlayTracker {
                                                   staysOverArea: block.staysOverArea)
         }
         return ReadingState(places: places, isReading: running != nil, passesOnPicture: passesOnPicture,
-                            due: recognitionDue, blocks: blocks)
+                            due: recognitionDue, blocks: blocks, knownTilePictures: knownTiles.count)
     }
 
     /// See `readingState`
@@ -460,6 +464,8 @@ final class OverlayTracker {
             var since: TimeInterval
             var attempts: Int
             var due: TimeInterval?
+            /// the line it is read with (`UnreadArea.readWith`)
+            var readWith: CGRect?
         }
 
         struct Block {
@@ -477,6 +483,8 @@ final class OverlayTracker {
         var passesOnPicture: Int
         var due: TimeInterval?
         var blocks: [Int: Block]
+        /// pictures of tiles known to hold nothing new (`Configuration.knownTilePictures`)
+        var knownTilePictures: Int
     }
 
     /// A paragraph followed from frame to frame

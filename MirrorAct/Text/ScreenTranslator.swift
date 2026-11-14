@@ -498,8 +498,9 @@ extension ScreenTranslator {
     /// Debug builds: the translations drawn into the latest frame, with the text they replace,
     /// every paragraph the tracker knows (whether it shows, is lost or doubtful, its scrolling
     /// area, since when it is held back for its numbers, relative to now, and whether it lies over
-    /// its area's content), and what the tracker still has to read and when
-    /// (`OverlayTracker.readingState`).
+    /// its area's content), what the tracker still has to read and when, how many pictures of
+    /// tiles it knows to hold nothing new (`OverlayTracker.readingState`), and the on-screen
+    /// keyboard it keeps from one reading to the next (its top and its keys, frame pixels).
     /// Call inside `FrameSink.debugSnapshot`, so that no frame is processed meanwhile.
     func debugPlacement() -> (placed: [[String: Any]], tracked: [[String: Any]], reading: [String: Any]) {
         func rect(_ r: CGRect?) -> Any {
@@ -538,9 +539,11 @@ extension ScreenTranslator {
             let reading: [String: Any] = [
                 "isReading": state.isReading, "passesOnPicture": state.passesOnPicture,
                 "dueIn": state.due.map { $0 - now } ?? NSNull(),
+                "knownTilePictures": state.knownTilePictures,
+                "keyboard": keyboard.map { ["top": $0.top, "keys": rect($0.keys)] as [String: Any] } ?? NSNull(),
                 "places": state.places.map { place in
                     ["kind": place.kind, "rect": rect(place.rect), "age": now - place.since, "attempts": place.attempts,
-                     "dueIn": place.due.map { $0 - now } ?? NSNull()] as [String: Any]
+                     "dueIn": place.due.map { $0 - now } ?? NSNull(), "readWith": rect(place.readWith)] as [String: Any]
                 },
             ]
             return (placed, tracked, reading)

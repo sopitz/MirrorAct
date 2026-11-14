@@ -318,6 +318,37 @@ final class OverlayTrackerChangingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(again.passes(from: 8.5, to: 12), 1)
     }
 
+    /// What the tracker shows of itself for a look at it (`readingState`): how many pictures it
+    /// knows to hold nothing new (the caret's, none after a reset), and for a change in a known
+    /// line the line it is read with, in frame pixels like the place
+    func testTheReadingStateShowsKnownPicturesAndTheLineAChangeIsReadWith() {
+        var seed: UInt64 = 5
+        let tracker = OverlayTracker()
+        _ = run(tracker, from: 0, seconds: 6, fps: 15, seed: &seed) { Self.caretScene($0) }
+        XCTAssertGreaterThan(tracker.readingState.knownTilePictures, 0)
+        tracker.reset()
+        XCTAssertEqual(tracker.readingState.knownTilePictures, 0)
+
+        let line = Self.field("Wasserkocher Kanne").line
+        var withLine: [(rect: CGRect, line: CGRect)] = []
+        // (the place is asked for when the word shows and read 0.12 s later: look at every frame)
+        let tracker2 = OverlayTracker()
+        _ = run(tracker2, from: 0, seconds: 5, fps: 15, seed: &seed, scene: { time in
+            Scene(lines: [Self.heading, Self.field(time < 3 ? "Wasserkocher" : "Wasserkocher Kanne").line, Self.note])
+        }, each: { _, _ in
+            for place in tracker2.readingState.places {
+                if let readWith = place.readWith { withLine.append((place.rect, readWith)) }
+            }
+        })
+        XCTAssertFalse(withLine.isEmpty)
+        for entry in withLine {
+            // the whole line of the field, beyond the change at its end
+            XCTAssertLessThanOrEqual(entry.line.minX, line.left + 10)
+            XCTAssertGreaterThan(entry.line.width, entry.rect.width)
+            XCTAssertTrue(entry.line.intersects(CGRect(x: line.left, y: line.top, width: 600, height: line.height)))
+        }
+    }
+
     // MARK: What keeps changing
 
     /// Counts the passes over 60 s (10 frames a second) and 600 s (5 frames a second) after
