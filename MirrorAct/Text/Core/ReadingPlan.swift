@@ -19,8 +19,9 @@ struct UnreadArea: Equatable {
         /// its next movement and the rest after it, `ReadingPlan.dueAtRest`)
         case reread
         /// was read while it moved fast (the link loses detail then), not found again while it
-        /// moved, or the place of a block that could not be found for a while and was forgotten
-        /// there: read again once all that moves over or under it rests
+        /// moved, the place of a block that could not be found for a while and was forgotten
+        /// there, or where a movement replaced the picture (`OverlayTracker.moveBlocks`): read
+        /// again once all that moves over or under it rests
         case confirm
         /// where a paragraph may go on: read once its scrolling area has not moved up or down for
         /// `restDelay`, if nothing read it before – when it was asked for before that rest began;

@@ -222,6 +222,9 @@ final class OverlayTracker {
         var stayContrast = 24
         /// seconds a block that cannot be found is kept, out of sight, in case it comes back
         var lostLifetime: TimeInterval = 1.5
+        /// a movement that carries this many blocks that showed whole, and finds none of them, has
+        /// replaced the picture where it lies (`moveBlocks`)
+        var replacedBlocks = 3
         /// a block read again at nearly the same place is the same block when they share this
         /// share of the larger one's area
         var sameBlockOverlap = 0.6
@@ -715,6 +718,9 @@ final class OverlayTracker {
     // scratch for the changed parts of a frame
     private var visited: [Bool] = []
     private var stack: [Int] = []
+    /// places where a movement of this frame replaced the picture (`moveBlocks`), added to the
+    /// reading plan after the plan moved with the frame
+    private var replacedPlaces: [CGRect] = []
 
     init(configuration: Configuration = Configuration()) {
         self.configuration = configuration
@@ -791,6 +797,10 @@ final class OverlayTracker {
         }
         plan.move(regions: regions, shifts: shifts,
                   bounds: CGRect(x: 0, y: 0, width: current.width, height: current.height))
+        for rect in replacedPlaces {
+            plan.add(UnreadArea(rect: rect, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
+        }
+        replacedPlaces = []
         addEnteredStrips(motions, time: time)
         addChangedAreas(time: time)
 
@@ -1250,9 +1260,13 @@ final class OverlayTracker {
     /// Moves every block whose part of the picture changed: to where its patch fits best near
     /// one of the movements of this frame, and checks what of it can still be seen
     private func moveBlocks(in current: LumaImage, motions: [FrameMotion], time: TimeInterval) {
+        // for each movement: the blocks it carried that showed whole, and how many of them were found
+        var carriedWhole = [Int](repeating: 0, count: motions.count), foundWhole = carriedWhole
+        let bounds = CGRect(x: 0, y: 0, width: current.width, height: current.height)
         for index in tracked.indices {
             var block = tracked[index]
             let rect = thumbnailRect(of: block)
+            let showedWhole = block.seen == block.inner && block.lostSince == nil
             // A block that shows whole and stays where it is while its scrolling area moves, and
             // lies outside of that area, lies over the content (`Block.staysOverArea`). It was
             // taken for a part of the area from a movement that carried it along (a screen that
@@ -1401,7 +1415,36 @@ final class OverlayTracker {
                 || abs(block.y - tracked[index].y) >= configuration.restingShift {
                 block.staysOverArea = false
             }
+            if showedWhole, let moving = likely.primary {
+                let carriedTo = rect.offsetBy(dx: motions[moving].dx, dy: motions[moving].dy).intersection(bounds)
+                if !carriedTo.isNull, carriedTo.width * carriedTo.height * 2 >= rect.width * rect.height {
+                    carriedWhole[moving] += 1
+                    if found { foundWhole[moving] += 1 }
+                }
+            }
             tracked[index] = block
+        }
+        // A movement that carried at least `replacedBlocks` blocks that showed whole, mostly into
+        // the frame, and none of them is found where it took them, did not move what they showed:
+        // the picture there was replaced. Its area (with the scrolling area it moves) is read once
+        // everything over it rests (`Kind.confirm`; read while it moves, rows that look alike may
+        // be placed a row off). Android brings a page in sideways over the one before while that
+        // fades out: in the frame between, the old page has slid on and faded to half, the new
+        // one shows at half strength beside its place, and in the next frame it stands in its
+        // place. Both steps are followed as movements of what was there, so only the spots where
+        // the old page's letters were count as changed; read in pieces, rows of the new page were
+        // cut by the edges of those pieces, or never read at all, on a screen that then stood
+        // still. (Added after the plan moved with this frame: the area is where the picture is
+        // now.)
+        for (index, motion) in motions.enumerated()
+        where carriedWhole[index] >= configuration.replacedBlocks && foundWhole[index] == 0 {
+            var rect = CGRect(x: motion.area.x, y: motion.area.y, width: motion.area.width, height: motion.area.height)
+            if let area = scrollArea(id: motionAreaIDs[index]) {
+                rect = rect.union(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width, height: area.rect.height))
+            }
+            rect = rect.intersection(bounds)
+            guard !rect.isNull, rect.width >= 1, rect.height >= 1 else { continue }
+            replacedPlaces.append(rect)
         }
         // A block that could not be found for `lostLifetime` is forgotten. Where its place still
         // lies in view (most of it in the frame and in its scrolling area), it may only have been
