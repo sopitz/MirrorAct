@@ -423,6 +423,10 @@ final class OverlayTracker {
         var isDoubtful = false
         /// when it became doubtful: a reading of a pass that started before does not end the doubt
         var doubtfulSince: TimeInterval?
+        /// its text was read by a pass at rest (what it lies in had rested when the pass started
+        /// and did not move since): another reading at rest that is nearly the same may be a
+        /// change of the text, not a misreading (`absorb`)
+        var textAtRest = false
     }
 
     /// A part of the screen whose content was seen to move as one (the view of a page between
@@ -1554,6 +1558,7 @@ final class OverlayTracker {
                                  mustShowWhole: false, keepsUnseen: true, time: time)
             }
             guard var block = made else { continue }
+            block.textAtRest = restedThrough(pass, area: block.areaID, around: thumbnailRect(of: block))
             // (its area did not move up or down all the while: what is cut off by an edge of the
             // view stays so)
             closeEdgesInView(&block, rect: rect,
@@ -2231,7 +2236,19 @@ final class OverlayTracker {
             return nil
         }
         var old = tracked[index]
-        let isSame = old.lineCount == block.lineCount && TextSimilarity.isNearlySame(old.text, block.text)
+        let nearlySame = old.lineCount == block.lineCount && TextSimilarity.isNearlySame(old.text, block.text)
+        // Nearly the same text read again is the same text read differently (Vision's readings
+        // flicker): it keeps the block and its translation. But when both readings were taken at
+        // rest, it is a change of the text in place – a letter added or taken away, one that
+        // looks alike – when the picture shows it: one line read in a box wider or narrower by
+        // at least half the width of the letters it gained or lost (a misreading keeps the
+        // box), or the block is doubtful (a title that may have been replaced in place). A block
+        // that is only lost is not enough: under a scrim or while it fades, a misreading of the
+        // same text is read at rest in a block that cannot be found. Then it is handled as related
+        // text: the old translation is shown until the new one is there.
+        let changedInPlace = nearlySame && old.text != block.text && old.textAtRest
+            && block.textAtRest && (old.isDoubtful || OverlayTracker.isOtherLength(old, block))
+        let isSame = nearlySame && !changedInPlace
         if isSame {
             // keep what is known; take the new anchor when the old one no longer fits
             if old.seen == nil || old.lostSince != nil {
@@ -2264,6 +2281,7 @@ final class OverlayTracker {
             old.colors = block.colors
             old.readAt = block.readAt
             old.missedOnce = false
+            if old.text == block.text { old.textAtRest = old.textAtRest || block.textAtRest }
             if let since = old.doubtfulSince, passStart < since {
                 // (read from a picture before it became doubtful: its place is read again)
                 askToReadPlace(thumbnailRect(of: old), attempts: attempts, time: time)
@@ -2280,7 +2298,7 @@ final class OverlayTracker {
         let common = oldRect.intersection(rect)
         let coversOld = !common.isNull
             && common.width * common.height >= configuration.containedShare * oldRect.width * oldRect.height
-        if TextSimilarity.isRelated(old.text, block.text) {
+        if changedInPlace || TextSimilarity.isRelated(old.text, block.text) {
             // (the old translation is shown only where the new reading covers most of its place)
             if coversOld { block.earlier = shownTranslation(of: old) }
             block.id = old.id
@@ -2297,6 +2315,16 @@ final class OverlayTracker {
         }
         tracked[index] = block
         return index
+    }
+
+    /// A reading of one line with letters more or fewer than the block's text, in a box wider
+    /// or narrower by at least half their width (the block's width per letter): letters added
+    /// or taken away, not a misreading, which keeps the box
+    private static func isOtherLength(_ old: Block, _ new: Block) -> Bool {
+        let gained = new.text.count - old.text.count
+        guard old.lineCount == 1, new.lineCount == 1, gained != 0 else { return false }
+        let letter = old.width / Double(max(1, old.text.count))
+        return (new.width - old.width) * Double(gained.signum()) >= 0.5 * letter * Double(abs(gained))
     }
 
     // MARK: Changes of the picture

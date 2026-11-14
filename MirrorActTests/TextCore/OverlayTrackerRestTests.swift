@@ -17,6 +17,8 @@ final class OverlayTrackerRestTests: XCTestCase {
         var fontSize = 63.0
         var left = 49.0
         var fontName = "Helvetica-Bold"
+        /// what the recognizer makes of the whole line, when it misreads it (in the same box)
+        var readAs: String?
 
         private var font: CTFont { CTFontCreateWithName(fontName as CFString, fontSize, nil) }
 
@@ -66,7 +68,7 @@ final class OverlayTrackerRestTests: XCTestCase {
             // the phone "Intranet" of "Netzwerk & Intranet" came 5 px lower, "rk & Intranet" 16 px
             // higher)
             let isPart = first > 0 || last < letters.count - 1
-            return RecognizedBlock(text: String(letters[first...last]),
+            return RecognizedBlock(text: isPart ? String(letters[first...last]) : readAs ?? text,
                                    rect: CGRect(x: minX, y: top + (isPart ? 8 : 0), width: maxX - minX,
                                                 height: height - (isPart ? 22 : 0)))
         }
@@ -90,23 +92,27 @@ final class OverlayTrackerRestTests: XCTestCase {
     }
 
     /// Shows `lines` for `seconds` at 30 frames per second, from `start`, with `each` called with
-    /// what is drawn into every frame; passes take 0.3 s and read what `lines` show in their
-    /// region; what is asked for is translated at once
+    /// what is drawn into every frame and `alter` changing every frame before the tracker sees
+    /// it; passes take 0.3 s and read what `lines` show in their region; what is asked for is
+    /// translated at once
     private func show(_ lines: [Line], on tracker: OverlayTracker, from start: TimeInterval, seconds: Double,
-                      seed: inout UInt64, each: ([String]) -> Void = { _ in })
-        -> (regions: [CGRect], sent: [String], placed: [String]) {
-        var regions: [CGRect] = [], sent: [String] = [], placed: [String] = []
+                      seed: inout UInt64, each: ([String]) -> Void = { _ in },
+                      alter: (inout LumaImage) -> Void = { _ in })
+        -> (regions: [CGRect], sent: [String], placed: [String], read: [String]) {
+        var regions: [CGRect] = [], sent: [String] = [], placed: [String] = [], read: [String] = []
         let picture = Self.picture(lines)
         var time = start
         var pending: (request: RecognitionRequest, answer: [RecognizedBlock], at: TimeInterval)?
         while time < start + seconds {
             time += 1.0 / 30
             seed += 1
-            let frame = SyntheticPage.noisy(picture, amount: 2, seed: seed)
+            var frame = SyntheticPage.noisy(picture, amount: 2, seed: seed)
+            alter(&frame)
             placed = tracker.advance(frame, scale: Self.scale, time: time).placed.map(\.text)
             each(placed)
             if let job = pending, time >= job.at {
                 tracker.finishRecognition(job.request, blocks: job.answer, time: time)
+                read += job.answer.map(\.text)
                 pending = nil
             }
             if pending == nil, let due = tracker.recognitionDue, due <= time,
@@ -119,7 +125,7 @@ final class OverlayTrackerRestTests: XCTestCase {
                 tracker.setTranslation("T " + text, for: text)
             }
         }
-        return (regions, sent, placed)
+        return (regions, sent, placed, read)
     }
 
     /// The title of a bar changes in place in its last word ("Netzwerk & Internet" to "Netzwerk
@@ -257,5 +263,87 @@ final class OverlayTrackerRestTests: XCTestCase {
         XCTAssertEqual(tracker.blocks.map(\.text).filter { $0 == text }, [text])
         XCTAssertEqual(placed, ["T " + text])
         XCTAssertEqual(sent, [])
+    }
+
+    /// A bar title and a row change in place to texts that look alike, a letter longer each
+    /// ("Netzwerk & Internet" to "Netzwerk & Internetz", "Mobilfunknetz" to "Mobilfunknetze", as
+    /// on the lab's page): read at rest, each new reading is nearly the same as the old text, but
+    /// its box is wider by about a letter. Both are taken as changed and translated, and the old
+    /// translations are drawn over the new texts for two seconds at most. (Taken for misreadings,
+    /// the old translations stayed over the new texts for good.)
+    func testATextThatGainedALetterInPlaceIsTranslatedAgain() {
+        let tracker = OverlayTracker()
+        var seed: UInt64 = 1
+        let title = Line(text: "Netzwerk & Internet", top: 264)
+        let row = Line(text: "Mobilfunknetz", top: 470, fontSize: 52)
+        let first = show([title, row], on: tracker, from: 0, seconds: 2, seed: &seed)
+        XCTAssertEqual(Set(first.placed), ["T " + title.text, "T " + row.text])
+        let newTitle = Line(text: "Netzwerk & Internetz", top: 264)
+        let newRow = Line(text: "Mobilfunknetze", top: 470, fontSize: 52)
+        var old = 0
+        let changed = show([newTitle, newRow], on: tracker, from: 2, seconds: 5, seed: &seed) { placed in
+            if placed.contains("T " + title.text) || placed.contains("T " + row.text) { old += 1 }
+        }
+        XCTAssertEqual(Set(tracker.blocks.map(\.text)), [newTitle.text, newRow.text], "\(changed.regions)")
+        XCTAssertEqual(Set(changed.sent), [newTitle.text, newRow.text])
+        XCTAssertEqual(changed.sent.count, 2)
+        XCTAssertEqual(Set(changed.placed), ["T " + newTitle.text, "T " + newRow.text])
+        XCTAssertLessThanOrEqual(old, 60, "the old translations at most two seconds")
+    }
+
+    /// … while readings of a title that does not change, which come out a letter different now
+    /// and then (Vision misreads a letter, or drops one) in the same box, are misreadings: the
+    /// title keeps its text and its translation, and nothing more is sent than the summary below
+    /// it that ticks (it has the title read with it each time)
+    func testMisreadingsOfATitleAtRestAreNotSent() {
+        let tracker = OverlayTracker()
+        var seed: UInt64 = 1
+        // (close enough above the summary that a pass that reads the summary reads it too)
+        var title = Line(text: "Speicherplatz", top: 1392, fontSize: 52)
+        func summary(_ used: Int) -> Line {
+            Line(text: "\(used) % belegt, \(128 - used) GB frei", top: 1460, fontSize: 42, fontName: "Helvetica")
+        }
+        _ = show([title, summary(41)], on: tracker, from: 0, seconds: 3, seed: &seed)
+        var time = 3.0, sent: [String] = [], misread = 0
+        for (step, misreading) in [nil, "Speicherpiatz", "Speicherpltz", nil, "Speicherplatz."].enumerated() {
+            title.readAs = misreading
+            let shown = summary(42 + step)
+            let result = show([title, shown], on: tracker, from: time, seconds: 3, seed: &seed) { placed in
+                XCTAssertTrue(placed.contains("T Speicherplatz"), "\(step): \(placed)")
+            }
+            sent += result.sent
+            misread += result.read.filter { $0 == misreading }.count
+            time += 3
+        }
+        XCTAssertGreaterThanOrEqual(misread, 2, "the title is read with the summary")
+        XCTAssertEqual(sent, (42...46).map { summary($0).text })
+        XCTAssertTrue(tracker.blocks.map(\.text).contains("Speicherplatz"))
+    }
+
+    /// … and so are readings of a title and a row under a scrim: a dialog dims the page for four
+    /// seconds, so neither can be found where it was read (they are lost), and Vision reads the
+    /// dimmed lines a letter short ("Speicherpltz", "Mobilfunknet") in the same boxes. Nothing is
+    /// sent and both keep their translations. (When a lost block took a nearly equal reading at
+    /// rest for a change, both misreadings were sent and their translations drawn.)
+    func testMisreadingsUnderAScrimAreNotSent() {
+        let tracker = OverlayTracker()
+        var seed: UInt64 = 1
+        let title = Line(text: "Speicherplatz", top: 1363, fontSize: 52)
+        let row = Line(text: "Mobilfunknetz", top: 470, fontSize: 52)
+        let first = show([title, row], on: tracker, from: 0, seconds: 3, seed: &seed)
+        XCTAssertEqual(Set(first.placed), ["T " + title.text, "T " + row.text])
+        var dimmedTitle = title, dimmedRow = row
+        dimmedTitle.readAs = "Speicherpltz"
+        dimmedRow.readAs = "Mobilfunknet"
+        let during = show([dimmedTitle, dimmedRow], on: tracker, from: 3, seconds: 4, seed: &seed) { frame in
+            for index in frame.pixels.indices { frame.pixels[index] = UInt8(Double(frame.pixels[index]) * 0.5) }
+        }
+        XCTAssertGreaterThanOrEqual(during.read.filter { $0 == "Speicherpltz" || $0 == "Mobilfunknet" }.count, 1,
+                                    "the dimmed lines are read: \(during.regions)")
+        XCTAssertEqual(during.sent, [])
+        XCTAssertEqual(Set(during.placed), ["T " + title.text, "T " + row.text])
+        let after = show([title, row], on: tracker, from: 7, seconds: 4, seed: &seed)
+        XCTAssertEqual(after.sent, [])
+        XCTAssertEqual(Set(after.placed), ["T " + title.text, "T " + row.text])
     }
 }
