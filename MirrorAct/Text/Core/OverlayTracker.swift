@@ -813,6 +813,9 @@ final class OverlayTracker {
             change = .first
         }
         previous = thumbnail
+        // (a block that cannot be found is forgotten in time also while no frame changes the
+        // picture: `moveBlocks` does not run then)
+        if change == .unchanged { forgetLostBlocks(in: thumbnail, time: time) }
         dropBottomEdgesThatDoNotHold(in: thumbnail, time: time)
         return FrameUpdate(change: change, scrollX: scrollX, scrollY: scrollY, placed: placed(),
                            recognitionDue: recognitionDue)
@@ -1318,6 +1321,8 @@ final class OverlayTracker {
     private func moveBlocks(in current: LumaImage, motions: [FrameMotion], time: TimeInterval) {
         // for each movement: the blocks it carried that showed whole, and how many of them were found
         var carriedWhole = [Int](repeating: 0, count: motions.count), foundWhole = carriedWhole
+        // the blocks a movement carried along where they could not be found (by id: the movement)
+        var carriedUnseen: [Int: Int] = [:]
         let bounds = CGRect(x: 0, y: 0, width: current.width, height: current.height)
         for index in tracked.indices {
             var block = tracked[index]
@@ -1456,6 +1461,7 @@ final class OverlayTracker {
                     block.x += motions[moving].dx
                     block.y += motions[moving].dy
                     block.areaID = motionAreaIDs[moving]
+                    carriedUnseen[block.id] = moving
                 }
                 if block.seen != nil, !isActive(under: rect, kind: .changed) {
                     // gone without anything changing there (a slow fade): read the place again
@@ -1491,9 +1497,13 @@ final class OverlayTracker {
         // the old page's letters were count as changed; read in pieces, rows of the new page were
         // cut by the edges of those pieces, or never read at all, on a screen that then stood
         // still. (Added after the plan moved with this frame: the area is where the picture is
-        // now.)
+        // now.) The blocks it carried along where they could not be found showed the picture
+        // before: they are gone with it, not kept for `lostLifetime` where the movement took
+        // them (over the new page, or across the edge of the frame).
+        var replaced = Set<Int>()
         for (index, motion) in motions.enumerated()
         where carriedWhole[index] >= configuration.replacedBlocks && foundWhole[index] == 0 {
+            replaced.insert(index)
             var rect = CGRect(x: motion.area.x, y: motion.area.y, width: motion.area.width, height: motion.area.height)
             if let area = scrollArea(id: motionAreaIDs[index]) {
                 rect = rect.union(CGRect(x: area.rect.x, y: area.rect.y, width: area.rect.width, height: area.rect.height))
@@ -1502,14 +1512,27 @@ final class OverlayTracker {
             guard !rect.isNull, rect.width >= 1, rect.height >= 1 else { continue }
             replacedPlaces.append(rect)
         }
-        // A block that could not be found for `lostLifetime` is forgotten. Where its place still
-        // lies in view (most of it in the frame and in its scrolling area), it may only have been
-        // lost to a picture the link damaged while it moved, or its text may have changed: that
-        // place is read once everything over it rests (`Kind.confirm`). (A pass that read the
-        // place at rest since it was lost removed it already, and one that read it while it moved
-        // asked for the same.) A block read while the picture moved fast and never seen since is
-        // left out: where it is, is only a guess, and the pass that read it asked for its own
-        // region to be confirmed.
+        if !replaced.isEmpty {
+            tracked.removeAll { block in carriedUnseen[block.id].map { replaced.contains($0) } ?? false }
+        }
+        forgetLostBlocks(in: current, time: time)
+        // (a block found again where a later reading lies)
+        dropOverlaps(attempts: 0, time: time)
+    }
+
+    /// A block that could not be found for `lostLifetime` is forgotten. Where its place still
+    /// lies in view (most of it in the frame and in its scrolling area), it may only have been
+    /// lost to a picture the link damaged while it moved, or its text may have changed: that
+    /// place is read once everything over it rests (`Kind.confirm`). (A pass that read the
+    /// place at rest since it was lost removed it already, and one that read it while it moved
+    /// asked for the same.) A block read while the picture moved fast and never seen since is
+    /// left out: where it is, is only a guess, and the pass that read it asked for its own
+    /// region to be confirmed. This runs for every frame, also for one that does not change the
+    /// picture (`advance`), and when a pass ends (`finishRecognition`; a still phone sends no
+    /// frames): a page that came over another and stands still must not keep the blocks of the
+    /// one before because no frame comes (they were taken into the places asked to be read
+    /// again there, across the edge of the frame).
+    private func forgetLostBlocks(in current: LumaImage, time: TimeInterval) {
         tracked.removeAll { block in
             guard let lost = block.lostSince, time - lost > configuration.lostLifetime else { return false }
             // (one a pass read while the picture moved fast and that was never seen since: its place
@@ -1526,8 +1549,6 @@ final class OverlayTracker {
             }
             return true
         }
-        // (a block found again where a later reading lies)
-        dropOverlaps(attempts: 0, time: time)
     }
 
     /// Where a block may have gone, the likeliest first: with the scrolling area it moves with,
@@ -2031,6 +2052,9 @@ final class OverlayTracker {
             plan.finishPass(succeeded: false)
             return
         }
+        // (no frame may have come since the picture came to rest: what is lost for long is not
+        // taken into what this pass asks to be read again)
+        forgetLostBlocks(in: current, time: time)
         // (what it read that had changed, and the texts known before it and where they lie:
         // whether it brought anything new, and where, `Configuration.knownTilePictures`)
         var textsBefore: [String: CGRect] = [:]
