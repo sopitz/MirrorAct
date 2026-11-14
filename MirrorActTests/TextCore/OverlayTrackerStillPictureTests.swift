@@ -216,6 +216,14 @@ final class OverlayTrackerStillPictureTests: XCTestCase {
                          answer: { _ in nil })
         XCTAssertEqual(still.count, tracker.configuration.maxPassesOnPicture, "\(still)")
         XCTAssertNil(tracker.recognitionDue)
+        // (what a debug dump shows of it: the whole frame still to be read, the passes spent)
+        let state = tracker.readingState
+        XCTAssertEqual(state.passesOnPicture, tracker.configuration.maxPassesOnPicture)
+        XCTAssertNil(state.due)
+        XCTAssertFalse(state.isReading)
+        XCTAssertEqual(state.places.map(\.kind), ["changed"])
+        XCTAssertEqual(state.places.first?.rect, CGRect(x: 0, y: 0, width: 1080, height: 2400))
+        XCTAssertEqual(state.blocks.count, 0)
 
         let changed = [Line(text: "Netzwerk & Intranet", box: CGRect(x: 54, y: 400, width: 600, height: 63), fontSize: 60)]
         let after = show(Self.picture([changed]), [changed], on: tracker, from: 10, seconds: 3, seed: &seed)

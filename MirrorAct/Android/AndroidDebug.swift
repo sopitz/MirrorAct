@@ -18,7 +18,8 @@ import SwiftUI
 ///   cmd=translate on=1|0                     Translate on or off (without on=: toggle)
 ///   cmd=copytext                             Text: copy the text on the screen to the clipboard
 ///   cmd=dump path=<folder>                   one and the same frame: source.png (as sent), shown.png
-///                                            (as shown) and placement.json (what the translator draws)
+///                                            (as shown) and placement.json (what the translator draws,
+///                                            what the tracker knows and still has to read)
 ///   cmd=textsettings path=<file.png>         draw the Text tab of the settings (written a second later)
 ///   cmd=record on=1|0  ·  cmd=present on=1|0 recording · presentation on or off (without on=: toggle)
 ///   cmd=translator                           log the translator's state as the user sees it
@@ -251,6 +252,7 @@ enum AndroidDebug {
             "time": time, "translating": session.translator.isActive,
             "engine": session.translator.debugEngineName ?? NSNull(), "sameBuffer": source === shown,
             "frame": size ?? NSNull(), "placed": placement.placed, "tracked": placement.tracked,
+            "reading": placement.reading,
         ]
         let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
         let summary = "\(placement.placed.count) placed, \(placement.tracked.count) tracked → \(folder.path)"

@@ -420,17 +420,19 @@ extension ScreenTranslator {
     var debugEngineName: String? { engine?.name }
 
     /// Debug builds: the translations drawn into the latest frame, with the text they replace,
-    /// and every paragraph the tracker knows. Call inside `FrameSink.debugSnapshot`, so that
-    /// no frame is processed meanwhile.
-    func debugPlacement() -> (placed: [[String: Any]], tracked: [[String: Any]]) {
+    /// every paragraph the tracker knows (whether it shows, is lost or doubtful, its scrolling
+    /// area), and what the tracker still has to read and when (`OverlayTracker.readingState`).
+    /// Call inside `FrameSink.debugSnapshot`, so that no frame is processed meanwhile.
+    func debugPlacement() -> (placed: [[String: Any]], tracked: [[String: Any]], reading: [String: Any]) {
         func rect(_ r: CGRect?) -> Any {
             guard let r else { return NSNull() }
             return ["x": r.minX, "y": r.minY, "width": r.width, "height": r.height]
         }
         func color(_ c: RGBColor) -> String { String(format: "#%02x%02x%02x", c.red, c.green, c.blue) }
         return locked {
-            guard running else { return ([], []) }
+            guard running else { return ([], [], [:]) }
             let known = tracker.blocks
+            let state = tracker.readingState
             let placed: [[String: Any]] = debugPlaced.map { block in
                 let original = known.first { $0.id == block.id }
                 return ["id": block.id, "recognized": original?.text ?? NSNull(), "translation": block.text,
@@ -438,11 +440,30 @@ extension ScreenTranslator {
                         "background": color(block.colors.background), "foreground": color(block.colors.foreground)]
             }
             let tracked: [[String: Any]] = known.map { block in
-                ["id": block.id, "recognized": block.text, "translation": block.translation ?? NSNull(),
-                 "isStale": block.isStale, "rect": rect(block.rect), "lineCount": block.lineCount,
-                 "background": color(block.colors.background), "foreground": color(block.colors.foreground)]
+                var entry: [String: Any] = [
+                    "id": block.id, "recognized": block.text, "translation": block.translation ?? NSNull(),
+                    "isStale": block.isStale, "rect": rect(block.rect), "lineCount": block.lineCount,
+                    "background": color(block.colors.background), "foreground": color(block.colors.foreground)]
+                if let more = state.blocks[block.id] {
+                    entry["isSeen"] = more.isSeen
+                    entry["isWhole"] = more.isWhole
+                    entry["isLost"] = more.isLost
+                    entry["isDoubtful"] = more.isDoubtful
+                    entry["areaID"] = more.areaID
+                }
+                return entry
             }
-            return (placed, tracked)
+            // (times relative to now, on the tracker's clock: negative = due already)
+            let now = clock()
+            let reading: [String: Any] = [
+                "isReading": state.isReading, "passesOnPicture": state.passesOnPicture,
+                "dueIn": state.due.map { $0 - now } ?? NSNull(),
+                "places": state.places.map { place in
+                    ["kind": place.kind, "rect": rect(place.rect), "age": now - place.since, "attempts": place.attempts,
+                     "dueIn": place.due.map { $0 - now } ?? NSNull()] as [String: Any]
+                },
+            ]
+            return (placed, tracked, reading)
         }
     }
 }

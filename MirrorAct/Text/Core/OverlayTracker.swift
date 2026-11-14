@@ -389,6 +389,56 @@ final class OverlayTracker {
             + failures.count
     }
 
+    /// What is still to be read, for looking at a running tracker (reading does not depend on
+    /// it): each place of the reading plan with its kind, its rectangle in frame pixels, since
+    /// when it is asked for, how often it was read again already, and when it is due (nil = not
+    /// before the picture moves again); the passes begun since a frame last changed the picture;
+    /// and for each block whether it shows (all of it), is lost or doubtful, and its scrolling area
+    var readingState: ReadingState {
+        let factor = Double(scale)
+        var places: [ReadingState.Place] = []
+        for area in plan.areas {
+            let due = plan.due(of: area, lastMotion: lastMotion, isFullyVisible: isFullyVisible, areaMotion: areaMotion)
+            places.append(ReadingState.Place(kind: "\(area.kind)",
+                                             rect: CGRect(x: area.rect.minX * factor, y: area.rect.minY * factor,
+                                                          width: area.rect.width * factor, height: area.rect.height * factor),
+                                             since: area.since, attempts: area.attempts, due: due))
+        }
+        var blocks: [Int: ReadingState.Block] = [:]
+        for block in tracked {
+            blocks[block.id] = ReadingState.Block(isSeen: block.seen != nil, isWhole: block.seen == block.inner,
+                                                  isLost: block.lostSince != nil, isDoubtful: block.isDoubtful,
+                                                  areaID: block.areaID)
+        }
+        return ReadingState(places: places, isReading: running != nil, passesOnPicture: passesOnPicture,
+                            due: recognitionDue, blocks: blocks)
+    }
+
+    /// See `readingState`
+    struct ReadingState {
+        struct Place {
+            var kind: String
+            var rect: CGRect
+            var since: TimeInterval
+            var attempts: Int
+            var due: TimeInterval?
+        }
+
+        struct Block {
+            var isSeen: Bool
+            var isWhole: Bool
+            var isLost: Bool
+            var isDoubtful: Bool
+            var areaID: Int
+        }
+
+        var places: [Place]
+        var isReading: Bool
+        var passesOnPicture: Int
+        var due: TimeInterval?
+        var blocks: [Int: Block]
+    }
+
     /// A paragraph followed from frame to frame
     private struct Block {
         var id: Int
