@@ -277,7 +277,8 @@ final class OverlayTracker {
         /// (or of its scrolling area) may be cut off there: it is not taken, and read again once
         /// all of it can be seen
         var cutEdge = 2.0
-        /// a place is read again at most this many times for being cut off
+        /// a place is read again at most this many times: for being cut off, or for holding two
+        /// blocks that may be one paragraph (`askToReadParagraphsTogether`)
         var maxRereads = 2
         /// A paragraph read while the picture moves may go on beyond the edge of the view (the
         /// frame, its scrolling area) when that edge lies above or below it within this many of
@@ -1854,7 +1855,7 @@ final class OverlayTracker {
         }
         if !gone.isEmpty { tracked.removeAll { gone.contains($0.id) } }
         dropOverlaps(attempts: rereadAttempt, time: time)
-        askToReadParagraphsTogether(taken, time: time)
+        askToReadParagraphsTogether(taken, attempts: rereadAttempt, time: time)
         if pass.whileMovingFast, let bounds = pass.probes.currentBounds {
             plan.add(UnreadArea(rect: bounds.intersection(CGRect(x: 0, y: 0, width: current.width, height: current.height)),
                                 kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
@@ -2249,8 +2250,15 @@ final class OverlayTracker {
     }
 
     /// Two blocks right above each other with lines of the same height may be one paragraph that
-    /// was read in two parts: both are read again together
-    private func askToReadParagraphsTogether(_ taken: Set<Int>, time: TimeInterval) {
+    /// was read in two parts: both are read again together. That is reading their place again:
+    /// it counts as such (`attempts`, the pass's own plus one) and is not asked for once the place
+    /// was read `Configuration.maxRereads` times. (Asked for as for the first time, it kept a
+    /// still page being read some seven times a second: the margin of the pass that read two
+    /// paragraphs together cut the title above them, the pass that read the title again cut the
+    /// first line of the upper paragraph, that cut line held the paragraph for a reading of its
+    /// place, and both paragraphs were asked for once more.)
+    private func askToReadParagraphsTogether(_ taken: Set<Int>, attempts: Int, time: TimeInterval) {
+        guard attempts < configuration.maxRereads else { return }
         for block in tracked where taken.contains(block.id) && block.seen != nil {
             let rect = thumbnailRect(of: block)
             let lineHeight = rect.height / Double(max(1, block.lineCount))
@@ -2261,7 +2269,7 @@ final class OverlayTracker {
                 else { continue }
                 let air = configuration.rereadAir
                 plan.add(UnreadArea(rect: rect.union(otherRect).insetBy(dx: -air, dy: -air),
-                                    kind: .reread, since: time, areaID: block.areaID))
+                                    kind: .reread, since: time, attempts: attempts, areaID: block.areaID))
             }
         }
     }
