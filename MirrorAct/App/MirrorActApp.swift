@@ -111,6 +111,8 @@ struct MirrorCommands: Commands {
             Toggle("Always Show Tools", isOn: $settings.alwaysShowTools)
             Toggle("Keep on Top", isOn: $settings.alwaysOnTop)
                 .keyboardShortcut("t")
+            Toggle("Also Above Full-Screen Apps", isOn: $settings.onTopEverywhere)
+                .disabled(!settings.alwaysOnTop)
             Toggle("Show Device Frame", isOn: $settings.showFrame)
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             Toggle("Play Sound", isOn: Binding(

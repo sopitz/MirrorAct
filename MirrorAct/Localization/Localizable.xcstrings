@@ -887,6 +887,26 @@
         }
       }
     },
+    "Also above full-screen apps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auch über Vollbild-Apps"
+          }
+        }
+      }
+    },
+    "Also Above Full-Screen Apps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auch über Vollbild-Apps"
+          }
+        }
+      }
+    },
     "Always show tools" : {
       "localizations" : {
         "de" : {
@@ -2803,6 +2823,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beim ersten Mal den Code %@ eingeben."
+          }
+        }
+      }
+    },
+    "The mirror window then also shows on every desktop and above other apps in full screen. Clicking it no longer brings MirrorAct to the front." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Spiegelfenster erscheint dann auch auf jedem Schreibtisch und über anderen Apps im Vollbild. Ein Klick darauf holt MirrorAct nicht mehr nach vorn."
           }
         }
       }
