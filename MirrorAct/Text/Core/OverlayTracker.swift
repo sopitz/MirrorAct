@@ -1895,7 +1895,8 @@ final class OverlayTracker {
     /// related text that overlap in part (a strip with the last line of a paragraph and the line
     /// below it) are pieces of one text: the larger stays, and both places are read again
     /// together. The one that stays shows the translation of the other until it has its own,
-    /// when their texts are related and it covers most of the other's place.
+    /// when their texts are related, it covers most of the other's place, and their numbers do
+    /// not differ (`TextSimilarity.hasOtherNumbers`).
     /// A later reading that lies inside a larger block gives way to it (one word of a paragraph,
     /// read while its place was not read whole), and a block that gives way to a reading that
     /// covers only a part of it: in both cases the larger place is read again
@@ -1955,7 +1956,8 @@ final class OverlayTracker {
                 // (a translation is handed on only to what covers most of the place it was drawn on)
                 let loserArea = loser == first ? a.width * a.height : b.width * b.height
                 if related, shared >= configuration.containedShare * loserArea,
-                   shownTranslation(of: tracked[winner]) == nil {
+                   shownTranslation(of: tracked[winner]) == nil,
+                   !TextSimilarity.hasOtherNumbers(tracked[loser].text, tracked[winner].text) {
                     tracked[winner].earlier = shownTranslation(of: tracked[loser])
                 }
                 dropped.insert(loser)
@@ -2166,7 +2168,8 @@ final class OverlayTracker {
 
     /// Takes a new reading into the block known at its place, if there is one: same text (or
     /// nearly) keeps the block and its translation; related text keeps the translation shown
-    /// as stale until the new one is there; other text replaces it. A part of a known paragraph
+    /// as stale until the new one is there, unless their numbers differ
+    /// (`TextSimilarity.hasOtherNumbers`); other text replaces it. A part of a known paragraph
     /// read alone is left out (the paragraph took it). Returns the index of the block that took
     /// it, nil when it is a new block (then it has got an id). A reading that takes the place of
     /// a block whose place it does not cover has that place read again (`askToReadPlace`). Same
@@ -2214,7 +2217,7 @@ final class OverlayTracker {
                 largestHeight = oldRect.height
             }
             if let largest {
-                block.earlier = shownTranslation(of: largest)
+                if !TextSimilarity.hasOtherNumbers(largest.text, block.text) { block.earlier = shownTranslation(of: largest) }
                 block.id = largest.id
                 if block.areaID < 0 { block.areaID = largest.areaID }
                 if let place = tracked.firstIndex(where: { $0.id == largest.id }) {
@@ -2305,8 +2308,9 @@ final class OverlayTracker {
             && common.width * common.height >= configuration.containedShare * oldRect.width * oldRect.height
             && (!block.textAtRest || leftOut < 0.5 * oldLine)
         if changedInPlace || TextSimilarity.isRelated(old.text, block.text) {
-            // (the old translation is shown only where the new reading covers most of its place)
-            if coversOld { block.earlier = shownTranslation(of: old) }
+            // (the old translation is shown only where the new reading covers most of its place, and
+            // not over other numbers than its own)
+            if coversOld, !TextSimilarity.hasOtherNumbers(old.text, block.text) { block.earlier = shownTranslation(of: old) }
             block.id = old.id
             // (the same text, changed in part: still apart from what it was read apart from)
             block.apartFrom = old.apartFrom
@@ -2600,6 +2604,36 @@ enum TextSimilarity {
 
     private static func isDigit(_ scalar: Unicode.Scalar) -> Bool {
         scalar.properties.numericType == .decimal
+    }
+
+    /// A letter that is a decimal digit
+    static func isDigit(_ letter: Character) -> Bool {
+        letter.unicodeScalars.count == 1 && isDigit(letter.unicodeScalars.first!)
+    }
+
+    /// The numbers (runs of digits) of a text, in order
+    static func numbers(of text: String) -> [String] {
+        text.split(whereSeparator: { !isDigit($0) }).map(String.init)
+    }
+
+    /// Two texts show other numbers: neither one's numbers are found, in order, among the other's
+    /// ("Ordner 12" and "Ordner 23", "49 % … 79 GB" and "50 % … 78 GB"; not a paragraph and one of
+    /// its lines, nor a title without a number and the title read with the value under it). A
+    /// translation of the one is never shown over the other, however much else they share: it
+    /// would show a number that is not there. Digits are never a misreading of other digits
+    /// (`isMisread`).
+    static func hasOtherNumbers(_ first: String, _ second: String) -> Bool {
+        let a = numbers(of: first), b = numbers(of: second)
+        return !isSubsequence(a, of: b) && !isSubsequence(b, of: a)
+    }
+
+    private static func isSubsequence(_ part: [String], of whole: [String]) -> Bool {
+        var index = whole.startIndex
+        for number in part {
+            guard let found = whole[index...].firstIndex(of: number) else { return false }
+            index = found + 1
+        }
+        return true
     }
 
     private static func lookalikeDigit(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
