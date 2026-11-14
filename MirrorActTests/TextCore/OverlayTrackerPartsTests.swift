@@ -289,6 +289,56 @@ final class MotionEstimatorTests: XCTestCase {
         XCTAssertEqual(estimator.motions.first?.dy ?? 0, Double(period) / 4, accuracy: 0.3,
                        "down by half a row, not up by half a row")
     }
+
+    /// A list whose rows look alike (the same icon and separator, text that differs at its end),
+    /// at a pitch of an even number of thumbnail pixels, creeps by one frame pixel (half a
+    /// thumbnail pixel) a frame, as at the end of a flick. The edges of all rows lie on rows of the
+    /// same parity, and a fit that looks at every other row only measured some steps a few tenths
+    /// of a pixel off; there the step failed its own check, and a movement of a few rows, which
+    /// explains such a picture almost as well, was taken instead. Measured on every row, the
+    /// step holds up: the list creeps, it does not jump.
+    func testACreepOverRowsThatLookAlikeDoesNotJumpByRows() {
+        let width = 400, height = 800
+        for period in [92, 100] {
+            var page = SyntheticPage.page(width: width, height: 1400, seed: 41, period: period)
+            let other = SyntheticPage.page(width: width, height: 1400, seed: 42, lineHeight: 24, lineGap: 68)
+            // every row the same but for its right end, with a separator and an icon
+            for y in 0..<1400 {
+                for x in 300..<width {
+                    page[y * width + x] = other[y * width + x]
+                }
+            }
+            for top in stride(from: 20, to: 1400, by: period) {
+                for y in top..<min(1400, top + 2) {
+                    for x in 0..<width {
+                        page[y * width + x] = 150
+                    }
+                }
+                for y in (top + 22)..<min(1400, top + 62) {
+                    for x in 16..<56 {
+                        page[y * width + x] = 90
+                    }
+                }
+            }
+            func frame(_ top: Int) -> LumaImage {
+                SyntheticPage.noisy(SyntheticPage.thumbnail(page, pageWidth: width, left: 0, top: top, width: width,
+                                                            height: height, scale: 2), amount: 2, seed: UInt64(top))
+            }
+            let estimator = MotionEstimator(configuration: configuration)
+            var priors: [FrameMotion] = []
+            var previous = frame(200)
+            for top in 201...232 {
+                let current = frame(top)
+                if estimator.analyze(previous: previous, current: current, priors: priors) {
+                    priors = estimator.motions
+                }
+                for motion in estimator.motions {
+                    XCTAssertLessThan(abs(motion.dy), 2, "period \(period), offset \(top): a creep, not a jump of rows")
+                }
+                previous = current
+            }
+        }
+    }
 }
 
 final class ReadingPlanTests: XCTestCase {

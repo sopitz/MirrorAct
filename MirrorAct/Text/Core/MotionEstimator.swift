@@ -590,6 +590,8 @@ final class MotionEstimator {
                 }
                 // the cheapest few, checked to a fraction of a pixel
                 var firstAccepted: (candidate: Candidate, motion: (dx: Double, dy: Double))?
+                // (those within a pixel that did not hold up)
+                var turnedDown: [Candidate] = []
                 for _ in 0..<configuration.profileCandidates {
                     guard let best = choose(scored) else { break }
                     scored.removeAll { $0.dx == best.dx && $0.dy == best.dy }
@@ -597,6 +599,7 @@ final class MotionEstimator {
                         firstAccepted = (best, motion)
                         break
                     }
+                    if abs(best.dx) <= 1, abs(best.dy) <= 1 { turnedDown.append(best) }
                 }
                 found = firstAccepted?.motion
                 // Scrolling does not jump from one speed to a very different one between two frames:
@@ -608,6 +611,18 @@ final class MotionEstimator {
                    other.candidate.cost > (1 - configuration.priorAdvantage) * prior.cost,
                    let motion = accepted(prior, share: configuration.minMatchedShare, previous, current) {
                     found = motion
+                }
+                // A movement of more than a pixel where a step of less than a pixel did not hold up
+                // (`turnedDown`), measured on every other row only (`squaredDifference`): over rows
+                // that look alike at an even pitch that fit can miss by a few tenths of a pixel,
+                // and a movement of a row or a few explains such a picture almost as well. A step
+                // of less than a pixel that holds up measured on every row (a creep of half a pixel
+                // a frame at the end of a flick) is taken instead.
+                if motions.isEmpty, let motion = found, abs(motion.dx) > 1 || abs(motion.dy) > 1,
+                   let near = turnedDown.lazy.compactMap({
+                       self.accepted($0, share: self.configuration.minMatchedShare, everyRow: true, previous, current)
+                   }).first {
+                    found = near
                 }
             }
             guard let (dx, dy) = found else { return }
@@ -643,10 +658,10 @@ final class MotionEstimator {
 
     /// The movement a candidate leads to, to a fraction of a pixel, when it explains at least
     /// `share` of the tiles it can be checked on and a good part of all that changed
-    private func accepted(_ candidate: Candidate, share: Double, _ previous: LumaImage,
+    private func accepted(_ candidate: Candidate, share: Double, everyRow: Bool = false, _ previous: LumaImage,
                           _ current: LumaImage) -> (dx: Double, dy: Double)? {
         guard isAcceptable(candidate) else { return nil }
-        let (dx, dy) = refine(candidate, previous, current)
+        let (dx, dy) = refine(candidate, everyRow: everyRow, previous, current)
         let (matched, valid) = check(dx: dx, dy: dy, previous, current)
         guard valid >= configuration.minMotionTiles, Double(matched) >= share * Double(valid),
               Double(matched) >= configuration.minExplainedShare * Double(chosen.count) else { return nil }
@@ -1123,8 +1138,9 @@ final class MotionEstimator {
     }
 
     /// The movement to a fraction of a pixel: a parabola through the squared differences at
-    /// the best whole-pixel movement and its neighbours, along each axis
-    private func refine(_ candidate: Candidate, _ previous: LumaImage, _ current: LumaImage) -> (Double, Double) {
+    /// the best whole-pixel movement and its neighbours, along each axis (`squaredDifference`)
+    private func refine(_ candidate: Candidate, everyRow: Bool, _ previous: LumaImage,
+                        _ current: LumaImage) -> (Double, Double) {
         var tiles: [Int] = []
         let dx0 = candidate.dx, dy0 = candidate.dy
         let step = max(1, chosen.count / configuration.refineTiles)
@@ -1137,13 +1153,13 @@ final class MotionEstimator {
         }
         guard !tiles.isEmpty else { return (Double(dx0), Double(dy0)) }
         var dx = dx0, dy = dy0
-        var center = squaredDifference(tiles, dx: dx, dy: dy, previous, current)
+        var center = squaredDifference(tiles, dx: dx, dy: dy, everyRow: everyRow, previous, current)
         var left = 0.0, right = 0.0, up = 0.0, down = 0.0
         for _ in 0..<MotionEstimator.refineSteps {
-            left = squaredDifference(tiles, dx: dx - 1, dy: dy, previous, current)
-            right = squaredDifference(tiles, dx: dx + 1, dy: dy, previous, current)
-            up = squaredDifference(tiles, dx: dx, dy: dy - 1, previous, current)
-            down = squaredDifference(tiles, dx: dx, dy: dy + 1, previous, current)
+            left = squaredDifference(tiles, dx: dx - 1, dy: dy, everyRow: everyRow, previous, current)
+            right = squaredDifference(tiles, dx: dx + 1, dy: dy, everyRow: everyRow, previous, current)
+            up = squaredDifference(tiles, dx: dx, dy: dy - 1, everyRow: everyRow, previous, current)
+            down = squaredDifference(tiles, dx: dx, dy: dy + 1, everyRow: everyRow, previous, current)
             let lowest = min(left, right, up, down)
             let reach = MotionEstimator.refineSteps - 1
             guard lowest < center, abs(dx - dx0) < reach, abs(dy - dy0) < reach else { break }
@@ -1173,7 +1189,17 @@ final class MotionEstimator {
         return min(0.5, max(-0.5, (a - c) / (2 * curvature)))
     }
 
-    private func squaredDifference(_ tiles: [Int], dx: Int, dy: Int, _ previous: LumaImage, _ current: LumaImage) -> Double {
+    /// Mean squared difference (capped) of the tiles to where a whole-pixel movement says they
+    /// came from, on every other row, or on every row. Every other row is enough for a page whose
+    /// lines lie at all heights. It is not for rows that look alike at a pitch of an even number
+    /// of pixels: all their horizontal edges lie on rows of the same parity, and the rows looked
+    /// at compare each edge with the row above it for a step up and with the row below it for a
+    /// step down, which differ. The fit through the three is then a few tenths of a pixel off
+    /// (no movement came out as 0.2, a creep of half a pixel as 0.15). On every row both steps
+    /// count the same pairs of neighbouring rows, and no movement comes out as none.
+    private func squaredDifference(_ tiles: [Int], dx: Int, dy: Int, everyRow: Bool, _ previous: LumaImage,
+                                   _ current: LumaImage) -> Double {
+        let rowStep = everyRow ? 1 : 2
         let width = width, cap = Int32(configuration.matchCostCap * configuration.matchCostCap)
         var sum: Int64 = 0, count = 0
         previous.pixels.withUnsafeBufferPointer { beforeBuffer in
@@ -1193,7 +1219,7 @@ final class MotionEstimator {
                             x += 1
                         }
                         count += rect.width
-                        y += 2
+                        y += rowStep
                     }
                 }
             }
