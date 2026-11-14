@@ -133,6 +133,15 @@ Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/Mirr
   der der Server antwortet. Für einen Server auf einem anderen Computer MirrorAct unter
   Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk erlauben.
 
+«Text» und «Übersetzen» nehmen jeden Absatz als einen Text. Der Titel eines Listeneintrags und
+die graue Zeile darunter (etwa in den Einstellungen) sind eigene Absätze: «Text» kopiert sie auf
+getrennte Zeilen, «Übersetzen» übersetzt sie einzeln. MirrorAct unterscheidet sie an der Farbe der
+Buchstaben: schwarz über grau, im dunklen Design weiss über grau. Eine farbige Zeile, etwa ein Link
+oder eine @-Erwähnung, bleibt Teil ihres Absatzes; eine farbige Zeile unter einem Titel (ein
+grünes «Verbunden», ein blaues «Tippt …») wird nur dann von ihm getrennt, wenn sie weiter entfernt
+oder deutlich kleiner ist. In sehr kleiner Schrift (etwa 15 Pixel oder weniger) wird unter
+Umständen eine fette, eine in Grossbuchstaben oder eine arabische Zeile für sich übersetzt.
+
 Eine Übersetzung, die nicht an ihren Platz passt, endet mit Auslassungspunkten. Text über einem
 laufenden Video, etwa Untertitel oder Beschriftungen auf einem Clip, wird nicht übersetzt, solange
 das Video läuft. Trennt sich das Gerät, geht «Übersetzen» aus und muss wieder eingeschaltet werden.

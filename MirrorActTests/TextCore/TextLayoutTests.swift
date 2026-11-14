@@ -64,7 +64,7 @@ final class TextLayoutTests: XCTestCase {
 
     /// Android settings: every entry has a title and a smaller summary right below it, which may
     /// take two lines; an icon in front. (Android's summary is about 1.4 times smaller than the
-    /// title; the closer sizes of iOS stay joined, see `TextLayoutJoinTests`.)
+    /// title; the closer sizes of iOS are told apart only by colour, see `TextLayoutJoinTests`.)
     func testTitlesAndSummariesOfAndroidSettingsAreSeparate() {
         let lines = [
             line("の", 91, 631, 91, 84),
@@ -93,6 +93,231 @@ final class TextLayoutTests: XCTestCase {
         XCTAssertEqual(TextLayout.blocks(lines, imageSize: phone).map(\.text), [
             "Datum und Uhrzeit automatisch einstellen", "Einstellung erfolgt automatisch über Netzwerk- und WLAN-Signale",
         ])
+    }
+
+    // MARK: The brightness of the letters
+
+    /// A line as Vision gave it, with the brightness of its letters and of the background and
+    /// the share of coloured letters as the recognizer measured them in the picture
+    /// (`RecognizedLine.tone`). The titles and summaries of the rows below measured 0 in every
+    /// frame they appear in: black, white and grey letters.
+    private func line(_ text: String, _ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat,
+                      tone: (text: Double, background: Double, colour: Double)) -> RecognizedLine {
+        var line = line(text, x, y, width, height)
+        line.tone = RecognizedLine.Tone(text: tone.text, background: tone.background, colour: tone.colour)
+        return line
+    }
+
+    /// Network & internet, light: Android sets the title of a row black and its summary grey.
+    /// "VPN" and "Kein VPN" are too short to measure their size, and their boxes (45 and 36
+    /// pixels) are about as high as those of the lines of a paragraph; "Privates DNS" over "An"
+    /// alike. Their letters tell them apart. A summary of two lines is one paragraph.
+    func testTheTitleAndTheSummaryOfARowAreSetInDifferentColours() {
+        let lines = [
+            line("Hotspot und Tethering", 192, 1155, 523, 56, tone: (28, 238, 0)),
+            line("Aus", 188, 1224, 63, 35, tone: (80, 238, 0)),
+            line("VPN", 188, 1566, 108, 45, tone: (28, 238, 0)),
+            line("Kein VPN", 188, 1635, 157, 36, tone: (80, 238, 0)),
+            line("Privates DNS", 63, 1772, 314, 49, tone: (28, 238, 0)),
+            line("An", 63, 1845, 45, 31, tone: (80, 238, 0)),
+            line("Sicherheit des Mobilfunknetzes", 63, 2180, 739, 53, tone: (28, 238, 0)),
+            line("Netzwerktyp, Verschlüsselung,", 63, 2253, 505, 42, tone: (80, 238, 0)),
+            line("Benachrichtigungseinstellungen", 63, 2299, 526, 38, tone: (80, 238, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: phone).map(\.text), [
+            "Hotspot und Tethering", "Aus", "VPN", "Kein VPN", "Privates DNS", "An", "Sicherheit des Mobilfunknetzes",
+            "Netzwerktyp, Verschlüsselung, Benachrichtigungseinstellungen",
+        ])
+        XCTAssertEqual(TextLayout.plainText(lines, imageSize: phone).components(separatedBy: "\n").count, 8)
+    }
+
+    /// The main list and the display settings, light. The summary of "Ton & Vibration" measures
+    /// 1.39 times smaller, but the two lines lie as close as lines of a paragraph and their boxes
+    /// are as high (49 and 48 pixels), so their sizes alone do not split them; nor do those of
+    /// "Dunkles Design" over a summary of two lines whose first box reaches up to it. The title
+    /// of the display page takes two lines of one colour and stays one paragraph.
+    func testATitleIsNotPartOfTheSummaryBelowItEvenWhenTheirBoxesAreAlike() {
+        let lines = [
+            line("Ton & Vibration", 209, 1528, 362, 49, tone: (28, 250, 0)),
+            line("Lautstärke und Haptik", 202, 1589, 374, 48, tone: (80, 250, 0)),
+            line("Display &", 59, 342, 415, 126, tone: (28, 238, 0)),
+            line("Touchbedienung", 58, 479, 700, 105, tone: (28, 238, 0)),
+            line("Dunkles Design", 63, 1720, 366, 56, tone: (28, 238, 0)),
+            line("Wird aktiviert, wenn der Modus „Bedtime\"", 62, 1786, 684, 52, tone: (80, 238, 0)),
+            line("beginnt", 63, 1835, 129, 39, tone: (80, 238, 0)),
+            line("Akkunutzung von Apps", 63, 2250, 543, 56, tone: (28, 238, 0)),
+            line("Akkunutzung für Apps festlegen", 63, 2309, 530, 49, tone: (80, 238, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: phone).map(\.text), [
+            "Display & Touchbedienung", "Ton & Vibration", "Lautstärke und Haptik", "Dunkles Design",
+            "Wird aktiviert, wenn der Modus „Bedtime\" beginnt", "Akkunutzung von Apps", "Akkunutzung für Apps festlegen",
+        ])
+    }
+
+    /// The main list at font scale 1.3: Android enlarges the summary more than the title, so
+    /// their sizes differ by only 1.26 to 1.33 and every title joined its summary. Dark theme:
+    /// white over light grey, closer in brightness than black and grey. A paragraph of white
+    /// letters on a dark page stays one.
+    func testTitlesAndSummariesAtALargerFontScaleAndInTheDarkTheme() {
+        let lines = [
+            line("Google", 212, 376, 196, 61, tone: (28, 250, 0)),
+            line("Services & preferences", 209, 457, 498, 49, tone: (80, 250, 0)),
+            line("Apps", 209, 1162, 146, 59, tone: (28, 250, 0)),
+            line("Assistant, kürzlich geöffnete Apps,", 209, 1238, 759, 53, tone: (80, 250, 0)),
+            line("Standard-Apps", 209, 1298, 327, 45, tone: (80, 250, 0)),
+            line("Benachrichtigungen", 213, 1448, 547, 63, tone: (28, 250, 0)),
+            line("Benachrichtigungsverlauf,", 213, 1528, 571, 52, tone: (80, 250, 0)),
+            line("Unterhaltungen", 209, 1584, 338, 52, tone: (80, 250, 0)),
+            line("Android-Version", 63, 2177, 380, 49, tone: (229, 34, 0)),
+            line("16", 59, 2247, 45, 35, tone: (204, 34, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: phone).map(\.text), [
+            "Google", "Services & preferences", "Apps", "Assistant, kürzlich geöffnete Apps, Standard-Apps",
+            "Benachrichtigungen", "Benachrichtigungsverlauf, Unterhaltungen", "Android-Version", "16",
+        ])
+        let dark = [
+            line("Helle Schrift auf dunklem Grund ist schwerer", 45, 1538, 948, 46, tone: (234, 22, 0)),
+            line("zu lesen, wenn der Kontrast nicht stimmt. Die", 49, 1608, 948, 52, tone: (234, 22, 0)),
+            line("Übersetzung sollte hier ebenfalls hell auf", 52, 1674, 854, 60, tone: (234, 22, 0)),
+            line("dunkel erscheinen und den Hintergrund nicht", 52, 1748, 937, 49, tone: (234, 22, 0)),
+            line("aufhellen.", 52, 1817, 209, 46, tone: (234, 22, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(dark, imageSize: phone).count, 1)
+    }
+
+    /// The letters of the lines of one paragraph measure a little differently: up to 6 apart on
+    /// real screens (here a wrapped summary of the main list at font scale 1.3 with that spread,
+    /// and a paragraph of a web page, 28 to 32). Lines whose tone was not measured, or measured
+    /// on different backgrounds, are joined by their boxes alone, as before.
+    func testLinesAreComparedByBrightnessOnlyWhenBothWereMeasuredOnTheSameBackground() {
+        let summary = [
+            line("Dunkles Design, Schriftgröße,", 213, 2281, 641, 56, tone: (80, 250, 0)),
+            line("Touchbedienung", 208, 2337, 364, 53, tone: (86, 250, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(summary, imageSize: phone).map(\.text),
+                       ["Dunkles Design, Schriftgröße, Touchbedienung"])
+        let paragraph = [
+            line("La biblioteca abre de lunes a viernes de nueve", 52, 788, 962, 46, tone: (32, 254, 0)),
+            line("de la mañana a ocho de la tarde. Los sábados", 52, 858, 962, 49, tone: (29, 254, 0)),
+            line("cierra a las dos. Los domingos y festivos", 52, 924, 854, 53, tone: (29, 254, 0)),
+            line("permanece cerrada.", 51, 992, 423, 59, tone: (28, 254, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(paragraph, imageSize: phone).count, 1)
+        let unmeasured = [line("VPN", 188, 1566, 108, 45, tone: (28, 238, 0)), line("Kein VPN", 188, 1635, 157, 36)]
+        XCTAssertEqual(TextLayout.blocks(unmeasured, imageSize: phone).map(\.text), ["VPN Kein VPN"])
+        let otherBackground = [line("VPN", 188, 1566, 108, 45, tone: (28, 238, 0)),
+                               line("Kein VPN", 188, 1635, 157, 36, tone: (80, 200, 0))]
+        XCTAssertEqual(TextLayout.blocks(otherBackground, imageSize: phone).map(\.text), ["VPN Kein VPN"])
+    }
+
+    /// A post with black text and blue mentions, a link and a hashtag, text of 30 pixels on a
+    /// light and on a dark page (boxes, tones and colours as measured). A line mostly in the
+    /// colour of the links ("Danke @anna_mueller @peter", a whole address) measures as bright as
+    /// the link (114 against 34), but most of its letters are coloured, so it stays in its
+    /// paragraph; the line with "#urlaub" (a third of it coloured) as well.
+    func testAPostWithLinksAndMentionsStaysOneParagraph() {
+        let post = [
+            line("Danke @anna_mueller @peter", 63, 719, 415, 28, tone: (114, 254, 0.77)),
+            line("für die tollen Fotos #urlaub", 52, 760, 366, 32, tone: (34, 254, 0.30)),
+            line("vom Wochenende!", 56, 806, 258, 28, tone: (34, 254, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(post, imageSize: phone).map(\.text),
+                       ["Danke @anna_mueller @peter für die tollen Fotos #urlaub vom Wochenende!"])
+        let address = [
+            line("Mehr dazu findest du unter", 63, 555, 359, 24, tone: (34, 254, 0)),
+            line("www.beispiel.de/info/2026", 52, 597, 355, 31, tone: (114, 254, 1)),
+            line("oder in der App.", 56, 638, 223, 35, tone: (34, 254, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(address, imageSize: phone).map(\.text),
+                       ["Mehr dazu findest du unter www.beispiel.de/info/2026 oder in der App."])
+        let dark = [
+            line("Danke @anna_mueller @peter", 63, 719, 415, 28, tone: (177, 22, 0.77)),
+            line("für die tollen Fotos #urlaub", 56, 760, 359, 32, tone: (241, 22, 0.29)),
+            line("vom Wochenende!", 56, 806, 258, 28, tone: (241, 22, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(dark, imageSize: phone).count, 1)
+        // the same brightness without colour, as a grey line: kept apart
+        let grey = post.map { line -> RecognizedLine in
+            var line = line
+            line.tone?.colour = 0
+            return line
+        }
+        XCTAssertEqual(TextLayout.blocks(grey, imageSize: phone).map(\.text),
+                       ["Danke @anna_mueller @peter", "für die tollen Fotos #urlaub vom Wochenende!"])
+    }
+
+    /// A post with a short mention in small text, drawn at text of 26 and 24 pixels and read at
+    /// half size (540 × 1200, lines 12 to 14 pixels high; boxes, tones and colours as measured).
+    /// "@bo" covers 3 of the 30 characters of the middle line: 0.16 of its letters are coloured,
+    /// and its brightness moves by 18 in the dark theme (205 against 223) and by 19 in the light
+    /// one (84 against 65). It is still a coloured line and stays in its paragraph.
+    private var postWithAShortMention: [[RecognizedLine]] {
+        let half = CGSize(width: 540, height: 1200)
+        func line(_ text: String, _ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat,
+                  tone: (text: Double, background: Double, colour: Double)) -> RecognizedLine {
+            RecognizedLine(text: text, rect: CGRect(x: x / half.width, y: y / half.height,
+                                                    width: width / half.width, height: height / half.height),
+                           tone: RecognizedLine.Tone(text: tone.text, background: tone.background, colour: tone.colour))
+        }
+        return [
+            [
+                line("Wir haben uns gestern lange", 30, 50, 168, 14, tone: (223, 22, 0)),
+                line("unterhalten mit @bo über alles", 28, 68, 182, 12, tone: (205, 22, 0.16)),
+                line("und freuen uns aufs nächste Mal.", 30, 86, 194, 14, tone: (223, 22, 0)),
+            ],
+            [
+                line("Wir haben uns gestern lange", 30, 50, 156, 14, tone: (65, 254, 0)),
+                line("unterhalten mit @bo über alles", 30, 68, 166, 12, tone: (84, 254, 0.16)),
+                line("und freuen uns aufs nächste Mal.", 28, 86, 182, 10, tone: (73, 254, 0)),
+            ],
+        ]
+    }
+
+    func testAShortMentionInSmallTextKeepsItsPostTogether() {
+        for post in postWithAShortMention {
+            XCTAssertEqual(TextLayout.blocks(post, imageSize: CGSize(width: 540, height: 1200)).map(\.text),
+                           ["Wir haben uns gestern lange unterhalten mit @bo über alles und freuen uns aufs nächste Mal."])
+        }
+    }
+
+    /// The share at which a line counts as coloured lies between the most that black, white or
+    /// grey letters measured in a real frame (0.083, the title "Accessibility Menu" in the light
+    /// theme) and the least that a line with a short mention measured (0.16, above). A title
+    /// with that much noise over a grey summary is still kept apart from it ("VPN" over "Kein
+    /// VPN", whose boxes alone would join them), and the post above stays one paragraph.
+    func testALineCountsAsColouredAboveTheNoiseOfGreyLettersAndBelowAShortMention() {
+        let row = [line("VPN", 188, 1566, 108, 45, tone: (28, 238, 0.083)),
+                   line("Kein VPN", 188, 1635, 157, 36, tone: (80, 238, 0))]
+        XCTAssertEqual(TextLayout.blocks(row, imageSize: phone).map(\.text), ["VPN", "Kein VPN"])
+        for post in postWithAShortMention {
+            XCTAssertEqual(TextLayout.blocks(post, imageSize: CGSize(width: 540, height: 1200)).count, 1)
+        }
+    }
+
+    /// Known limit: a summary in colour under a black title (a green "Verbunden", a blue "Tippt
+    /// …", a red error) is told apart from the title no more than a link from its paragraph, so
+    /// the two are joined when their boxes alone join them, as they were before brightness was
+    /// compared (boxes, tones and colours as measured on drawn rows of 30 pixels; and a blue
+    /// caption over a list on a test page, as measured in a frame of the stream). This test
+    /// records the joining so that a change to it is noticed.
+    func testASummaryInColourUnderABlackTitleIsJoinedWithIt() {
+        let rows = [
+            line("WLAN", 59, 98, 87, 28, tone: (34, 254, 0)),
+            line("Verbunden", 59, 140, 146, 24, tone: (110, 254, 1)),
+            line("Anna Schmidt", 63, 220, 202, 28, tone: (34, 254, 0)),
+            line("Tippt ...", 59, 265, 108, 28, tone: (114, 254, 1)),
+            line("Synchronisierung", 59, 345, 233, 31, tone: (34, 254, 0)),
+            line("Fehler beim Laden", 59, 387, 251, 25, tone: (107, 254, 1)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(rows, imageSize: phone).map(\.text),
+                       ["WLAN Verbunden", "Anna Schmidt Tippt ...", "Synchronisierung Fehler beim Laden"])
+        let caption = [
+            line("14 px, Abstand Leerzeichen", 38, 296, 543, 48, tone: (105, 254, 0.98)),
+            line("5 Kaffee", 41, 372, 177, 42, tone: (33, 254, 0)),
+            line("2x Milch", 41, 448, 181, 43, tone: (33, 254, 0)),
+        ]
+        XCTAssertEqual(TextLayout.blocks(caption, imageSize: phone).map(\.text),
+                       ["14 px, Abstand Leerzeichen 5 Kaffee", "2x Milch"])
     }
 
     /// Lines side by side are separate; so are columns, and the items of a list (widths as Vision

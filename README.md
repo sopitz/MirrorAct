@@ -129,6 +129,15 @@ it until you turn it off. Under Settings → Text:
   a server on another computer, allow MirrorAct under System Settings → Privacy & Security → Local
   Network.
 
+Text and Translate take each paragraph as one text. The title of a list entry and the grey line
+under it (in settings, for example) are paragraphs of their own: Text copies them on separate
+lines and Translate translates them separately. MirrorAct tells them apart by the colour of the
+letters: black over grey, or white over grey in a dark theme. A line in colour, such as a link or
+an @mention, stays part of its paragraph; a line in colour under a title (a green "Connected", a
+blue "Typing…") is kept apart from it only where it lies farther away or is clearly smaller. In
+very small text (about 15 pixels or less) a bold, an all-caps or an Arabic line may be translated
+on its own.
+
 A translation that does not fit its place ends with an ellipsis. Text over a playing video, such
 as subtitles or captions on a clip, is not translated while the video plays. When the device
 disconnects, "Translate" turns off; turn it on again. When MirrorAct itself moves an Android window

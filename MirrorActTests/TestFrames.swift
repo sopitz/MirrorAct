@@ -14,13 +14,15 @@ enum TestFrames {
         var x: CGFloat
         var top: CGFloat
         var fontSize: CGFloat = 48
+        /// the brightness of its letters
+        var gray: UInt8 = 20
     }
 
     static func blank(width: Int, height: Int, format: OSType, gray: UInt8 = 255) throws -> CVPixelBuffer {
         try frame(from: [UInt8](repeating: gray, count: width * height), width: width, height: height, format: format)
     }
 
-    /// Dark gray (20) text on light gray (245), drawn with Core Text. The second value holds
+    /// Text of the gray of each line (dark, 20, unless set) on light gray (245), drawn with Core Text. The second value holds
     /// where the ink of each line lies, in frame pixels with the origin at the top left.
     static func text(_ lines: [Line], width: Int, height: Int,
                      format: OSType) throws -> (frame: CVPixelBuffer, inked: [CGRect]) {
@@ -36,7 +38,7 @@ enum TestFrames {
                 let font = CTFontCreateWithName("Helvetica" as CFString, line.fontSize, nil)
                 let string = NSAttributedString(string: line.text, attributes: [
                     kCTFontAttributeName as NSAttributedString.Key: font,
-                    kCTForegroundColorAttributeName as NSAttributedString.Key: CGColor(gray: 20 / 255, alpha: 1),
+                    kCTForegroundColorAttributeName as NSAttributedString.Key: CGColor(gray: CGFloat(line.gray) / 255, alpha: 1),
                 ])
                 let ctLine = CTLineCreateWithAttributedString(string)
                 let ascent = CTFontGetAscent(font)
@@ -50,6 +52,108 @@ enum TestFrames {
             }
         }
         return (try frame(from: gray, width: width, height: height, format: format), inked)
+    }
+
+    /// A run of a line in colour (red, green, blue 0…255)
+    struct Run {
+        var text: String
+        var color: (UInt8, UInt8, UInt8)
+    }
+
+    /// Lines of coloured runs on `background`, with rectangles of other colours (cards, bubbles:
+    /// frame pixels, origin at the top left) under them, drawn with Core Text in RGB. A 4:2:0
+    /// frame gets the brightness of every pixel and the colour of every 2 × 2 pixels (their mean),
+    /// with the BT.709 numbers of video range.
+    static func colored(_ lines: [(runs: [Run], x: CGFloat, top: CGFloat, fontSize: CGFloat)],
+                        background: (UInt8, UInt8, UInt8), cards: [(rect: CGRect, color: (UInt8, UInt8, UInt8))] = [],
+                        width: Int, height: Int, format: OSType) throws -> CVPixelBuffer {
+        func color(_ rgb: (UInt8, UInt8, UInt8)) -> CGColor {
+            CGColor(srgbRed: CGFloat(rgb.0) / 255, green: CGFloat(rgb.1) / 255, blue: CGFloat(rgb.2) / 255, alpha: 1)
+        }
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        try rgba.withUnsafeMutableBytes { bytes in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
+                throw XCTSkip("no RGB context")
+            }
+            context.setFillColor(color(background))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            for card in cards {
+                context.setFillColor(color(card.color))
+                context.fill(CGRect(x: card.rect.minX, y: CGFloat(height) - card.rect.maxY, width: card.rect.width,
+                                    height: card.rect.height))
+            }
+            for line in lines {
+                let font = CTFontCreateWithName("Helvetica" as CFString, line.fontSize, nil)
+                let string = NSMutableAttributedString()
+                for run in line.runs {
+                    string.append(NSAttributedString(string: run.text, attributes: [
+                        kCTFontAttributeName as NSAttributedString.Key: font,
+                        kCTForegroundColorAttributeName as NSAttributedString.Key: color(run.color),
+                    ]))
+                }
+                context.textPosition = CGPoint(x: line.x, y: CGFloat(height) - line.top - CTFontGetAscent(font))
+                CTLineDraw(CTLineCreateWithAttributedString(string), context)
+            }
+        }
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault, width, height, format,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary] as CFDictionary, &buffer)
+        let frame = try XCTUnwrap(buffer, "no pixel buffer")
+        CVPixelBufferLockBaseAddress(frame, [])
+        defer { CVPixelBufferUnlockBaseAddress(frame, []) }
+        func pixel(_ x: Int, _ y: Int) -> (Double, Double, Double) {
+            let index = (y * width + x) * 4
+            return (Double(rgba[index]), Double(rgba[index + 1]), Double(rgba[index + 2]))
+        }
+        func byte(_ value: Double) -> UInt8 { UInt8(max(0, min(255, value.rounded()))) }
+        switch format {
+        case kCVPixelFormatType_32BGRA:
+            let base = try XCTUnwrap(CVPixelBufferGetBaseAddress(frame)).assumingMemoryBound(to: UInt8.self)
+            let rowBytes = CVPixelBufferGetBytesPerRow(frame)
+            for y in 0..<height {
+                for x in 0..<width {
+                    let index = (y * width + x) * 4, target = base + y * rowBytes + 4 * x
+                    target[0] = rgba[index + 2]
+                    target[1] = rgba[index + 1]
+                    target[2] = rgba[index]
+                    target[3] = 255
+                }
+            }
+        case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
+            let luma = try XCTUnwrap(CVPixelBufferGetBaseAddressOfPlane(frame, 0)).assumingMemoryBound(to: UInt8.self)
+            let lumaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(frame, 0)
+            for y in 0..<height {
+                for x in 0..<width {
+                    let (red, green, blue) = pixel(x, y)
+                    luma[y * lumaRowBytes + x] = byte(16 + (0.2126 * red + 0.7152 * green + 0.0722 * blue) * 219 / 255)
+                }
+            }
+            let chroma = try XCTUnwrap(CVPixelBufferGetBaseAddressOfPlane(frame, 1)).assumingMemoryBound(to: UInt8.self)
+            let chromaRowBytes = CVPixelBufferGetBytesPerRowOfPlane(frame, 1)
+            for row in 0..<CVPixelBufferGetHeightOfPlane(frame, 1) {
+                for cell in 0..<CVPixelBufferGetWidthOfPlane(frame, 1) {
+                    var red = 0.0, green = 0.0, blue = 0.0, count = 0.0
+                    for y in 2 * row..<min(2 * row + 2, height) {
+                        for x in 2 * cell..<min(2 * cell + 2, width) {
+                            let value = pixel(x, y)
+                            red += value.0
+                            green += value.1
+                            blue += value.2
+                            count += 1
+                        }
+                    }
+                    let lumaValue = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / count
+                    chroma[row * chromaRowBytes + 2 * cell] = byte(128 + (blue / count - lumaValue) / 1.8556 * 224 / 255)
+                    chroma[row * chromaRowBytes + 2 * cell + 1] = byte(128 + (red / count - lumaValue) / 1.5748 * 224 / 255)
+                }
+            }
+        default:
+            XCTFail("unsupported pixel format")
+        }
+        return frame
     }
 
     /// The same picture moved down by `rows` (up for negative values), as when the content scrolls

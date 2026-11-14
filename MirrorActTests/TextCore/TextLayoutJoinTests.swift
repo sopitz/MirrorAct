@@ -225,14 +225,13 @@ final class TextLayoutJoinTests: XCTestCase {
 
     // MARK: Titles and summaries
 
-    /// Known limit: the title of a row in iOS settings (17 points) and the summary below it (15
-    /// points) are as close as the lines of a paragraph, their sizes measure within `sameSize` of
-    /// each other and their boxes are about as high, so they are joined. Only their colour tells
-    /// them apart, and the boxes of the lines do not show it. (On Android the summary is clearly
-    /// smaller: `TextLayoutTests.testTitlesAndSummariesOfAndroidSettingsAreSeparate`.) This test
-    /// records the joining so that a change to it is noticed.
-    func testTitleAndSummaryOfAnIOSSettingsRowAreJoined() {
-        let lines = [
+    /// The title of a row in iOS settings (17 points) and the summary below it (15 points) are as
+    /// close as the lines of a paragraph, their sizes measure within `sameSize` of each other and
+    /// their boxes are about as high: by their boxes alone they are joined. The colour of their
+    /// letters tells them apart (black and grey: `RecognizedLine.tone`, as the recognizer
+    /// measured it in the picture).
+    func testTitleAndSummaryOfAnIOSSettingsRowAreToldApartByTheirColour() {
+        let boxes = [
             line("Photos", 207, 691, 178, 41, on: Self.iPhoneIsland),
             line("Passwords", 223, 817, 247, 41, on: Self.iPhoneIsland),
             line("Updated just now", 223, 882, 361, 45, on: Self.iPhoneIsland),
@@ -241,8 +240,18 @@ final class TextLayoutJoinTests: XCTestCase {
             line("Banners, Sounds, Badges", 223, 2235, 527, 49, on: Self.iPhoneIsland),
             line("Notifications", 223, 2353, 288, 45, on: Self.iPhoneIsland),
         ]
-        XCTAssertEqual(TextLayout.blocks(lines, imageSize: Self.iPhoneIsland).map(\.text), [
+        XCTAssertEqual(TextLayout.blocks(boxes, imageSize: Self.iPhoneIsland).map(\.text), [
             "Photos", "Passwords Updated just now", "Privacy & Security", "Mobile Data Banners, Sounds, Badges",
+            "Notifications",
+        ])
+        let tones: [Double] = [0, 0, 149, 1, 0, 149, 0]
+        let lines = zip(boxes, tones).map { line, text in
+            var line = line
+            line.tone = RecognizedLine.Tone(text: text, background: 254)
+            return line
+        }
+        XCTAssertEqual(TextLayout.blocks(lines, imageSize: Self.iPhoneIsland).map(\.text), [
+            "Photos", "Passwords", "Updated just now", "Privacy & Security", "Mobile Data", "Banners, Sounds, Badges",
             "Notifications",
         ])
     }

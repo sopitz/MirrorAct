@@ -86,6 +86,123 @@ final class TextRecognizerTests: XCTestCase {
         }
     }
 
+    /// A row as Android and iOS draw it: a dark title over a smaller grey summary, then a
+    /// paragraph of two dark lines. The recognizer measures how bright each line's letters and
+    /// background are; the title and the summary differ, the lines of the paragraph do not, and
+    /// the copied text has the title and the summary on lines of their own. (In video range the
+    /// frame holds 16 to 235 for 0 to 255.)
+    func testTheBrightnessOfTheLettersOfEachLineIsMeasured() throws {
+        let rows = [
+            TestFrames.Line(text: "Network and Internet", x: 60, top: 60, fontSize: 44),
+            TestFrames.Line(text: "Mobile data and hotspot", x: 60, top: 118, fontSize: 32, gray: 110),
+            TestFrames.Line(text: "The weather stays dry for most of the", x: 60, top: 300, fontSize: 36),
+            TestFrames.Line(text: "week, with light winds from the west.", x: 60, top: 346, fontSize: 36),
+        ]
+        let size = CGSize(width: width, height: height)
+        for (name, format) in formats {
+            let (frame, _) = try TestFrames.text(rows, width: width, height: height, format: format)
+            let found = TextLayout.readingOrder(try TextRecognizer.lines(in: frame)).flatMap { $0 }
+            XCTAssertEqual(found.count, 4, "\(name): \(found.map(\.text))")
+            let tones = try found.map { try XCTUnwrap($0.tone, "\(name): \($0.text)") }
+            let backgrounds = tones.map(\.background)
+            XCTAssertLessThanOrEqual(try XCTUnwrap(backgrounds.max()) - XCTUnwrap(backgrounds.min()), 4, "\(name)")
+            XCTAssertGreaterThan(tones[0].background - tones[0].text, 160, "\(name): \(tones)")
+            XCTAssertGreaterThan(tones[1].text - tones[0].text, 60, "\(name): \(tones)")
+            XCTAssertLessThanOrEqual(abs(tones[2].text - tones[3].text), TextLayout.sameTone / 2, "\(name): \(tones)")
+            XCTAssertEqual(TextLayout.plainText(found, imageSize: size).components(separatedBy: "\n").count, 3,
+                           "\(name): \(TextLayout.plainText(found, imageSize: size))")
+        }
+    }
+
+    /// No brightness is given for a line on a picture: its box has no background of one brightness
+    func testTheBrightnessOfLettersOnAPictureIsNotMeasured() {
+        var values = [UInt8](repeating: 0, count: 400 * 40)
+        for index in values.indices { values[index] = UInt8((index * 37 + index / 400 * 11) % 256) }
+        XCTAssertNil(LineTone.measure(LumaRaster(x: 0, y: 0, width: 400, height: 40, values: values)))
+        // the same box on a plain background, with strokes of 60 in it
+        var plain = [UInt8](repeating: 240, count: 400 * 40)
+        for y in 10..<30 {
+            for x in stride(from: 20, to: 380, by: 6) {
+                plain[y * 400 + x] = 60
+                plain[y * 400 + x + 1] = 60
+            }
+        }
+        let tone = LineTone.measure(LumaRaster(x: 0, y: 0, width: 400, height: 40, values: plain))
+        XCTAssertEqual(tone, RecognizedLine.Tone(text: 60, background: 242))
+    }
+
+    /// How much of the letters of each line is coloured (`RecognizedLine.Tone.colour`): none of
+    /// a dark title or a dark paragraph, also on a tinted card; nearly all of a green status
+    /// line and of a link; about the share of the mentions in a line that is half mentions. A
+    /// post of dark lines and lines in the blue of links stays one paragraph, as does the text on
+    /// the card.
+    func testHowMuchOfTheLettersOfEachLineIsColouredIsMeasured() throws {
+        let dark: (UInt8, UInt8, UInt8) = (20, 20, 20), blue: (UInt8, UInt8, UInt8) = (0, 122, 255)
+        let green: (UInt8, UInt8, UInt8) = (30, 142, 62)
+        let lines: [(runs: [TestFrames.Run], x: CGFloat, top: CGFloat, fontSize: CGFloat)] = [
+            ([TestFrames.Run(text: "Network and Internet", color: dark)], 60, 30, 44),
+            ([TestFrames.Run(text: "Connected", color: green)], 60, 86, 32),
+            ([TestFrames.Run(text: "Thanks ", color: dark), TestFrames.Run(text: "@anna_mueller @peter", color: blue)], 60, 200, 36),
+            ([TestFrames.Run(text: "for the great photos from", color: dark)], 60, 246, 36),
+            ([TestFrames.Run(text: "www.example.com/photos", color: blue)], 60, 292, 36),
+            ([TestFrames.Run(text: "of the weekend at the lake.", color: dark)], 60, 338, 36),
+            ([TestFrames.Run(text: "Your parcel arrives today", color: dark)], 80, 520, 36),
+            ([TestFrames.Run(text: "between two and four.", color: dark)], 80, 566, 36),
+        ]
+        let card = (rect: CGRect(x: 40, y: 490, width: 900, height: 140), color: (UInt8(255), UInt8(244), UInt8(204)))
+        let size = CGSize(width: width, height: height)
+        for (name, format) in formats {
+            let frame = try TestFrames.colored(lines, background: (245, 245, 245), cards: [card],
+                                               width: width, height: height, format: format)
+            let found = TextLayout.readingOrder(try TextRecognizer.lines(in: frame)).flatMap { $0 }
+            func colour(_ word: String) throws -> Double {
+                let line = try XCTUnwrap(found.first { $0.text.contains(word) }, "\(name): \(word) in \(found.map(\.text))")
+                return try XCTUnwrap(line.tone, "\(name): \(line.text)").colour
+            }
+            for word in ["Network", "great", "weekend", "parcel", "between"] {
+                XCTAssertLessThan(try colour(word), 0.05, "\(name): \(word)")
+            }
+            XCTAssertGreaterThan(try colour("Connected"), 0.8, "\(name)")
+            XCTAssertGreaterThan(try colour("example"), 0.8, "\(name)")
+            let mentions = try colour("Thanks")
+            XCTAssertTrue((0.4...0.9).contains(mentions), "\(name): \(mentions)")
+            let blocks = TextLayout.blocks(found, imageSize: size).map(\.text)
+            XCTAssertTrue(blocks.contains { $0.contains("Thanks") && $0.contains("example") && $0.contains("lake") },
+                          "\(name): \(blocks)")
+            XCTAssertTrue(blocks.contains { $0.contains("parcel") && $0.contains("between") }, "\(name): \(blocks)")
+        }
+    }
+
+    /// The colour of letters is measured against grey and the colour of the background: dark
+    /// strokes whose smoothed edges take the colour of a tinted card are not coloured, blue
+    /// strokes on it are
+    func testTheColourOfLettersIsMeasuredAgainstGreyAndTheBackground() throws {
+        let width = 400, height = 40
+        var luma = [UInt8](repeating: 240, count: width * height)
+        // a yellowish card: Cb -20, Cr 8
+        var blue = [Int8](repeating: -20, count: width * height), red = [Int8](repeating: 8, count: width * height)
+        for y in 10..<30 {
+            for x in stride(from: 20, to: 380, by: 6) {
+                // the core of a stroke is grey, its edge half grey and half the card
+                luma[y * width + x] = 40
+                (blue[y * width + x], red[y * width + x]) = (0, 0)
+                luma[y * width + x + 1] = 140
+                (blue[y * width + x + 1], red[y * width + x + 1]) = (-10, 4)
+            }
+        }
+        let raster = LumaRaster(x: 0, y: 0, width: width, height: height, values: luma)
+        func colours(_ indices: [Int]) -> ChromaSamples {
+            ChromaSamples(blue: indices.map { blue[$0] }, red: indices.map { red[$0] })
+        }
+        let grey = try XCTUnwrap(LineTone.measure(raster, colours: colours))
+        XCTAssertEqual(grey.colour, 0)
+        // the same strokes in blue
+        for index in luma.indices where luma[index] < 200 { (blue[index], red[index]) = (60, -50) }
+        let coloured = try XCTUnwrap(LineTone.measure(raster, colours: colours))
+        XCTAssertEqual(coloured.colour, 1)
+        XCTAssertEqual(coloured.text, grey.text)
+    }
+
     // MARK: Helpers
 
     private func checkPlace(of line: RecognizedLine, drawnAt ink: CGRect, _ name: String,

@@ -9,6 +9,8 @@ enum TextRecognizer {
     /// The rectangles of the result are in coordinates 0…1 of the whole frame, origin at the top
     /// left. Blocks while Vision works; call it off the main thread (or use `recognize`).
     /// An icon that Vision read as a character in front of a line is left out (`LeadingMark`).
+    /// Each line carries how bright its letters and background are and how much of its letters
+    /// are coloured (`LineTone`).
     static func lines(in pixelBuffer: CVPixelBuffer, region: CGRect? = nil) throws -> [RecognizedLine] {
         let width = CGFloat(CVPixelBufferGetWidth(pixelBuffer)), height = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
         guard width > 0, height > 0 else { return [] }
@@ -38,9 +40,14 @@ enum TextRecognizer {
             let line = RecognizedLine(text: candidate.string,
                                       rect: frameRect(of: observation.boundingBox, in: interest),
                                       confidence: Double(candidate.confidence))
-            return LeadingMark.removed(from: line, frameSize: frameSize, boxOf: { range in
+            var kept = LeadingMark.removed(from: line, frameSize: frameSize, boxOf: { range in
                 (try? candidate.boundingBox(for: range)).map { frameRect(of: $0.boundingBox, in: interest) }
             }, luma: { LumaRaster(of: pixelBuffer, in: $0) })
+            let box = kept.rect.applying(CGAffineTransform(scaleX: width, y: height))
+            kept.tone = LumaRaster(of: pixelBuffer, in: box).flatMap { raster in
+                LineTone.measure(raster) { ChromaSamples(of: pixelBuffer, in: raster, at: $0) }
+            }
+            return kept
         }
     }
 
@@ -112,6 +119,175 @@ struct LumaRaster {
             }
         }
         self.init(x: left, y: top, width: width, height: height, values: values)
+    }
+}
+
+/// The colour of some pixels of a `LumaRaster`: the colour differences Cb and Cr (BT.709, as
+/// `YCbCrColor`), 0 for grey, in steps of full-range 8-bit colour (pure blue 0, 122, 255 is
+/// Cb 80, Cr -67; a light blue link on a dark page about Cb 47, Cr -41). A 4:2:0 frame has one
+/// colour for every 2 × 2 pixels, so a thin coloured stroke there is paler than in BGRA, and a
+/// black letter takes some of the colour of the background next to it.
+struct ChromaSamples {
+    var blue: [Int8]
+    var red: [Int8]
+
+    init(blue: [Int8], red: [Int8]) {
+        self.blue = blue
+        self.red = red
+    }
+
+    /// `indices`: of pixels of `raster` (row by row from its top left). nil for pixel formats
+    /// other than bi-planar 4:2:0 and BGRA, or when `raster` does not lie in the frame.
+    init?(of pixelBuffer: CVPixelBuffer, in raster: LumaRaster, at indices: [Int]) {
+        guard raster.width > 0, raster.x >= 0, raster.y >= 0,
+              raster.x + raster.width <= CVPixelBufferGetWidth(pixelBuffer),
+              raster.y + raster.height <= CVPixelBufferGetHeight(pixelBuffer) else { return nil }
+        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        let fullRange = format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        let planar = fullRange || format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        guard planar || format == kCVPixelFormatType_32BGRA,
+              CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        guard let base = planar ? CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) : CVPixelBufferGetBaseAddress(pixelBuffer)
+        else { return nil }
+        let bytesPerRow = planar ? CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1) : CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let bytes = base.assumingMemoryBound(to: UInt8.self)
+        var blue = [Int8](repeating: 0, count: indices.count), red = blue
+        func byte(_ value: Int) -> Int8 { Int8(max(-128, min(127, value))) }
+        if planar {
+            let cells = CVPixelBufferGetWidthOfPlane(pixelBuffer, 1), rows = CVPixelBufferGetHeightOfPlane(pixelBuffer, 1)
+            // video range codes colour differences in 224 steps instead of 255: × 291 / 256
+            let scale = fullRange ? 256 : 291
+            for (sample, index) in indices.enumerated() {
+                let x = raster.x + index % raster.width, y = raster.y + index / raster.width
+                let cell = bytes + min(y >> 1, rows - 1) * bytesPerRow + 2 * min(x >> 1, cells - 1)
+                blue[sample] = byte(((Int(cell[0]) - 128) * scale) >> 8)
+                red[sample] = byte(((Int(cell[1]) - 128) * scale) >> 8)
+            }
+        } else {
+            for (sample, index) in indices.enumerated() {
+                let x = raster.x + index % raster.width, y = raster.y + index / raster.width
+                let pixel = bytes + y * bytesPerRow + 4 * x
+                // in 65536ths: luma 0.2126 R + 0.7152 G + 0.0722 B, Cb = (B - luma) / 1.8556,
+                // Cr = (R - luma) / 1.5748
+                let b = Int(pixel[0]), g = Int(pixel[1]), r = Int(pixel[2])
+                let luma = 13933 * r + 46871 * g + 4732 * b
+                blue[sample] = byte((((b << 16) - luma) * 35318) >> 32)
+                red[sample] = byte((((r << 16) - luma) * 41615) >> 32)
+            }
+        }
+        self.init(blue: blue, red: red)
+    }
+}
+
+/// How bright a line's letters and its background are and how much of the letters is coloured
+/// (`RecognizedLine.Tone`), measured in the pixels of its box. The background is the most
+/// common brightness (in steps of 4, as in `LeadingMark.parts`); it must cover at least
+/// `plainShare` of the box (within `plainRange`), or the line lies on a picture or a gradient
+/// and nil is returned. Ink is what differs from the background by more than `inkDifference`,
+/// on the side where most of it lies (darker or brighter). The letters are as bright as the ink
+/// at the share `strokeShare` of its pixels, counted from the one closest to the background:
+/// the cores of the strokes rather than their smoothed edges, which are wider in small and thin
+/// letters, and not the few pixels of a darker mark in the box. nil when fewer than `minInk`
+/// pixels are ink.
+///
+/// The colour of the letters (`Tone.colour`) is the share of the ink whose colour (`ChromaSamples`)
+/// lies more than `colourDifference` away from every colour between grey and the colour of the
+/// background (the median of its pixels): grey letters, whose smoothed edges mix their grey with
+/// the background, give 0, also on a tinted card or in a coloured bubble; a link or a coloured
+/// status line gives nearly 1, a line that is partly a link the share of the link. Without
+/// `colours` it is 0.
+enum LineTone {
+    static let plainShare = 0.4
+    static let plainRange = 8
+    static let inkDifference = 40
+    static let strokeShare = 0.75
+    static let minInk = 20
+    /// Measured on 849 Android frames and on drawn pages (links, mentions, coloured status
+    /// lines, tinted cards and bubbles, light and dark, 11 to 40 pixel text), each read as BGRA
+    /// and as 4:2:0: of the letters of a black, white or grey line at most 8 % of the pixels lie
+    /// farther than this from grey and the background (smoothed edges, compression), mostly
+    /// none; of a link or a coloured line 70 to 100 %, also the muted headings of Android's
+    /// settings (about 21 away) and thin strokes at the halved colour resolution of 4:2:0.
+    static let colourDifference = 12
+    /// The colour is read from every `colourStep`th pixel of a box of at least `smallBox` pixels
+    /// (a box of 1000 × 50 pixels holds some 2000 of them in its letters), and the colour of the
+    /// background from every `backgroundStep`th of those
+    static let colourStep = 3
+    static let smallBox = 6000
+    static let backgroundStep = 8
+
+    /// `colours`: the colours of the pixels of `raster` at the given indices
+    static func measure(_ raster: LumaRaster,
+                        colours: (([Int]) -> ChromaSamples?)? = nil) -> RecognizedLine.Tone? {
+        guard !raster.values.isEmpty else { return nil }
+        var histogram = [Int](repeating: 0, count: 256)
+        for value in raster.values { histogram[Int(value)] += 1 }
+        var bins = [Int](repeating: 0, count: 64)
+        for value in 0..<256 { bins[value >> 2] += histogram[value] }
+        var mode = 0
+        for bin in 1..<64 where bins[bin] > bins[mode] { mode = bin }
+        let background = mode * 4 + 2
+        let plain = (max(0, background - plainRange)...min(255, background + plainRange)).reduce(0) { $0 + histogram[$1] }
+        guard Double(plain) >= plainShare * Double(raster.values.count) else { return nil }
+        // how many pixels of ink lie each distance from the background, darker and brighter
+        var darker = [Int](repeating: 0, count: 256), brighter = [Int](repeating: 0, count: 256)
+        for value in 0..<256 where abs(value - background) > inkDifference {
+            if value < background { darker[background - value] += histogram[value] } else { brighter[value - background] += histogram[value] }
+        }
+        let darkCount = darker.reduce(0, +), brightCount = brighter.reduce(0, +)
+        let isDark = darkCount >= brightCount
+        let counts = isDark ? darker : brighter, total = isDark ? darkCount : brightCount
+        guard total >= minInk else { return nil }
+        var seen = 0, distance = 0
+        while distance < 255 {
+            seen += counts[distance]
+            if Double(seen) > strokeShare * Double(total - 1) { break }
+            distance += 1
+        }
+        let text = isDark ? background - distance : background + distance
+        var colour = 0.0
+        if let colours {
+            // the colour of every `colourStep`th pixel (of all in a small box) is enough for the
+            // share; of the background, every `backgroundStep`th of those
+            let step = raster.values.count >= smallBox ? colourStep : 1
+            var ink: [Int] = [], plain: [Int] = []
+            ink.reserveCapacity(total / step + 1)
+            var plainSeen = 0
+            raster.values.withUnsafeBufferPointer { values in
+                let darkest = background - inkDifference, brightest = background + inkDifference
+                for index in stride(from: 0, to: values.count, by: step) {
+                    let value = Int(values[index])
+                    if isDark ? value < darkest : value > brightest {
+                        ink.append(index)
+                    } else if value >= background - plainRange, value <= background + plainRange {
+                        if plainSeen == 0 { plain.append(index) }
+                        plainSeen = plainSeen == backgroundStep - 1 ? 0 : plainSeen + 1
+                    }
+                }
+            }
+            if !ink.isEmpty, let samples = colours(ink + plain), samples.blue.count == ink.count + plain.count {
+                // the colour of the background: the median Cb and Cr of its pixels
+                func median(_ values: ArraySlice<Int8>) -> Double {
+                    let sorted = values.sorted()
+                    return sorted.isEmpty ? 0 : Double(sorted[sorted.count / 2])
+                }
+                let backgroundBlue = median(samples.blue[ink.count...]), backgroundRed = median(samples.red[ink.count...])
+                let length = backgroundBlue * backgroundBlue + backgroundRed * backgroundRed
+                // Grey letters, smoothed into the background at their edges, have colours between
+                // grey and the background's; a coloured letter lies away from that segment
+                let limit = Double(colourDifference * colourDifference)
+                var coloured = 0
+                for sample in 0..<ink.count {
+                    let blue = Double(samples.blue[sample]), red = Double(samples.red[sample])
+                    let share = length > 0 ? min(1, max(0, (blue * backgroundBlue + red * backgroundRed) / length)) : 0
+                    let offBlue = blue - share * backgroundBlue, offRed = red - share * backgroundRed
+                    if offBlue * offBlue + offRed * offRed > limit { coloured += 1 }
+                }
+                colour = Double(coloured) / Double(ink.count)
+            }
+        }
+        return RecognizedLine.Tone(text: Double(text), background: Double(background), colour: colour)
     }
 }
 

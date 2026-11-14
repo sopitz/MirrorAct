@@ -11,11 +11,34 @@ struct RecognizedLine: Equatable {
     var rect: CGRect
     /// 0…1 where the recognizer says how sure it is, nil otherwise
     var confidence: Double?
+    /// How bright its letters and the plain background around them are and how much of the
+    /// letters is coloured, when the recognizer measured that (`TextLayout.blocks` keeps lines of
+    /// different brightness apart unless one of them is coloured)
+    var tone: Tone?
 
-    init(text: String, rect: CGRect, confidence: Double? = nil) {
+    /// The brightness (luma as the frame holds it: 0 black … 255 white, or 16 … 235 in video
+    /// range) of the letters of a line and of the background in its box, and how much of the
+    /// letters is coloured. The recognizer gives it only where the background is plain (most
+    /// of the box is of one brightness) and the letters stand out from it.
+    struct Tone: Equatable {
+        var text: Double
+        var background: Double
+        /// 0…1: the share of the letters' pixels that are coloured (a link, a mention, a coloured
+        /// status), not black, white or grey
+        var colour: Double
+
+        init(text: Double, background: Double, colour: Double = 0) {
+            self.text = text
+            self.background = background
+            self.colour = colour
+        }
+    }
+
+    init(text: String, rect: CGRect, confidence: Double? = nil, tone: Tone? = nil) {
         self.text = text
         self.rect = rect
         self.confidence = confidence
+        self.tone = tone
     }
 }
 
@@ -190,6 +213,19 @@ enum TextLayout {
     ///   reach into the one above by up to `overlap` of the higher box),
     /// - their left edges or their centres are within `alignment` of the height of a line (or their
     ///   right edges, when either is written from right to left: `isRightToLeft`),
+    /// - its letters are as bright as those of the line above, when the recognizer measured both
+    ///   on the same background (`RecognizedLine.tone`: backgrounds within `sameBackground` of each
+    ///   other, letters within `sameTone`) and neither line's letters are coloured (less than
+    ///   `colouredLetters` of them). The title of a list row and the summary below it differ in
+    ///   brightness, not in colour (Android and iOS set the summary grey, the title black, or
+    ///   white and grey in a dark theme), even when the summary is not much smaller or too short
+    ///   to measure ("VPN" over "Kein VPN", "Akku" over "100 %"). A line of a paragraph that is
+    ///   mostly a link or mentions measures as bright as the link, but its letters are coloured,
+    ///   so it stays in its paragraph. (For the same reason a summary in colour, a green
+    ///   "Verbunden" or a blue "Tippt …" under a black title, is told apart from the title only
+    ///   by the boxes. In very small text, about 15 pixels high or less, a bold, an all-caps or
+    ///   an Arabic line may measure darker or lighter than the regular lines around it and be
+    ///   kept apart.)
     /// - neither shows only part of its letters, and it does not start a list item ("• …", "1. …":
     ///   `listMarkerUnits`; a number only in a list or where the line above ends short of it:
     ///   `startsItem`); the line after the first one of an item may also line up with where the
@@ -275,6 +311,7 @@ enum TextLayout {
                                        ":\u{FF1A}".unicodeScalars.contains($0) } ?? false,
                                    isRightToLeft: isRightToLeft(line.text)))
         }
+        for index in all.indices { all[index].1.tone = all[index].0.tone }
         let reach = barReach * Double(max(imageSize.width, imageSize.height))
         for index in all.indices where all[index].1.isLow {
             let (recognized, line) = all[index]
@@ -338,6 +375,8 @@ enum TextLayout {
         var endsWithColon: Bool
         /// most of its letters are of a script written from right to left
         var isRightToLeft: Bool
+        /// `RecognizedLine.tone`
+        var tone: RecognizedLine.Tone? = nil
     }
 
     /// A paragraph being put together by `blocks`
@@ -354,6 +393,12 @@ enum TextLayout {
     private static func continues(_ paragraph: Paragraph, with line: Measured) -> Bool {
         let last = paragraph.last
         guard !last.isPart, !line.isPart, !(line.startsListItem && startsItem(line, after: paragraph)) else {
+            return false
+        }
+        // a grey summary under a black title is not part of it; a line in the colour of a link
+        // measures as bright as the link and may still be part of its paragraph
+        if let upper = last.tone, let lower = line.tone, abs(upper.background - lower.background) <= sameBackground,
+           abs(upper.text - lower.text) > sameTone, max(upper.colour, lower.colour) < colouredLetters {
             return false
         }
         if let lastSize = last.size, let size = line.size {
@@ -454,6 +499,29 @@ enum TextLayout {
     /// how far left edges or centres of the lines of a paragraph may lie apart, as a share of the
     /// height of a line
     static let alignment = 0.6
+    /// The letters of the lines of a paragraph differ in brightness (`RecognizedLine.tone`, luma
+    /// 0…255) by no more than this, measured on backgrounds within `sameBackground` of each
+    /// other. Measured with Vision's boxes on Android screens (light and dark, font scale 1 and
+    /// 1.3) and web pages: the lines of a paragraph differed by at most 6, the title and the
+    /// summary of a row by at least 25 (white and light grey of a dark theme); a frame in video
+    /// range, which holds 16…235 for 0…255, brings these to 5 and 21. The brightness of the
+    /// letters is the 75th percentile of the line's letter pixels (counted from the background),
+    /// so a coloured run over a fifth to a half of a line or more (a link, mentions) moves it to
+    /// that colour (`colouredLetters` keeps such a line in its paragraph); and where strokes are
+    /// only 1 or 2 pixels wide (text of about 15 pixels or less), a bold or an all-caps line
+    /// measures 15 to 35 darker than regular ones, and an Arabic line may differ as much, so it
+    /// is kept apart from the lines around it.
+    static let sameTone = 14.0
+    static let sameBackground = 12.0
+    /// A line counts as coloured when at least this share of its letters' pixels is
+    /// (`RecognizedLine.Tone.colour`); its brightness then says nothing about whether it belongs
+    /// to the line above or below. Measured on 849 Android frames, each read as BGRA and as
+    /// 4:2:0: black, white and grey lines at most 0.08, nearly all 0; coloured headings, links
+    /// and captions 0.6 to 1. On drawn posts: a line with a short mention, a hashtag or two emoji
+    /// in small text (12 to 16 pixels) 0.15 to 0.2, its brightness moved by up to 20; a line
+    /// with a link over a fifth of it about 0.2 to 0.3, its brightness moved by up to 18 in the
+    /// dark theme at half resolution; mentions over half a line 0.5 to 0.8.
+    static let colouredLetters = 0.12
     /// a box lower than this share of the size of its text and at most `partOfNeighbour` of the
     /// box of the line next to it holds only part of its letters; one lower than `cutOffHeight`
     /// of its size was read as garbage
