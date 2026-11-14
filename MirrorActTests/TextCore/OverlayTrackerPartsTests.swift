@@ -619,7 +619,9 @@ final class OverlayTrackerFollowingTests: XCTestCase {
     /// slid under the bar, and a tile under it missed a frame of the movement (damaged), so its
     /// tiles say it went a frame's movement less – about a row. The row that looks alike there is
     /// no place for it: the picture under it moves with the page, so nothing stays there the way a
-    /// header that sticks does. It is not drawn there.
+    /// header that sticks does. It is not taken there (it may be kept under the bar, once), and
+    /// its translation is not drawn while it is out of view; a row the same pass read that is
+    /// still in view is taken where the page carried it, so the pass did place what it read.
     func testARowReadWhileGlidingIsNotPlacedOnTheRowThatLooksAlikeWhereItsTilesStopped() throws {
         let width = SyntheticScreen.width, height = SyntheticScreen.height, period = 80
         var page = SyntheticPage.page(width: width, height: 2000, seed: 31, period: period)
@@ -673,10 +675,25 @@ final class OverlayTrackerFollowingTests: XCTestCase {
                                          scale: scale, time: 0.5 + Double(step) / 60)
             XCTAssertEqual(update.change, .scrolled, "frame \(step)")
         }
-        tracker.finishRecognition(request, blocks: [row], time: 0.5 + 4.5 / 60)
-        for block in tracker.blocks where block.text == "Row" {
+        // (a row read by the same pass that is still in view: taken where its area carried it)
+        let second = RecognizedBlock(text: "Second", rect: CGRect(x: 16, y: 640, width: 254, height: 24))
+        tracker.finishRecognition(request, blocks: [row, second], time: 0.5 + 4.5 / 60)
+        let seconds = tracker.blocks.filter { $0.text == "Second" }
+        XCTAssertEqual(seconds.count, 1, "the row in view is kept once")
+        XCTAssertEqual(seconds.first?.rect.minY ?? 0, Double(640 - 4 * speed), accuracy: 2.0,
+                       "the row in view is where the page carried it")
+        let rows = tracker.blocks.filter { $0.text == "Row" }
+        XCTAssertLessThanOrEqual(rows.count, 1, "the row is kept once at most: \(rows.map(\.rect))")
+        for block in rows {
             XCTAssertLessThanOrEqual(block.rect.minY, Double(bar),
                                      "the row is under the bar, not on the row that looks alike: \(block.rect)")
+        }
+        tracker.setTranslation("T Row", for: "Row")
+        for step in 5...6 {
+            let update = tracker.advance(frame(offset: start + speed * step), scale: scale,
+                                         time: 0.5 + Double(step) / 60)
+            XCTAssertFalse(update.placed.contains { $0.text == "T Row" },
+                           "frame \(step): the row is out of view, its translation is not drawn")
         }
     }
 
