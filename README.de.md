@@ -3,7 +3,8 @@
 # MirrorAct
 
 iPhone, iPad oder Android-Telefon auf dem Mac spiegeln, rahmen und aufnehmen – per Kabel oder kabellos.
-Open Source, alles bleibt auf deinem Mac.
+Open Source, ohne Telemetrie: Alles bleibt auf deinem Mac, ausser du wählst zum Übersetzen einen
+Online-Dienst.
 
 *English: [README.md](README.md)*
 
@@ -67,6 +68,10 @@ Werkzeugleiste; ein Rechtsklick zeigt alle Funktionen.
 |---|---|
 | <img src="docs/iphone-duo-closed.jpg" alt="iPhone Duo zugeklappt, gerahmt auf blauem Verlauf, mit dem Scharnier links"> | <img src="docs/iphone-duo-open.jpg" alt="iPhone Duo aufgeklappt, gerahmt auf blauem Verlauf"> |
 
+**Übersetzen:** ein Android-Telefon mit deutscher Einstellungen-App, auf Englisch gezeigt
+
+<img src="docs/translate.jpg" width="800" alt="MirrorAct spiegelt ein Android-Telefon mit deutscher Einstellungen-App, die mit eingeschaltetem «Übersetzen» auf Englisch erscheint, neben Werkzeugleiste und Stil-Panel">
+
 Die Bilder zeigen die englische Oberfläche.
 
 ## Funktionen
@@ -80,7 +85,7 @@ Die Bilder zeigen die englische Oberfläche.
 - **Immer im Vordergrund** (⌘T): das Spiegelfenster schwebt über anderen Fenstern. Mit «Auch über Vollbild-Apps» (Einstellungen → Allgemein, Menü «Gerät» oder Rechtsklick) erscheint es auch auf jedem Schreibtisch und über anderen Apps im Vollbild; ein Klick darauf holt MirrorAct dann nicht mehr nach vorn.
 - **Stil-Panel:** Grösse (lebensgross, pixelgenau, punktgenau, Bildschirm füllen), Rahmen an/aus, Rahmenfarbe, Hintergrund (transparent, Verläufe, Farbe, Bild), Abstand, Schatten, Format (1:1, 16:9, 9:16, 4:3).
 - **Screenshots und Aufnahmen** mit oder ohne Rahmen und Hintergrund. Mit transparentem Hintergrund entstehen PNG bzw. HEVC mit Alpha für Keynote und Schnittprogramme, sonst H.264. Screenshots lassen sich direkt aus dem Fenster ziehen.
-- **Text auf dem Bildschirm:** «Text» kopiert alles, was auf dem Gerätebildschirm steht, in die Zwischenablage (Texterkennung mit Apples Vision, auf dem Mac). «Übersetzen» zeigt die Übersetzung an der Stelle des Textes: Sie wird ins Bild gezeichnet, bleibt beim Scrollen auf ihrem Text, neue Bereiche werden übersetzt, sobald sie ins Bild kommen, und Screenshots, Aufnahmen und die Präsentation zeigen sie ebenfalls. Mehrere Sprachen auf einem Bildschirm funktionieren; Text, der schon in der eigenen Sprache ist, bleibt stehen. Unter Einstellungen → Text wählt man die Sprache und was übersetzt: der Mac (Apples Translation-Framework; macOS fragt einmal, bevor es eine Sprache lädt) oder ein Sprachmodell-Dienst mit eigenem API-Schlüssel (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, ein lokaler Server wie Ollama oder LM Studio oder jede OpenAI-kompatible Adresse). Der Schlüssel liegt im Schlüsselbund; siehe [Text kopieren und übersetzen](#text-kopieren-und-übersetzen).
+- **Text auf dem Bildschirm:** «Text» kopiert den Text auf dem Gerätebildschirm in die Zwischenablage (Apples Vision, auf dem Mac). «Übersetzen» zeigt den Bildschirm in einer anderen Sprache, an Ort und Stelle und auch beim Scrollen, ebenso in Screenshots, Aufnahmen und beim Präsentieren. Übersetzt wird auf dem Mac (Apples Translation-Framework) oder von einem Sprachmodell-Dienst mit eigenem API-Schlüssel (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, Ollama, LM Studio oder jeder OpenAI-kompatible Server); siehe [Text kopieren und übersetzen](#text-kopieren-und-übersetzen).
 - **Präsentieren:** Gerät mittig auf dem Hintergrund, im Vollbild ohne Dock; die Menüleiste erscheint am oberen Rand. Beenden mit Esc, ⌃⌘F oder «Präsentation beenden» oben links.
 - **Editor:** vorhandene Screenshots und Bildschirmaufnahmen nachträglich rahmen, Videos kürzen, zwei Screenshots als **Duo** (nebeneinander, versetzt, gekippt, perspektivisch).
 - **Kurzbefehle:** «Screenshot einrahmen» (auch als Finder-Schnellaktion), «Screenshot vom iPhone», «Aufnahme starten oder beenden».
@@ -96,60 +101,114 @@ Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/Mirr
 
 ## Text kopieren und übersetzen
 
-«Text» (⌥⌘T) kopiert den Text auf dem Gerätebildschirm, «Übersetzen» (⇧⌘T) zeichnet die
-Übersetzung darüber, bis man es wieder ausschaltet. Unter Einstellungen → Text:
+«Text» (⌥⌘T) kopiert den Text auf dem Gerätebildschirm in die Zwischenablage, einen Absatz pro
+Zeile. «Übersetzen» (⇧⌘T) zeigt den Bildschirm in einer anderen Sprache, bis man es wieder
+ausschaltet: Die Übersetzung wird über den Text gezeichnet, in der Grösse des Textes, den sie
+ersetzt, bleibt beim Scrollen auf ihm und erscheint auch in Screenshots, Aufnahmen und beim
+Präsentieren. Beide gibt es in der Werkzeugleiste und, als «Text auf dem Bildschirm kopieren» und
+«Text auf dem Bildschirm übersetzen», im Kontextmenü und im Menü «Gerät». Beide lassen die
+Statusleiste weg, auch im Querformat, und ein Zeichen wie «€» oder «#», das weit vor seinem Text
+steht. Unter Einstellungen → Text:
 
 - **Übersetzen nach:** die Systemsprache oder eine andere aus der Liste. Gibt es eine Sprache in
-  mehreren Formen, steht die Region dabei, etwa «Deutsch (Schweiz)» oder «Englisch (Vereinigtes
-  Königreich)». Eine Sprache aus der Liste gilt so, wie sie gewählt ist. Die Systemsprache bekommt
-  die nächste Form, die macOS übersetzt, ab macOS 26.4 die der schnellen Modelle auf dem Mac, wo
-  diese die Sprache haben (Englisch für Deutschland oder Indien ergibt britisches Englisch).
-- **Dieser Mac:** Apples Translation-Framework. Bevor ein Sprachpaar übersetzt werden kann, fragt
-  macOS, ob es von Apple geladen werden soll, ein Paar nach dem anderen; bis man antwortet, sagt es
-  das Spiegelfenster, und «Übersetzen» auszuschalten schliesst die Frage. Einige Sprachen und
-  regionale Formen, in der Liste markiert, brauchen Apple Intelligence; MirrorAct sagt es, wenn sie
-  aus ist oder dieser Mac sie nicht unterstützt.
-- **Sprachmodell-Dienst:** Der Dienst kann jede Anfrage in Rechnung stellen, und je mehr neuer
-  Text ins Bild kommt, solange «Übersetzen» an ist, desto mehr kostet es. Adresse und Modell gelten,
-  sobald man Return drückt oder das Feld verlässt, auf «Testen» oder «Liste laden» klickt, den
-  Dienst wechselt, die Seite verlässt oder in ein anderes Fenster wechselt, nicht schon beim
-  Tippen; ein unter «Modelle» gewähltes Modell gilt sofort. Ein eingetippter API-Schlüssel wird mit
-  Return, «Sichern» oder einem gelungenen «Testen» im Schlüsselbund gesichert und ersetzt dann einen
-  gesicherten. Hat der Dienst noch keinen Schlüssel, wird ein eingetippter auch gesichert, wenn
-  «Liste laden» gelingt, der Dienst wechselt oder man die Seite verlässt. Bei einem langsamen Modell
-  sagt MirrorAct das einmal und sendet weniger Texte pro Anfrage. Meldet der Dienst Fehler oder ist
-  er nicht erreichbar, versucht MirrorAct es nach 5, 10, 20 und 40 Sekunden wieder und dann jede
-  Minute, und das Spiegelfenster sagt, wann; sobald der Dienst wieder antwortet, wird der
-  Bildschirm mit dem nächsten Versuch übersetzt. Eine Pause, um die der Dienst bittet (zu viele
-  Anfragen), wird eingehalten. Antwortet das Modell in einer Form, die MirrorAct nicht brauchen
-  kann, sagt das Fenster das und schlägt ein anderes Modell vor; «Übersetzen» bleibt an und
-  versucht es nach denselben Wartezeiten wieder, mit einem Text auf einmal, bis das Modell
-  richtig antwortet. «Übersetzen» geht nur aus, wenn der API-Schlüssel nicht angenommen wird, das
-  Modell oder die Adresse falsch ist oder das Modell alles ablehnt, was es übersetzen soll.
+  mehreren Formen, nennt die Liste die Region, etwa «Deutsch (Schweiz)» oder «Englisch
+  (Vereinigtes Königreich)», und die gewählte Form gilt. Mit «Systemsprache» nimmt «Dieser Mac»
+  eine Form der eigenen Sprache, in die er übersetzen kann, am liebsten eine, die schon auf dem Mac
+  ist.
+- **Übersetzen mit:** «Dieser Mac (Apple)» oder «Sprachmodell-Dienst (eigener API-Schlüssel)»,
+  unten beschrieben.
+- **Dieser Mac (Apple):** Apples Translation-Framework, auf dem Mac und kostenlos. Wird ein
+  Sprachpaar zum ersten Mal gebraucht, zeigt macOS einen Dialog mit beiden Sprachen und je einem
+  Knopf zum Laden: dort laden und den Dialog mit «Fertig» schliessen. Bis dahin sagt das
+  Spiegelfenster, worauf es wartet, und das Übersetzen beginnt von selbst, sobald die Sprachen auf
+  dem Mac sind; das Laden kann eine Minute oder länger dauern. Fehlen die Sprachen 20 Sekunden nach
+  dem Schliessen noch, sagt das Spiegelfenster, dass sie «noch nicht auf diesem Mac» sind: Laden
+  sie noch, abwarten, sonst «Übersetzen» aus- und wieder einschalten, damit die Frage wiederkommt.
+  «Übersetzen» auszuschalten schliesst auch einen offenen Dialog von macOS, ausser ein anderes
+  Spiegelfenster übersetzt dieselben Sprachen. macOS wird jeweils nur nach einem Sprachpaar
+  gefragt, und nur, wenn ein guter Teil des Textes auf dem Bildschirm in der Sprache ist: Ein Name,
+  eine Seriennummer oder ein einzelnes Wort allein bringt die Frage nie. Einzelne Wörter wie «Ein»
+  und «Aus» geraten unter Umständen falsch oder lauten von Bildschirm zu Bildschirm anders
+  («Airplane mode» auf dem einen, «Flight mode» auf dem anderen). Einige Sprachen und regionale
+  Formen, in der Liste markiert, brauchen Apple Intelligence; MirrorAct sagt es, wenn sie aus ist
+  oder dieser Mac sie nicht unterstützt. Braucht die Sprache, in die übersetzt wird, Apple
+  Intelligence, geht «Übersetzen» aus; Text in einer Sprache, die sie braucht, bleibt stehen.
+- **Sprachmodell-Dienst (eigener API-Schlüssel):** den Dienst wählen, den eigenen API-Schlüssel
+  eintragen («Schlüssel holen» öffnet die Seite des Dienstes dafür) und ein Modell; «Testen»
+  übersetzt damit «Hello». Fehlen Adresse, ein nötiger API-Schlüssel oder ein Modell, geht
+  «Übersetzen» nicht an, und das Fenster sagt, was zuerst einzutragen ist. Der Dienst kann jede
+  Anfrage in Rechnung stellen, und je mehr neuer Text ins Bild kommt, solange «Übersetzen» an ist,
+  desto mehr kostet es. Adresse und Modell gelten, sobald man Return drückt oder das Feld verlässt;
+  ein unter «Modelle» gewähltes Modell gilt sofort. «Sichern» oder Return sichert den
+  API-Schlüssel im Schlüsselbund, ebenso ein gelungenes «Testen». Braucht das Modell länger als
+  eine Minute für eine Antwort (fünf Minuten für einen Server unter einer Adresse auf dem Mac oder
+  im eigenen Netzwerk), sagt MirrorAct das und sendet weniger Texte pro Anfrage. Meldet der Dienst
+  Fehler oder ist er nicht erreichbar, versucht MirrorAct es nach 5, 10, 20 und 40 Sekunden wieder
+  und dann jede Minute, und das Spiegelfenster sagt es; sobald der Dienst wieder antwortet, wird
+  der Bildschirm mit dem nächsten Versuch übersetzt, und «Übersetzen» aus- und wieder einschalten
+  versucht es sofort. Eine Pause, um die der Dienst bittet (zu viele Anfragen), wird eingehalten,
+  höchstens 15 Minuten. Antwortet das Modell in einer Form, die MirrorAct nicht brauchen kann, sagt
+  das Fenster das und schlägt ein anderes Modell vor; «Übersetzen» bleibt an und versucht es nach
+  denselben Wartezeiten wieder, zuerst mit einem einzelnen Text, bis das Modell richtig antwortet.
+  «Übersetzen» geht aus, wenn der API-Schlüssel nicht angenommen wird oder dafür nicht verwendet
+  werden darf, kein Guthaben mehr da ist, das Modell oder die Adresse falsch ist oder das Modell
+  alles ablehnt, was es übersetzen soll.
 - **Ein eigener Server** (Ollama, LM Studio oder Benutzerdefiniert): Einfaches `http://` geht für
   diesen Mac (`localhost`, `127.0.0.1`), für private IP-Adressen (`192.168.…`, `10.…`, `172.16.…`
   bis `172.31.…`), `.local`-Namen und Namen ohne Punkt; jede andere Adresse braucht `https://`.
   Eine Adresse ohne `http://` oder `https://` bekommt für diese `http://` und für jeden anderen
   Namen `https://`. Weiterleitungen folgt MirrorAct nicht, einzutragen ist also die Adresse, unter
-  der der Server antwortet. Für einen Server auf einem anderen Computer MirrorAct unter
-  Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk erlauben.
+  der der Server antwortet. Hat ein Server unter einer Adresse auf dem Mac oder im eigenen Netzwerk
+  20 Sekunden lang nicht geantwortet, sagt es das Spiegelfenster («seit 20 s keine Antwort – lädt
+  das Modell noch?»), bis die Antwort kommt. Nachdem das Modell einmal geantwortet hat, wartet das
+  Spiegelfenster doppelt so lange wie die bisher langsamste Antwort, mindestens aber 20 Sekunden,
+  bevor es das sagt. «Übersetzen» aus- und wieder einschalten sendet die Texte erneut.
 
-«Text» und «Übersetzen» nehmen jeden Absatz als einen Text. Der Titel eines Listeneintrags und
-die graue Zeile darunter (etwa in den Einstellungen) sind eigene Absätze: «Text» kopiert sie auf
-getrennte Zeilen, «Übersetzen» übersetzt sie einzeln. MirrorAct unterscheidet sie an der Farbe der
-Buchstaben: schwarz über grau, im dunklen Design weiss über grau. Eine farbige Zeile, etwa ein Link
-oder eine @-Erwähnung, bleibt Teil ihres Absatzes; eine farbige Zeile unter einem Titel (ein
-grünes «Verbunden», ein blaues «Tippt …») wird nur dann von ihm getrennt, wenn sie weiter entfernt
-oder deutlich kleiner ist. In sehr kleiner Schrift (etwa 15 Pixel oder weniger) wird unter
-Umständen eine fette, eine in Grossbuchstaben oder eine arabische Zeile für sich übersetzt.
+**Was macOS fragt.** Mit «Dieser Mac» fragt macOS, bevor es ein Sprachpaar lädt; ein Paar braucht
+einige hundert Megabyte auf dem Mac. Für einen Server auf einem anderen Computer im eigenen
+Netzwerk fragt macOS, sofern es das noch nicht getan hat, ob MirrorAct sich mit Geräten im lokalen
+Netzwerk verbinden darf; das erlauben, gleich oder später unter Systemeinstellungen → Datenschutz &
+Sicherheit → Lokales Netzwerk. Fragt macOS, ob MirrorAct den API-Schlüssel im Schlüsselbund
+verwenden darf, das erlauben; sonst bittet das Spiegelfenster, den Schlüssel erneut zu sichern.
 
-Eine Übersetzung, die nicht an ihren Platz passt, endet mit Auslassungspunkten. Text über einem
-laufenden Video, etwa Untertitel oder Beschriftungen auf einem Clip, wird nicht übersetzt, solange
-das Video läuft. Trennt sich das Gerät, geht «Übersetzen» aus und muss wieder eingeschaltet werden.
-Wechselt MirrorAct ein Android-Fenster selbst auf die andere Verbindung (Kabel abgezogen bei
-bestehendem WLAN oder «WLAN statt Kabel verwenden»), geht «Übersetzen» wieder an, wenn das neue Bild
-innert weniger Sekunden kommt; das Fenster sagt es, und ein Klick auf «Übersetzen» in dieser Zeit
-lässt es aus.
+«Text» und «Übersetzen» arbeiten Absatz für Absatz. Der Titel eines Listeneintrags und die graue
+Zeile darunter (etwa in den Einstellungen) gelten als eigene Absätze: «Text» kopiert sie auf
+getrennte Zeilen, «Übersetzen» übersetzt sie einzeln. Eine farbige Zeile, etwa ein Link oder eine
+@-Erwähnung, bleibt Teil ihres Absatzes, ebenso ein farbiger Status unter einem Titel, etwa ein
+grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner.
+
+**Gut zu wissen:**
+
+- «Text» kopiert alles, was es liest; so kann das Symbol eines Listeneintrags als ein oder zwei
+  verirrte Buchstaben mitkommen. «Übersetzen» lässt solche Symbole in Ruhe und damit auch ein
+  kurzes Wort an ihrer Stelle, etwa einen Wochentag vor zwei Zeilen Öffnungszeiten oder die
+  Initialen in einem Profilbild: Es bleibt unübersetzt.
+- Mit «Dieser Mac» bleibt ein einzelnes Wort in der Sprache des Geräts zwischen Text, der schon in
+  der eigenen Sprache ist, unter Umständen stehen: Ein Wort allein verrät seine Sprache nicht.
+- Text über einem laufenden Video, etwa Untertitel, wird nicht übersetzt, solange das Video läuft,
+  und Text, der sich von selbst weiterbewegt, etwa ein Ticker oder ein Karussell, bleibt unter
+  Umständen unübersetzt, solange er sich bewegt.
+- Text, der sich ändert, während sich der Bildschirm bewegt, bekommt seine neue Übersetzung,
+  sobald der Bildschirm zur Ruhe kommt. Eine Zeile, die eine Leiste oder der Bildschirmrand
+  abschneidet, wird übersetzt, sobald sie ganz zu sehen ist, oder, unter einer Leiste, die stehen
+  bleibt, so weit sie zu sehen ist, sobald der Bildschirm ruht; «Text» lässt eine Zeile weg, die
+  der obere oder untere Bildschirmrand abschneidet.
+- Solange ein Seitenpanel oder eine Schublade einen Teil der Seite verdeckt, werden die Wortenden
+  daneben unter Umständen als kleine Beschriftungen übersetzt, und eine Zeile, die zur Hälfte
+  hinter einer Leiste liegt, kann in «Text» und «Übersetzen» als einige verstümmelte Buchstaben
+  erscheinen.
+- Eine Übersetzung, die nicht an den Platz ihres Textes passt, wird kleiner gesetzt, und eine, die
+  auch dann nicht passt, endet mit Auslassungspunkten.
+- In sehr kleiner Schrift, etwa bei einem Telefon, das in niedriger Auflösung gespiegelt wird, wird
+  eine fette, eine in Grossbuchstaben oder eine arabische Zeile unter Umständen vom Rest ihres
+  Absatzes getrennt: «Übersetzen» übersetzt sie für sich, «Text» kopiert sie auf eine eigene
+  Zeile.
+
+Trennt sich das Gerät, geht «Übersetzen» aus und muss wieder eingeschaltet werden. Wechselt
+MirrorAct ein Android-Fenster selbst auf die andere Verbindung (Kabel abgezogen bei bestehendem
+WLAN oder umgekehrt, oder «WLAN statt Kabel verwenden»), geht «Übersetzen» wieder an, wenn das neue
+Bild innert 10 Sekunden kommt, und bleibt sonst aus; das Fenster sagt, was davon gilt, und ein
+Klick auf «Übersetzen» in dieser Zeit lässt es aus.
 
 ## Android-Telefon bedienen
 
@@ -210,20 +269,28 @@ beim Beenden von MirrorAct wird er gestoppt. Endet eine kabellose Verbindung (au
 - Home, App-Umschalter, Mitteilungszentrale, Lautstärke und Sperren in der Werkzeugleiste und im Kontextmenü
 
 Das geht per Kabel und kabellos; MirrorAct erreicht den Agent über usbmuxd (wie Xcode) oder über das
-lokale Netz. Gesten werden beim Loslassen der Maustaste geschickt, der Finger folgt der Maus also
+lokale Netzwerk. Gesten werden beim Loslassen der Maustaste geschickt, der Finger folgt der Maus also
 nicht live. Ein Gerät mit Code lässt sich so nicht entsperren. Die Ausgabe von `xcodebuild` steht in
 `~/Library/Logs/MirrorAct-Agent.log`.
 
 ## Datenschutz
 
-MirrorAct arbeitet lokal, sendet keine Daten und hat keine Telemetrie. Netzwerkzugriff gibt es nur
-für den AirPlay-Empfänger im lokalen Netz und über AWDL, für adb zu Android-Telefonen (per Kabel
-oder, bei WLAN, im lokalen Netz) sowie, während ein iPhone oder iPad bedient wird, zum Agent auf
-diesem Gerät. Die Texterkennung läuft auf dem Mac. Auch das Übersetzen läuft standardmässig auf dem
-Mac; die Sprachen lädt macOS dann von Apple, sobald man zustimmt. Nur wer unter Einstellungen → Text einen
-Sprachmodell-Dienst wählt, sendet den auf dem Bildschirm erkannten Text an diesen Dienst, mit dem
-eigenen API-Schlüssel und nur, solange «Übersetzen» an ist; ein lokaler Server (Ollama, LM Studio)
-behält ihn auf dem Mac oder im eigenen Netz.
+MirrorAct arbeitet lokal und hat keine Telemetrie. Daten sendet es nur, wenn man für «Übersetzen»
+einen Sprachmodell-Dienst wählt (siehe unten). Netzwerkzugriff gibt es nur für den
+AirPlay-Empfänger im lokalen Netzwerk und über AWDL, für adb zu Android-Telefonen (per Kabel oder,
+bei WLAN, im lokalen Netzwerk), während ein iPhone oder iPad bedient wird zum Agent auf diesem
+Gerät, und zu diesem Dienst.
+
+Die Texterkennung läuft auf dem Mac, und «Text» kopiert nur in die Zwischenablage. Auch
+«Übersetzen» läuft standardmässig auf dem Mac («Dieser Mac»): Nichts vom Bildschirm verlässt ihn,
+und die Sprachen lädt macOS von Apple, sobald man zustimmt. Nur wer unter Einstellungen → Text
+einen Sprachmodell-Dienst wählt, sendet den auf dem Bildschirm erkannten Text an diesen Dienst –
+den Text, nicht das Bild –, mit dem eigenen API-Schlüssel und nur, solange «Übersetzen» an ist;
+beim Einschalten mit einem Dienst ausserhalb des eigenen Netzwerks sagt das Spiegelfenster, wohin
+der Text geht. Was der Dienst damit tut, regeln seine Bedingungen. «Testen» sendet das Wort
+«Hello», und «Liste laden» fragt den Dienst nach seinen Modellen. Ein eigener Server unter einer
+Adresse auf dem Mac oder im eigenen Netzwerk (Ollama, LM Studio, Benutzerdefiniert) behält den Text
+dort. Der API-Schlüssel bleibt im Schlüsselbund und geht nur an diesen Dienst, mit dessen Anfragen.
 
 ## Rechtliches
 
