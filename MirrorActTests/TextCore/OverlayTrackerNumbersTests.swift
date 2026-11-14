@@ -181,7 +181,7 @@ final class OverlayTrackerNumbersTests: XCTestCase {
         var wrongMoving = 0, wrongAtRest = 0, placedMoving = 0
         var examples: [String] = []
         let untranslated = UntranslatedCount(after: stopped + 2, frameHeight: Double(Self.height))
-        run(OverlayTracker(), times: times, seed: 11, lines: { Self.rows(offset: offsets[$0]) }) { frame, lines, placed in
+        run(OverlayTracker(), times: times, seed: 11, lines: { Self.rows(offset: offsets[$0]) }, each: { frame, lines, placed in
             untranslated.count(at: times[frame], lines: lines, placed: placed)
             let wrong = placed.filter { !Self.isOnItsText($0, lines: lines) }
             if times[frame] > start, times[frame] <= stopped {
@@ -194,7 +194,7 @@ final class OverlayTrackerNumbersTests: XCTestCase {
                 let under = lines.first { abs($0.top - first.rect.minY) < 30 }?.text ?? "-"
                 examples.append(String(format: "%.2f s: ", times[frame]) + "\(first.text) over \(under)")
             }
-        }
+        })
         return (wrongMoving, wrongAtRest, placedMoving, untranslated.frames, examples + untranslated.examples)
     }
 
@@ -287,11 +287,11 @@ final class OverlayTrackerNumbersTests: XCTestCase {
         var placedMoving = 0, wrong = 0
         let untranslated = UntranslatedCount(after: stopped + 2, frameHeight: Double(Self.height))
         run(OverlayTracker(configuration: configuration), times: times, seed: 13,
-            lines: { Self.invoices(offset: offsets[$0]) }) { frame, lines, placed in
+            lines: { Self.invoices(offset: offsets[$0]) }, each: { frame, lines, placed in
             untranslated.count(at: times[frame], lines: lines, placed: placed)
             if times[frame] > start, times[frame] <= stopped { placedMoving += placed.count }
             wrong += placed.filter { !Self.isOnItsText($0, lines: lines) }.count
-        }
+        })
         return (placedMoving, wrong, untranslated.frames, untranslated.examples)
     }
 
@@ -333,9 +333,9 @@ final class OverlayTrackerNumbersTests: XCTestCase {
         let tracker = OverlayTracker()
         let row = Line(text: "Ordner 12 synchronisieren", top: 800, fontSize: 52)
         var placed: [PlacedBlock] = []
-        run(tracker, times: (0..<60).map { Double($0) / 30 }, seed: 3, lines: { _ in [row] }) { _, _, now in
+        run(tracker, times: (0..<60).map { Double($0) / 30 }, seed: 3, lines: { _ in [row] }, each: { _, _, now in
             placed = now
-        }
+        })
         XCTAssertEqual(placed.map(\.text), ["T " + row.text])
         // (the other row shows at the same place and is read; nothing is translated meanwhile)
         let other = Line(text: "Ordner 23 synchronisieren", top: 800, fontSize: 52)
