@@ -37,6 +37,9 @@ struct ScrollingArea: Equatable {
 /// - `ReadingPlan` keeps what has to be read: what scrolled into view (at once), what changed
 ///   (once it rests), places where a block was cut off (once all of it can be seen), and what
 ///   was read while it moved fast (once more when it rests).
+/// - A change of which every tile shows a picture that a pass at rest found to hold nothing new
+///   is not read (`Configuration.knownTilePictures`): a blinking caret costs two passes, not one
+///   a blink.
 /// - A pass reads the thumbnail it started on; points on a grid over its region move with the
 ///   picture meanwhile and carry its blocks over to the current frame, where each one is
 ///   checked against the picture before it is taken.
@@ -290,8 +293,11 @@ final class OverlayTracker {
         /// for a place to be read again at rest is bounded on its own (`maxRereads`,
         /// `Block.missedOnce`, a place to read at rest asked for while its area rested already
         /// waits for its next movement, a line whose numbers no longer fit is read once more,
-        /// `askToReadLine`, which needs a frame that changed the picture; the place where lines
-        /// are no longer left out is read once, `linesNoLongerLeftOut`); this bounds them all
+        /// `askToReadLine`, which needs a frame that changed the picture; a block hidden for its
+        /// numbers that no place of the plan reaches into any more is dropped and its place read
+        /// once, `dropHiddenBlocksNothingReads`: a block read from a still picture fits its
+        /// numbers, so it is not hidden again; the place where lines are no longer left out is
+        /// read once, `linesNoLongerLeftOut`); this bounds them all
         /// together (on a picture that nothing changes: any change anywhere, such as a blinking
         /// cursor, lets the next passes begin anew), also two of them that keep starting each
         /// other anew, and a recognizer that keeps failing. A screen that came to rest is read a
@@ -543,7 +549,7 @@ final class OverlayTracker {
         /// another one. Its translation would show a number that is not there. Judged whenever it
         /// is found (`moveBlocks`, `makeBlock`); its place is read again once everything over it
         /// rests (`askToReadLine`: the whole line of a block of one line, the box of a
-        /// paragraph). When no place of the plan asks for it any more, it is dropped and its
+        /// paragraph). When no place of the plan reaches into it any more, it is dropped and its
         /// place is read as new text (`dropHiddenBlocksNothingReads`).
         var numbersDifferSince: TimeInterval?
         /// It showed whole and stayed where it was while its scrolling area moved, outside of that
@@ -2140,10 +2146,10 @@ final class OverlayTracker {
     }
 
     /// A block that is not drawn for its numbers (`Block.numbersDifferSince`) waits for a
-    /// reading of its place. When no place of the plan covers it any more (its readings came
-    /// back cut, in separate lines or not at all, and the rereads were used up), it would stay
-    /// hidden for good: it is dropped, and its place is read once as new text. (Once: a reading
-    /// that finds nothing there leaves nothing to wait for.)
+    /// reading of its place. When no place of the plan reaches into it any more (its readings
+    /// came back cut, in separate lines or not at all, and the rereads were used up), it would
+    /// stay hidden for good: it is dropped, and its place is read once as new text. (Once: a
+    /// reading that finds nothing there leaves nothing to wait for.)
     private func dropHiddenBlocksNothingReads(bounds: CGRect, time: TimeInterval) {
         var dropped: Set<Int> = []
         for block in tracked where block.numbersDifferSince != nil && block.seen != nil {
