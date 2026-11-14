@@ -35,6 +35,9 @@ enum Showcase {
                                     deviceName: live?.kind == .android ? "Phone" : "iPhone",
                                     modelIdentifier: model, muted: false)
         session.state = .live
+        // The rail shows Translate lit while the mirrored session translates: its picture holds
+        // the translations
+        session.showTranslating(live?.isTranslating ?? false)
         // Show the tool rail's device buttons; afterwards control belongs to the real session again
         let liveControl = live?.control
         session.control = liveControl

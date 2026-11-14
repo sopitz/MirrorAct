@@ -96,6 +96,11 @@ final class MirrorSession: ObservableObject, Identifiable {
     /// translates the text on the screen in place (see `ScreenTranslator`)
     let translator: ScreenTranslator
     @Published private(set) var isTranslating = false
+    #if DEBUG
+    /// For the README pictures (`Showcase`): the session a picture is drawn from shows Translate
+    /// the way the mirrored session has it, though no translator of its own runs
+    func showTranslating(_ translating: Bool) { isTranslating = translating }
+    #endif
 
     var onMuteChange: ((Bool) -> Void)?
     /// window was closed: stop the source

@@ -96,6 +96,28 @@ final class ShowcaseTests: XCTestCase {
         }
     }
 
+    /// The picture of the mirror window shows Translate the way the mirrored session has it: lit
+    /// while that one translates (a picture of a translated screen once showed the button as off,
+    /// because the picture is drawn from a session of its own). The start window, which shows no
+    /// session, comes out the same both times.
+    func testTheRailShowsTranslateAsTheMirroredSessionHasIt() throws {
+        let session = MirrorSession(id: "showcase-test", kind: .android, deviceName: "Phone",
+                                    modelIdentifier: "Pixel", muted: true)
+        func pixels(_ name: String, translating: Bool) throws -> Data {
+            session.showTranslating(translating)
+            let dir = folder.appendingPathComponent(translating ? "on" : "off")
+            Showcase.export(to: dir, session: session, scale: 1)
+            let file = dir.appendingPathComponent("\(name).png")
+            let source = try XCTUnwrap(CGImageSourceCreateWithURL(file as CFURL, nil), name)
+            let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil), name)
+            return try XCTUnwrap(image.dataProvider?.data as Data?, name)
+        }
+        let mirrorOff = try pixels("mirror", translating: false), startOff = try pixels("start-window", translating: false)
+        let mirrorOn = try pixels("mirror", translating: true), startOn = try pixels("start-window", translating: true)
+        XCTAssertEqual(startOn, startOff, "the same picture is drawn the same twice")
+        XCTAssertNotEqual(mirrorOn, mirrorOff, "the Translate button is lit")
+    }
+
     /// The pictures have the size of their canvas at the scale asked for
     func testExportedPicturesHaveTheScaleAskedFor() throws {
         let session = MirrorSession(id: "showcase-test", kind: .cable, deviceName: "iPhone",
