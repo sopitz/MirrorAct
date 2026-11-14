@@ -170,10 +170,12 @@ final class OverlayTrackerChangingTests: XCTestCase {
     /// 15 frames a second. The text and the counter are translated as soon as when nothing was
     /// known of the field's pictures: none later by more than a frame on average, and the latest
     /// no later than before or a second; and at least as many of their states as before a
-    /// change was read with its line (45 of the 56).
+    /// change was read with its line (45 of the 56). A debug build plays the first of the four
+    /// points, and 2 s after the word instead of 4 (12 of its 14, `TestBuild`).
     func testTextTypedAfterTheBlinkingCaretIsTranslatedAsSoonAsBefore() {
         var before: [Double?] = [], after: [Double?] = []
-        for phase in 0..<4 {
+        let phases = TestBuild.playsEverything ? 4 : 1
+        for phase in 0..<phases {
             let begin = 3 + 0.14 * Double(phase)
             var states: [(time: TimeInterval, text: String)] = [(0, "Wasser")]
             for letter in "kocher" {
@@ -194,7 +196,7 @@ final class OverlayTrackerChangingTests: XCTestCase {
                 checks.append((state.time, state.text))
                 checks.append((state.time, "Noch \(40 - state.text.count) Zeichen"))
             }
-            let end = states.last!.time + 4
+            let end = states.last!.time + (phases == 4 ? 4 : 2)
             before += delays(Self.unchanged, seconds: end, fps: 15, scene: scene, checks: checks)
             after += delays(OverlayTracker.Configuration(), seconds: end, fps: 15, scene: scene, checks: checks)
         }
@@ -208,7 +210,7 @@ final class OverlayTrackerChangingTests: XCTestCase {
         print("CHANGING typed after:  \(after.map { $0.map { String(format: "%.2f", $0) } ?? "-" })")
         // 45 of the 56 states were translated before a change in a known line was read with
         // that line; nothing known of the pictures (`before`) is not that state and may do better
-        XCTAssertGreaterThanOrEqual(new.count, 45)
+        XCTAssertGreaterThanOrEqual(new.count, phases == 4 ? 45 : 12)
         XCTAssertLessThanOrEqual(new.mean, old.mean + 1.0 / 15)
         XCTAssertLessThanOrEqual(new.worst, max(old.worst, 1))
     }
@@ -252,8 +254,10 @@ final class OverlayTrackerChangingTests: XCTestCase {
     }
 
     /// While the caret blinks (its pictures known), a message comes in above the field, then a
-    /// dialog of three lines appears over the page: each is translated as soon as before.
+    /// dialog of three lines appears over the page: each is translated as soon as before. (A
+    /// debug build plays the message only, `TestBuild`.)
     func testWhatAppearsBesideTheBlinkingCaretIsTranslatedAsSoonAsBefore() {
+        let everything = TestBuild.playsEverything
         let message = Line(text: "Anna: Brauchst du noch etwas", top: 880, fontSize: 42, fontName: "Helvetica")
         let dialog = [Line(text: "Bestellung abschicken", top: 1250, fontSize: 52),
                       Line(text: "Der Betrag wird sofort belastet", top: 1330, fontSize: 40, fontName: "Helvetica"),
@@ -264,9 +268,10 @@ final class OverlayTrackerChangingTests: XCTestCase {
             if time >= 9 { shown.lines += dialog }
             return shown
         }
-        let checks = [(time: 6.0, text: message.text)] + dialog.map { (time: 9.0, text: $0.text) }
-        let before = delays(Self.unchanged, seconds: 12, scene: scene, checks: checks)
-        let after = delays(OverlayTracker.Configuration(), seconds: 12, scene: scene, checks: checks)
+        let checks = [(time: 6.0, text: message.text)] + (everything ? dialog.map { (time: 9.0, text: $0.text) } : [])
+        let seconds = everything ? 12.0 : 7
+        let before = delays(Self.unchanged, seconds: seconds, scene: scene, checks: checks)
+        let after = delays(OverlayTracker.Configuration(), seconds: seconds, scene: scene, checks: checks)
         print("CHANGING beside: before \(before) after \(after)")
         for index in checks.indices {
             XCTAssertNotNil(after[index], checks[index].text)
@@ -279,21 +284,23 @@ final class OverlayTrackerChangingTests: XCTestCase {
     /// without the caret. (A pass that read a new value forgot what was known of every tile of
     /// its region, the caret's too; the caret was read again with its line at the next blink, and
     /// that pass kept the counter's next value waiting: a third of the values were never drawn.)
+    /// A debug build plays the first 12 values, of which one may be missed (`TestBuild`).
     func testACounterBesideTheBlinkingCaretKeepsItsValues() {
+        let values = TestBuild.playsEverything ? 40 : 12
         func counter(_ time: TimeInterval) -> Line {
             let value = time < 6 ? 60 : 60 - Int((time - 6) / 0.5)
             return Line(text: "Noch \(value) Zeichen", top: 1090, fontSize: 36, fontName: "Helvetica")
         }
         var checks: [(time: TimeInterval, text: String)] = []
-        for step in 0..<40 { checks.append((6 + 0.5 * Double(step), "Noch \(60 - step) Zeichen")) }
-        let delays = delays(OverlayTracker.Configuration(), seconds: 27, scene: { time in
+        for step in 0..<values { checks.append((6 + 0.5 * Double(step), "Noch \(60 - step) Zeichen")) }
+        let delays = delays(OverlayTracker.Configuration(), seconds: 6 + 0.5 * Double(values) + 1, scene: { time in
             var shown = Self.caretScene(time)
             shown.lines.append(counter(time))
             return shown
         }, checks: checks)
         let found = delays.compactMap { $0 }
         print("CHANGING counter: \(found.count) of \(checks.count), worst \(found.max() ?? -1)")
-        XCTAssertGreaterThanOrEqual(found.count, checks.count - 2)
+        XCTAssertGreaterThanOrEqual(found.count, checks.count - (values == 40 ? 2 : 1))
         XCTAssertLessThan(found.max() ?? .infinity, 0.5)
     }
 
@@ -314,10 +321,15 @@ final class OverlayTrackerChangingTests: XCTestCase {
     // MARK: What keeps changing
 
     /// Counts the passes over 60 s (10 frames a second) and 600 s (5 frames a second) after
-    /// 5 s in which the page is read and translated
-    private func passes(_ scene: (TimeInterval) -> Scene) -> (minute: Int, tenMinutes: Int, sent: [String]) {
+    /// 5 s in which the page is read and translated; a debug build plays 20 s at 10 frames a
+    /// second only (`TestBuild`)
+    private func passes(_ scene: (TimeInterval) -> Scene) -> (minute: Int, tenMinutes: Int?, sent: [String]) {
         var seed: UInt64 = 1
         let tracker = OverlayTracker()
+        guard TestBuild.playsEverything else {
+            let first = run(tracker, from: 0, seconds: 25, fps: 10, seed: &seed, scene: scene)
+            return (first.passes(from: 5, to: 25), nil, first.sent)
+        }
         let first = run(tracker, from: 0, seconds: 65, fps: 10, seed: &seed, scene: scene)
         let long = run(OverlayTracker(), from: 0, seconds: 605, fps: 5, seed: &seed, scene: scene)
         return (first.passes(from: 5, to: 65), long.passes(from: 5, to: 605), first.sent)
@@ -329,9 +341,9 @@ final class OverlayTrackerChangingTests: XCTestCase {
     /// core), and the bound on the passes over a picture that does not change never applied.
     func testABlinkingCaretIsNotReadAgainAndAgain() {
         let counts = passes { Self.caretScene($0) }
-        print("CHANGING caret: \(counts.minute) passes in 60 s, \(counts.tenMinutes) in 600 s")
+        print("CHANGING caret: \(counts.minute) passes in the first part, \(counts.tenMinutes.map(String.init) ?? "-") in 600 s")
         XCTAssertEqual(Set(counts.sent), [Self.heading.text, "Wasserkocher", Self.note.text])
         XCTAssertLessThanOrEqual(counts.minute, 6)
-        XCTAssertLessThanOrEqual(counts.tenMinutes, 6)
+        if let tenMinutes = counts.tenMinutes { XCTAssertLessThanOrEqual(tenMinutes, 6) }
     }
 }

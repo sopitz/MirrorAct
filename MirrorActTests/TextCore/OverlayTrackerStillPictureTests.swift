@@ -360,8 +360,9 @@ final class OverlayTrackerStillPictureTests: XCTestCase {
 
     /// The screen of `testTheTitleOfABarStaysDrawnAfterTheScreenSlidInAndThePageScrolls`; once
     /// the page rests the title becomes `changed` (other pixels where it is) or its right part is
-    /// covered for `coverFrames` frames. Returns in how many of the 300 frames after that the
-    /// translation of `changed` is drawn, and in how many from the fourth on the old one is.
+    /// covered for `coverFrames` frames. Returns in how many of the 300 frames after that (150 in a
+    /// debug build, `TestBuild`) the translation of `changed` is drawn, and in how many from the
+    /// fourth on the old one is.
     private func barTitleAtRest(initial: String, changed: String,
                                 coverFrames: Int = 0) -> (drawn: Int, frames: Int, stale: Int) {
         let screen = SyntheticScreen(seed: 5)
@@ -388,10 +389,13 @@ final class OverlayTrackerStillPictureTests: XCTestCase {
             }
             return blocks
         }
+        // (the thumbnail of each offset is made once: a debug build takes long to make one)
+        var thumbnails: [Int: LumaImage] = [:]
         func frame(shift: Int, offset: Int) -> [PlacedBlock] {
             time += 1.0 / 30
             seed += 1
-            var image = screen.thumbnail(offset: offset)
+            if thumbnails[offset] == nil { thumbnails[offset] = screen.thumbnail(offset: offset) }
+            var image = thumbnails[offset]!
             if shift > 0 {
                 let moved = shift / SyntheticScreen.scale
                 var pixels = [UInt8](repeating: 225, count: image.pixels.count)
@@ -433,7 +437,8 @@ final class OverlayTrackerStillPictureTests: XCTestCase {
         covering = coverFrames
         titleText = changed
         var drawn = 0, stale = 0
-        let frames = 300
+        // (a debug build plays half of them: cut to nothing, the title is drawn in none)
+        let frames = TestBuild.playsEverything ? 300 : 150
         for index in 0..<frames {
             let placed = frame(shift: 0, offset: 560)
             if placed.contains(where: { $0.text == "T " + changed }) { drawn += 1 }

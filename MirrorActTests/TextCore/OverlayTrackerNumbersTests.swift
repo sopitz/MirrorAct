@@ -13,8 +13,21 @@ final class OverlayTrackerNumbersTests: XCTestCase {
     typealias Line = OverlayTrackerRestTests.Line
     private static let scale = 3, width = 1080, height = 2400
 
+    /// thumbnails made already, by the lines they show (a debug build takes long to make one)
+    private static var pictures: [String: LumaImage] = [:]
+
     /// The thumbnail of a plain page with `lines` (without noise)
     private static func picture(_ lines: [Line]) -> LumaImage {
+        let key = lines.map { "\($0.text)|\($0.top)|\($0.left)|\($0.fontSize)|\($0.fontName)|\($0.readAs ?? "")" }
+            .joined(separator: "\n")
+        if let known = pictures[key] { return known }
+        let picture = render(lines)
+        if pictures.count >= 64 { pictures = [:] }
+        pictures[key] = picture
+        return picture
+    }
+
+    private static func render(_ lines: [Line]) -> LumaImage {
         var gray = [UInt8](repeating: 245, count: width * height)
         gray.withUnsafeMutableBytes { bytes in
             guard let context = CGContext(data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
@@ -79,13 +92,15 @@ final class OverlayTrackerNumbersTests: XCTestCase {
     /// again. (Before, the translation of the old value stayed drawn over the new one until the
     /// next reading replaced it, about a second at every tick; on the phone, where that reading
     /// could not be taken, for up to 40 s.)
+    /// (A debug build plays the first four values, `TestBuild`.)
     func testASummaryIsNeverDrawnWithAnotherValue() {
         let tracker = OverlayTracker()
+        let values = TestBuild.playsEverything ? [41, 42, 43, 44, 45, 46] : [41, 42, 43, 44]
         let title = Line(text: "Speicherplatz", top: 1363, fontSize: 52)
         func summary(_ used: Int) -> Line {
             Line(text: "\(used) % belegt, \(128 - used) GB frei", top: 1460, fontSize: 42, fontName: "Helvetica")
         }
-        let shownValue = [41, 42, 43, 44, 45, 46].flatMap { Array(repeating: $0, count: 90) }
+        let shownValue = values.flatMap { Array(repeating: $0, count: 90) }
         let cutFrames = 180..<270
         var wrong: [String] = [], right = 0, titleMissing = 0
         let sent = run(tracker, times: shownValue.indices.map { Double($0) / 30 }, seed: 1,
@@ -110,10 +125,11 @@ final class OverlayTrackerNumbersTests: XCTestCase {
         }
         XCTAssertEqual(wrong, [])
         XCTAssertEqual(titleMissing, 0)
-        XCTAssertEqual(sent, ["Speicherplatz", "41 % belegt, 87 GB frei", "42 % belegt, 86 GB frei", "43 % belegt, 85 GB",
-                              "44 % belegt, 84 GB frei", "45 % belegt, 83 GB frei", "46 % belegt, 82 GB frei"])
+        XCTAssertEqual(sent, Array(["Speicherplatz", "41 % belegt, 87 GB frei", "42 % belegt, 86 GB frei", "43 % belegt, 85 GB",
+                                    "44 % belegt, 84 GB frei", "45 % belegt, 83 GB frei", "46 % belegt, 82 GB frei"]
+                                    .prefix(1 + values.count)))
         // (each value drawn for most of its 3 s)
-        XCTAssertGreaterThan(right, 5 * 60, "\(right)")
+        XCTAssertGreaterThan(right, (values.count - 1) * 60, "\(right)")
     }
 
     // MARK: A paragraph whose number changes in place
@@ -261,11 +277,12 @@ final class OverlayTrackerNumbersTests: XCTestCase {
     /// each text sent once. Two lines and five, the number in the middle of a line, also when it
     /// gains a digit (9 to 10). (Before, only blocks of one line were judged: the paragraph showed
     /// the translation with the old number until its place was read again, on the phone for about
-    /// 4 s at every tick.)
+    /// 4 s at every tick.) A debug build plays two lines (`TestBuild`).
     func testAParagraphIsNeverDrawnWithAnotherNumber() {
-        for (name, paragraph, values) in [("two lines", Self.messages, [22, 27, 33]),
-                                          ("five lines", Self.folders, [15, 18, 22]),
-                                          ("a digit more", Self.messages, [8, 9, 10, 11])] as [(String, (Int) -> [Line], [Int])] {
+        let cases: [(String, (Int) -> [Line], [Int])] = [("two lines", Self.messages, [22, 27, 33]),
+                                                         ("five lines", Self.folders, [15, 18, 22]),
+                                                         ("a digit more", Self.messages, [8, 9, 10, 11])]
+        for (name, paragraph, values) in TestBuild.playsEverything ? cases : Array(cases.prefix(1)) {
             let result = changingParagraph(paragraph, values: values, seed: 21)
             XCTAssertEqual(result.wrong, [], name)
             XCTAssertEqual(result.wrongMoving, 0, name)
@@ -293,21 +310,27 @@ final class OverlayTrackerNumbersTests: XCTestCase {
     /// A paragraph whose numbers do not change, at rest and while the page scrolls (60 and 150
     /// pixels a second for 5 s, then at rest), on a link that adds noise of 2 and of 6 grey
     /// levels: it is drawn in as many frames as without the rule, and only its one text is sent.
-    /// Also in small text and in a serif font (at rest and at 60 pixels a second, noise of 6).
+    /// Also in small text and in a serif font (at rest and at 60 pixels a second, noise of 6). A
+    /// debug build plays five lines at 60 pixels a second with noise of 6, and only 4 s: 2 s of
+    /// them moving (`TestBuild`).
     func testAParagraphWhoseNumberStaysIsNotHidden() {
         var withoutRule = OverlayTracker.Configuration()
         withoutRule.numberFitFactor = 1e9
-        for (kind, paragraph, scrolls, noises) in [
-            ("five lines", Self.folders, [0.0, 60, 150], [2, 6]),
-            ("small text", Self.smallFolders, [0.0, 60], [6]),
-            ("serif", Self.serifFolders, [0.0, 60], [6])] as [(String, (Int) -> [Line], [Double], [Int])] {
+        let everything = TestBuild.playsEverything
+        let cases: [(String, (Int) -> [Line], [Double], [Int])] = everything
+            ? [("five lines", Self.folders, [0.0, 60, 150], [2, 6]),
+               ("small text", Self.smallFolders, [0.0, 60], [6]),
+               ("serif", Self.serifFolders, [0.0, 60], [6])]
+            : [("five lines", Self.folders, [60], [6])]
+        let seconds = everything ? 9.0 : 4, moving = everything ? 2.0...7 : 1.0...3
+        for (kind, paragraph, scrolls, noises) in cases {
             for scroll in scrolls {
                 for noise in noises {
                     let name = "\(kind), \(scroll) px/s, noise \(noise)"
-                    let with = changingParagraph(paragraph, values: [15], seconds: 9, scroll: scroll, moving: [2...7],
-                                                 noise: noise, seed: 31)
-                    let without = changingParagraph(paragraph, values: [15], seconds: 9, scroll: scroll, moving: [2...7],
-                                                    noise: noise, seed: 31, configuration: withoutRule)
+                    let with = changingParagraph(paragraph, values: [15], seconds: seconds, scroll: scroll,
+                                                 moving: [moving], noise: noise, seed: 31)
+                    let without = changingParagraph(paragraph, values: [15], seconds: seconds, scroll: scroll,
+                                                    moving: [moving], noise: noise, seed: 31, configuration: withoutRule)
                     XCTAssertEqual(with.wrongMoving, 0, name)
                     XCTAssertEqual(with.wrong, [], name)
                     XCTAssertGreaterThanOrEqual(with.right, without.right, name)
@@ -324,8 +347,9 @@ final class OverlayTrackerNumbersTests: XCTestCase {
     /// text: the number is right again within two seconds, never wrong at rest, and the page is
     /// not read on without end. (Before, the paragraph stayed hidden for good, 9 s without its
     /// translation to the end of the run, the passes stopped.)
+    /// (A debug build plays the lines apart for good, `TestBuild`.)
     func testAHiddenParagraphThatNothingReadsIsReadAsNewText() {
-        for apartUntil in [6.0, 99] {
+        for apartUntil in TestBuild.playsEverything ? [6.0, 99] : [99] {
             let name = "apart until \(apartUntil)"
             let result = changingParagraph(Self.messages, values: [22, 27, 27, 27], seed: 41,
                                            readApart: 3..<apartUntil, passesAfter: 8)
@@ -454,12 +478,15 @@ final class OverlayTrackerNumbersTests: XCTestCase {
 
     /// … and four glides in a row (2600 pixels a second each, as the lab's swipes), where the
     /// movement is measured right: every translation stays on its row, and as many are drawn
-    /// while the list moves as without the rule (1688 when it was made).
+    /// while the list moves as without the rule (1688 when it was made). A debug build plays two
+    /// glides, and asks for half as many (`TestBuild`).
     func testGlidesOverRowsThatLookAlikeKeepTheirTranslations() {
-        let result = glide(speed: 2600, slowing: 0.4, swipes: 4)
+        let swipes = TestBuild.playsEverything ? 4 : 2
+        let result = glide(speed: 2600, slowing: 0.4, swipes: swipes)
+        print("NUMBERS glides: \(swipes) swipes, placed while moving \(result.placedMoving)")
         XCTAssertEqual(result.wrongMoving + result.wrongAtRest, 0, "\(result.examples)")
         XCTAssertEqual(result.untranslatedAtRest, 0, "\(result.examples)")
-        XCTAssertGreaterThanOrEqual(result.placedMoving, 1600)
+        XCTAssertGreaterThanOrEqual(result.placedMoving, 1600 * swipes / 4)
     }
 
     // MARK: Rows with long numbers
@@ -480,27 +507,28 @@ final class OverlayTrackerNumbersTests: XCTestCase {
         return lines
     }
 
-    /// The invoices at rest for 3 s, scrolled at `speed` pixels a second for 4 s (30 frames a
-    /// second), then at rest for 4 s: translations placed while the list moves, those that do
-    /// not lie on their text, and lines in full view without their translation from 2 s after
-    /// it stopped
-    private func scrollInvoices(speed: Double, configuration: OverlayTracker.Configuration)
+    /// The invoices at rest for `before` s, scrolled at `speed` pixels a second for `scrolling` s
+    /// (30 frames a second), then at rest for `after` s: translations placed while the list
+    /// moves, those that do not lie on their text, and lines in full view without their
+    /// translation from 2 s after it stopped
+    private func scrollInvoices(speed: Double, configuration: OverlayTracker.Configuration,
+                                before: Double = 3, scrolling: Double = 4, after: Double = 4)
         -> (placedMoving: Int, wrong: Int, untranslatedAtRest: Int, examples: [String]) {
         var times: [Double] = [], offsets: [Double] = []
         var time = 0.0
-        while time < 3 {
+        while time < before {
             times.append(time)
             offsets.append(0)
             time += 1.0 / 30
         }
         let start = time
-        while time < start + 4 {
+        while time < start + scrolling {
             time += 1.0 / 30
             times.append(time)
             offsets.append(speed * (time - start))
         }
         let stopped = time
-        while time < stopped + 4 {
+        while time < stopped + after {
             time += 1.0 / 30
             times.append(time)
             offsets.append(offsets.last ?? 0)
@@ -524,13 +552,18 @@ final class OverlayTrackerNumbersTests: XCTestCase {
     /// against 2764 at 150 pixels a second, where the movement starts), and none more is missing
     /// once it rests. (When the digits were judged against the other letters only, the
     /// order number's line was taken for another at the first frame of the movement at 150
-    /// pixels a second and stayed untranslated at rest.)
+    /// pixels a second and stayed untranslated at rest.) A debug build plays 150 pixels a second,
+    /// 1 s at rest, 1.2 s moving and 2.5 s at rest (`TestBuild`).
     func testASlowScrollOverLongNumbersDrawsAsManyTranslations() {
         var withoutRule = OverlayTracker.Configuration()
         withoutRule.numberFitFactor = 1e9
-        for speed in [60.0, 150.0] {
-            let with = scrollInvoices(speed: speed, configuration: OverlayTracker.Configuration())
-            let without = scrollInvoices(speed: speed, configuration: withoutRule)
+        let everything = TestBuild.playsEverything
+        let (before, scrolling, after) = everything ? (3.0, 4.0, 4.0) : (1.0, 1.2, 2.5)
+        for speed in everything ? [60.0, 150.0] : [150] {
+            let with = scrollInvoices(speed: speed, configuration: OverlayTracker.Configuration(),
+                                      before: before, scrolling: scrolling, after: after)
+            let without = scrollInvoices(speed: speed, configuration: withoutRule,
+                                         before: before, scrolling: scrolling, after: after)
             XCTAssertEqual(with.wrong, 0, "\(speed): \(with.examples)")
             XCTAssertGreaterThanOrEqual(Double(with.placedMoving), 0.97 * Double(without.placedMoving),
                                         "\(speed): \(with.placedMoving) against \(without.placedMoving)")

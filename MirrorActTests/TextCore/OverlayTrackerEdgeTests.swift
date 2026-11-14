@@ -41,7 +41,7 @@ final class OverlayTrackerEdgeTests: XCTestCase {
     /// edge of the frame by `bottomShare` of it, in between in proportion (a stretch, not a
     /// movement of the whole page)
     private static func frame(_ page: (pixels: [UInt8], height: Int), offset: Int, pull: Double,
-                              bottomShare: Double = 0.4, bottomBar: Int? = nil, noiseSeed: UInt64) -> LumaImage {
+                              bottomShare: Double = 0.4, bottomBar: Int? = nil, noiseSeed: UInt64?) -> LumaImage {
         var frame = [UInt8](repeating: 225, count: width * height)
         let span = Double(height - topBar)
         for y in topBar..<(bottomBar ?? height) {
@@ -75,6 +75,7 @@ final class OverlayTrackerEdgeTests: XCTestCase {
             }
         }
         let image = LumaImage(width: width, height: height, pixels: frame).downsampled(by: scale)
+        guard let noiseSeed else { return image }
         return SyntheticPage.noisy(image, amount: 2, seed: noiseSeed)
     }
 
@@ -89,9 +90,11 @@ final class OverlayTrackerEdgeTests: XCTestCase {
     /// so the movement seems to end above it, in two frames in a row. At rest the label is
     /// translated and drawn, and nothing cuts it at its bottom: no edge is kept above the bar.
     /// (Before, the edge learned in those frames was kept at rest: the label was drawn cut
-    /// through its letters, or never translated.)
+    /// through its letters, or never translated.) A debug build plays the first of the four
+    /// stretches (`TestBuild`).
     func testTheLastLineIsDrawnWholeAfterThePageSprangBackFromAStretch() throws {
-        for (share, peak) in [(0.5, 42.0), (0.6, 42.0), (0.6, 30.0), (0.9, 60.0)] {
+        let stretches = [(0.5, 42.0), (0.6, 42.0), (0.6, 30.0), (0.9, 60.0)]
+        for (share, peak) in TestBuild.playsEverything ? stretches : Array(stretches.prefix(1)) {
             let lines = 12, bar = 760
             let page = Self.page(lines: lines, seed: 41, lastLineRight: 140)
             // at rest the last line lies from y 600 to 624, plain page below it down to the bar
@@ -100,11 +103,17 @@ final class OverlayTrackerEdgeTests: XCTestCase {
             var time = 0.0
             var seed: UInt64 = 1
             var offset = rest - 240
+            // (the frame without noise of each offset and pull is made once: a debug build takes long
+            // to make one)
+            var clean: [String: LumaImage] = [:]
             func show(_ pull: Double) -> FrameUpdate {
                 seed += 1
                 time += 1.0 / 60
-                return tracker.advance(Self.frame(page, offset: offset, pull: pull, bottomShare: share, bottomBar: bar,
-                                                  noiseSeed: seed), scale: Self.scale, time: time)
+                let key = "\(offset) \(pull)"
+                if clean[key] == nil {
+                    clean[key] = Self.frame(page, offset: offset, pull: pull, bottomShare: share, bottomBar: bar, noiseSeed: nil)
+                }
+                return tracker.advance(SyntheticPage.noisy(clean[key]!, amount: 2, seed: seed), scale: Self.scale, time: time)
             }
             func readWhatIsDue() {
                 guard let due = tracker.recognitionDue, due <= time, let request = tracker.beginRecognition(time: time)
@@ -176,8 +185,11 @@ final class OverlayTrackerEdgeTests: XCTestCase {
         let lines = 30
         let page = Self.page(lines: lines, seed: 43)
         let barTop = 684
+        // (the frame without noise of each offset is made once: a debug build takes long to make one)
+        var clean: [Int: LumaImage] = [:]
         func frame(offset: Int, bar: Bool, noiseSeed: UInt64) -> LumaImage {
-            var image = Self.frame(page, offset: offset, pull: 0, noiseSeed: noiseSeed)
+            if clean[offset] == nil { clean[offset] = Self.frame(page, offset: offset, pull: 0, noiseSeed: nil) }
+            var image = SyntheticPage.noisy(clean[offset]!, amount: 2, seed: noiseSeed)
             guard bar else { return image }
             // an opaque bar with a separator and two buttons (thumbnail pixels)
             for y in (barTop / Self.scale)..<(Self.height / Self.scale) {
@@ -262,9 +274,10 @@ final class OverlayTrackerEdgeTests: XCTestCase {
         for line in below {
             XCTAssertTrue(update.placed.contains { $0.text == "T Line \(line)" && $0.visibleRect == nil }, "line \(line)")
         }
-        // and the still page is not read on and on: nothing in a minute
+        // and the still page is not read on and on: nothing in a minute (in a debug build in
+        // 5 s, `TestBuild`)
         let readsAtRest = reads
-        for _ in 0..<3600 {
+        for _ in 0..<(TestBuild.playsEverything ? 3600 : 300) {
             _ = show()
             readWhatIsDue()
         }
