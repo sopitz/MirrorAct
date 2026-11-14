@@ -692,7 +692,8 @@ final class OverlayTracker {
 
     /// Counts for every tile how often in a row it stayed while the content around it moved (a
     /// movement too short to tell, `Configuration.overlayMinShift`, neither counts nor breaks
-    /// the row)
+    /// the row; the length is that of the movement that judged the tile,
+    /// `MotionEstimator.stillShifts`)
     private func updateOverlays() {
         let count = estimator.kinds.count
         if overlayHits.count != count {
@@ -705,7 +706,7 @@ final class OverlayTracker {
                 overlayHits[tile] = 0
             case .still, .plain:
                 let verdict = estimator.stillVerdicts[tile]
-                guard verdict == 0 || isLongEnoughToTell(tile: tile) else { continue }
+                guard verdict == 0 || estimator.stillShifts[tile] >= configuration.overlayMinShift else { continue }
                 if verdict == MotionEstimator.stillAgainstMotion {
                     overlayHits[tile] = min(200, overlayHits[tile] + 1)
                     let box = estimator.stayBoxes[tile]
@@ -715,21 +716,6 @@ final class OverlayTracker {
                 }
             }
         }
-    }
-
-    /// The movement that judged a tile (the first of this frame whose area takes it in, as
-    /// `MotionEstimator` judges them) is long enough to tell a tile that stays from one that
-    /// moved with the content (`Configuration.overlayMinShift`)
-    private func isLongEnoughToTell(tile: Int) -> Bool {
-        let size = configuration.tileSize
-        let row = tile / max(1, estimator.columns), column = tile % max(1, estimator.columns)
-        for motion in estimator.motions where !motion.area.isEmpty {
-            let area = motion.area
-            guard row >= area.y / size, row <= (area.maxY - 1) / size, column >= area.x / size,
-                  column <= (area.maxX - 1) / size else { continue }
-            return max(abs(motion.dx), abs(motion.dy)) >= configuration.overlayMinShift
-        }
-        return true
     }
 
     /// `rect` (thumbnail pixels) without what lies over the content there: cut off from the side

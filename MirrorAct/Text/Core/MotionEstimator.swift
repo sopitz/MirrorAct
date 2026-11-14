@@ -106,6 +106,11 @@ final class MotionEstimator {
     /// for a tile `stillAgainstMotion`: the pixels around it (in it and its neighbours) that stay
     /// in place and do not fit the movement – where the thing that stays shows
     private(set) var stayBoxes: [ThumbnailRect] = []
+    /// for a tile with a verdict (`stillVerdicts`): how far the movement that judged it moved
+    /// (thumbnail pixels, the longer of its two directions) – a tile inside the areas of two
+    /// movements is judged by the first that takes it between tiles it moved, not always the
+    /// first whose area holds it
+    private(set) var stillShifts: [Double] = []
 
     private var width = 0
     private var height = 0
@@ -231,6 +236,7 @@ final class MotionEstimator {
         valueSum = [Int32](repeating: 0, count: count)
         stillVerdicts = [UInt8](repeating: 0, count: count)
         stayBoxes = [ThumbnailRect](repeating: .empty, count: count)
+        stillShifts = [Double](repeating: 0, count: count)
         acceptedMean = [Double](repeating: -1, count: count)
         needsFullStructure = true
     }
@@ -432,6 +438,7 @@ final class MotionEstimator {
                                   rect.maxX - shift.whole.x <= width, rect.maxY - shift.whole.y <= height else { continue }
                             let fits = tileDifference(rect, shift: shift, before, now, width: width)
                                 <= configuration.matchBase + 2 * configuration.matchTexture * texture(ofTile: tile)
+                            stillShifts[tile] = max(abs(motion.dx), abs(motion.dy))
                             if fits {
                                 stillVerdicts[tile] = MotionEstimator.stillFits
                             } else {

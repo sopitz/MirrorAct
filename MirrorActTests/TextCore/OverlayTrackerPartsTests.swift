@@ -406,6 +406,54 @@ final class MotionEstimatorTests: XCTestCase {
         }
         return copy
     }
+
+    /// A badge stays over a strip that glides sideways by 6 thumbnail pixels a frame, inside a
+    /// page that creeps by 1. The page's area holds the badge, but its column shows nothing that
+    /// moves with the page below it, so the strip's movement judges it: the length recorded for
+    /// the badge is the strip's, not that of the page, the first movement whose area holds it
+    /// (a hit of a floating thing over a carousel is not dropped as too short to tell)
+    func testATileIsJudgedByTheMovementThatTakesItBetweenItsTiles() throws {
+        let width = 400, height = 800
+        let page = SyntheticPage.page(width: width, height: 1200, seed: 41)
+        let strip = SyntheticPage.page(width: 800, height: 200, seed: 42, lineGap: 12)
+        let badge = (x: 288, y: 560, side: 32)
+        func frame(_ step: Int) -> LumaImage {
+            var pixels = [UInt8](repeating: 225, count: width * height)
+            for y in 60..<780 {
+                for x in 0..<width {
+                    if y >= 520 && y < 640 {
+                        pixels[y * width + x] = strip[(y - 520 + 20) * 800 + x + 12 * step]
+                    } else if y < 500 || (y >= 660 && x < 200) {
+                        pixels[y * width + x] = page[(y + 2 * step) * width + x]
+                    } else {
+                        pixels[y * width + x] = 240
+                    }
+                }
+            }
+            for y in badge.y..<(badge.y + badge.side) {
+                for x in badge.x..<(badge.x + badge.side) {
+                    pixels[y * width + x] = (x / 4 + y / 4) % 2 == 0 ? 30 : 200
+                }
+            }
+            return LumaImage(width: width, height: height, pixels: pixels).downsampled(by: 2)
+        }
+        let estimator = MotionEstimator(configuration: configuration)
+        XCTAssertTrue(estimator.analyze(previous: frame(0), current: frame(1), priors: []))
+        let motions = estimator.motions
+        XCTAssertEqual(motions.count, 2, "\(motions)")
+        guard motions.count == 2 else { return }
+        let tileSize = configuration.tileSize
+        let column = (badge.x / 2 + 4) / tileSize, row = (badge.y / 2 + 4) / tileSize
+        let tile = row * estimator.columns + column
+        let page0 = motions[0], strip1 = motions[1]
+        XCTAssertEqual(page0.dy, -1, accuracy: 0.2, "the page creeps")
+        XCTAssertEqual(strip1.dx, -6, accuracy: 0.2, "the strip glides")
+        XCTAssertTrue(page0.area.contains(x: Double(column * tileSize + 4), y: Double(row * tileSize + 4)),
+                      "the page's area holds the badge: \(page0.area)")
+        XCTAssertEqual(estimator.kinds[tile], .still)
+        XCTAssertEqual(estimator.stillVerdicts[tile], MotionEstimator.stillAgainstMotion)
+        XCTAssertEqual(estimator.stillShifts[tile], 6, accuracy: 0.2, "the strip's movement judged it")
+    }
 }
 
 final class ReadingPlanTests: XCTestCase {
