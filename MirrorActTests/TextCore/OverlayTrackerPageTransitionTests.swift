@@ -167,8 +167,12 @@ final class OverlayTrackerPageTransitionTests: XCTestCase {
         return steps
     }
 
-    /// The blocks of the page before do not outlive it because no frame comes: they could not be
-    /// found, and they are forgotten after `lostLifetime` also on a picture that stands still.
+    /// Nothing of the page before is kept once the new page has stood still for a few seconds,
+    /// although no frame comes then (blocks that could not be found are forgotten after
+    /// `lostLifetime` on a still picture too). As the rules stand, what this test fails without
+    /// is the forgetting of the slide's stale scrolling area (`OverlayTracker.updateScrollAreas`):
+    /// with that rule in place it also passes without the forgetting at rest, which no test
+    /// shows on its own.
     func testTheLinesOfThePageBeforeAreForgottenOnAStillPicture() {
         let outcome = play(Self.slideSteps, last: Self.connected, rest: 4)
         for line in Self.network {
