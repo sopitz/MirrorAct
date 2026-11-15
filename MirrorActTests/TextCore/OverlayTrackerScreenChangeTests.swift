@@ -51,8 +51,9 @@ final class OverlayTrackerScreenChangeTests: XCTestCase {
             let part = box.intersection(region)
             guard !part.isNull, part.height >= 0.9 * box.height, part.width >= 0.1 * box.width else { continue }
             let letters = Array(line.text)
-            let from = Int(((part.minX - box.minX) / box.width * Double(letters.count)).rounded(.up))
-            let to = Int(((part.maxX - box.minX) / box.width * Double(letters.count)).rounded(.down))
+            // (a thousandth of a letter is rounding, not a letter cut off)
+            let from = Int(((part.minX - box.minX) / box.width * Double(letters.count) - 0.001).rounded(.up))
+            let to = Int(((part.maxX - box.minX) / box.width * Double(letters.count) + 0.001).rounded(.down))
             guard to > from else { continue }
             let text = String(letters[from..<to]).trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
@@ -142,5 +143,82 @@ final class OverlayTrackerScreenChangeTests: XCTestCase {
         }
         XCTAssertNil(tracker.recognitionDue)
         XCTAssertLessThanOrEqual(passesAfter, 30, "passes over the new page")
+    }
+
+    /// … and Display, read at rest
+    private static let display = [
+        Line("Display & Touchbedienung", 19.3, 114.0, 233.4, 80.6),
+        Line("Helligkeit", 21.0, 240.7, 52.3, 11.7), Line("Helligkeit", 22.0, 278.7, 74.7, 18.7),
+        Line("83 %", 19.7, 301.0, 26.7, 11.7), Line("Displaysperre", 21.0, 353.3, 75.7, 13.3),
+        Line("Sperrbildschirm", 21.0, 392.0, 124.3, 18.7),
+        Line("Gesamten Inhalt von Benachrichtigungen anzeigen", 21.0, 415.0, 275.3, 13.0),
+        Line("Display automatisch ausschalten", 22.0, 461.7, 257.7, 17.3), Line("Nicht festgelegt", 21.0, 483.7, 88.3, 13.0),
+        Line("Darstellung", 19.3, 535.0, 64.3, 13.0), Line("Dunkles Design", 22.0, 573.3, 120.7, 18.7),
+        Line("Wird aktiviert, wenn der Modus Bedtime", 21.0, 596.7, 227.7, 15.0), Line("beginnt", 21.0, 611.7, 43.0, 13.0),
+        Line("Bildschirmschoner", 21.0, 657.0, 148.7, 16.3), Line("An / Uhr", 21.0, 680.0, 46.7, 11.0),
+        Line("Anzeigegröße und Text", 21.0, 725.7, 182.3, 18.7), Line("Navigationsmodus", 21.0, 778.0, 149.7, 17.3),
+    ]
+
+    /// Settings goes from its main list to Network & internet and, later, from Apps to Display,
+    /// with Translate on: the frames of the lab's phone (`Frames/DisplayLastRow`, thumbnails as
+    /// the app made them, at the times they came; the pages in between are left out). While
+    /// Network & internet slides in, the page is taken for one scrolling area whose bottom edge
+    /// is found to the pixel just above the navigation bar's handle (the page rises by a pixel at
+    /// the end, the handle stays), and a misjudged movement makes a narrow area down the left
+    /// side of the page. Display's last row, "Navigationsmodus", reaches below that edge: read
+    /// as cut by it, it was asked to be read again, and that place, which cannot be seen whole,
+    /// never became due on the still page. The edge does not hold once the page rests (the rows
+    /// beyond it changed, the ground goes on in them), but the narrow area, lying across the
+    /// rows beyond it, kept it from being checked. An area that lies mostly inside the one whose
+    /// edge is checked is a part of its content and does not keep the check from running; and as
+    /// no frame comes on the still page, the check also runs when a pass ends, before what it read
+    /// is judged (a pass that ended right after the page came to rest read the row as cut). A
+    /// pass takes 0.08 s, as in the other tracker tests: with longer passes the check on a frame
+    /// alone happens to come early enough here, and the check at the end of a pass goes untested.
+    func testTheLastRowAboveTheNavigationHandleIsReadAfterAPageChange() throws {
+        let shown: [(frame: Int, time: TimeInterval)] = [
+            (572, 0.000), (573, 0.967), (574, 1.054), (575, 1.107), (576, 1.165), (577, 1.236), (578, 1.277),
+            (579, 1.304), (580, 1.347), (581, 1.377), (582, 1.437), (583, 1.448), (584, 1.458), (585, 1.467),
+            (586, 1.477), (587, 1.486), (588, 1.498), (589, 1.509), (590, 1.521), (591, 1.533), (592, 1.543),
+            (593, 1.553), (594, 1.565), (595, 1.575), (596, 1.586), (597, 1.595), (598, 1.606), (599, 1.616),
+            (600, 1.650), (711, 4.650), (712, 7.650), (713, 7.747), (714, 7.793), (715, 7.841), (716, 7.932),
+            (717, 7.955), (718, 7.964), (719, 7.974), (720, 7.986), (721, 7.995), (722, 8.005), (723, 8.015),
+            (724, 8.025), (725, 8.035),
+        ]
+        let frames = try shown.map { try thumbnail($0.frame) }
+        let tracker = OverlayTracker()
+        var pending: (request: RecognitionRequest, blocks: [RecognizedBlock], at: TimeInterval)?
+        var placed: [PlacedBlock] = []
+        var passesAtRest = 0
+        for index in frames.indices {
+            // (only the still Display page is read; passes over the frames before it read nothing)
+            let lines = index == frames.count - 1 ? Self.display : []
+            let end = index + 1 < shown.count ? shown[index + 1].time : shown[index].time + 12
+            var time = shown[index].time
+            // like the phone: a frame when the picture changes, and the frame again after a pass
+            placed = tracker.advance(frames[index], scale: Self.scale, time: time).placed
+            repeat {
+                if let job = pending, time >= job.at {
+                    tracker.finishRecognition(job.request, blocks: job.blocks, time: time)
+                    pending = nil
+                    placed = tracker.advance(frames[index], scale: Self.scale, time: time).placed
+                }
+                if pending == nil, let due = tracker.recognitionDue, due <= time,
+                   let request = tracker.beginRecognition(time: time) {
+                    if index == frames.count - 1, time > shown[index].time + 2 { passesAtRest += 1 }
+                    pending = (request, Self.recognize(lines, in: request.region), time + 0.08)
+                }
+                for text in tracker.textsAwaitingTranslation(limit: 50, time: time) {
+                    tracker.setTranslation("T " + text, for: text)
+                }
+                time += 1.0 / 60
+            } while time < end
+            placed = tracker.advance(frames[index], scale: Self.scale, time: time).placed
+        }
+        for line in Self.display {
+            XCTAssertTrue(placed.contains { $0.text == "T " + line.text }, "'\(line.text)' drawn")
+        }
+        XCTAssertNil(tracker.recognitionDue)
+        XCTAssertLessThanOrEqual(passesAtRest, 2, "passes on the still page after its first 2 s")
     }
 }

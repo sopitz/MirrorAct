@@ -1167,18 +1167,24 @@ final class OverlayTracker {
     /// above it: a bar, which shows the same on a still screen. An edge that lies above where the
     /// area's content was seen to reach before (by more than `edgeJitter`) is checked on the
     /// picture at rest: once the area has rested for `restDelay`, and again whenever the picture
-    /// changes while it rests. It does not hold when the `edgeHoldRows` rows beyond it no longer
-    /// show what they showed in the last frame that found it (a row across the area differs by
-    /// more than `matchBase` on average) and the ground of the rows above it goes on in them (the
-    /// median of each row within `plainRange` of theirs: no bar of another shade, no separator),
-    /// unless those rows lie in or within `edgeJitter` of another scrolling area (the page that
-    /// goes on gliding below a banner that came to rest). Then the area reaches down as far as its
-    /// content was seen again, with the edge known there as it was known there: nothing cuts
-    /// translations at the edge that did not hold, and readings there are not taken for cut off
-    /// by it (`cut(_:toViewOf:)`, `cutEdges`). Such edges are learned from frames that do not hold
-    /// at rest: Android stretches a page pulled past its end, its last lines move less than the
-    /// rest, and the movement seems to end above them in two frames in a row; the handle of the
-    /// navigation bar stays while a screen slides in sideways; a banner comes and goes. Only
+    /// changes while it rests (on every frame and, as a still phone sends no frames, when a pass
+    /// ends, before its readings are judged). It does not hold when the `edgeHoldRows` rows beyond
+    /// it no longer show what they showed in the last frame that found it (a row across the area
+    /// differs by more than `matchBase` on average) and the ground of the rows above it goes on in
+    /// them (the median of each row within `plainRange` of theirs: no bar of another shade, no
+    /// separator), unless those rows lie in or within `edgeJitter` of another scrolling area (the
+    /// page that goes on gliding below a banner that came to rest). An area that lies with at least
+    /// half of itself inside this one does not count for that: it is a part of this area's own
+    /// content (a strip that a movement of the page was misjudged for while a screen slid in, a row
+    /// that moved on its own), not content that goes on beyond its edge; otherwise such a strip
+    /// down the side of the page would keep the edge from ever being checked, and the lowest row of
+    /// every later page would be read as cut by the navigation bar's handle. Then the area reaches
+    /// down as far as its content was seen again, with the edge known there as it was known there:
+    /// nothing cuts translations at the edge that did not hold, and readings there are not taken
+    /// for cut off by it (`cut(_:toViewOf:)`, `cutEdges`). Such edges are learned from frames that
+    /// do not hold at rest: Android stretches a page pulled past its end, its last lines move less
+    /// than the rest, and the movement seems to end above them in two frames in a row; the handle
+    /// of the navigation bar stays while a screen slides in sideways; a banner comes and goes. Only
     /// bottom edges are checked: the top edge of a page lies under a title bar whose own content
     /// changes as the page moves (a large title that shrinks, the spinner of a pull to refresh),
     /// and its rows need not stay. The next movement finds an edge again where there is one, and
@@ -1214,10 +1220,14 @@ final class OverlayTracker {
                   columns.clamped(to: 0..<picture.width) == columns, !columns.isEmpty,
                   area.beyondBottom.count == rows * picture.width else { continue }
             areas[index].checkedAt = time
-            // (in or next to another scrolling area: content of its own)
+            // (in or next to another scrolling area: content of its own – not one that lies mostly
+            // inside this area, which is a part of its content)
             let band = ThumbnailRect(x: area.rect.x, y: beyond.lowerBound - configuration.edgeJitter,
                                      width: area.rect.width, height: rows + 2 * configuration.edgeJitter)
-            guard !areas.contains(where: { $0.id != area.id && !$0.rect.intersection(band).isEmpty }) else { continue }
+            guard !areas.contains(where: { other in
+                other.id != area.id && !other.rect.intersection(band).isEmpty
+                    && other.rect.intersection(area.rect).area * 2 < other.rect.area
+            }) else { continue }
             var stays = true
             for (row, y) in beyond.enumerated() {
                 var sum = 0
@@ -2092,6 +2102,9 @@ final class OverlayTracker {
         // (no frame may have come since the picture came to rest: what is lost for long is not
         // taken into what this pass asks to be read again)
         forgetLostBlocks(in: current, time: time)
+        // (nor is a bottom edge that no longer holds taken for cutting off what it read: the
+        // check of `dropBottomEdgesThatDoNotHold` runs before its readings are judged)
+        dropBottomEdgesThatDoNotHold(in: current, time: time)
         // (what it read that had changed, and the texts known before it and where they lie:
         // whether it brought anything new, and where, `Configuration.knownTilePictures`)
         var textsBefore: [String: CGRect] = [:]
