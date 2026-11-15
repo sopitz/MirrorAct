@@ -129,15 +129,24 @@ when the picture under it changes in place, where no movement carries all of it 
 shows (`moveBlocks`): its lines need not share its box equally (the text of a field read as one
 paragraph with a smaller countdown under it), so `numbersFit` may look for its digits on another
 line than theirs. A reading is not taken when, over one of its lines, a movement since the pass
-began carried one end and not the other, and the scrolling area of that movement rested when the
-pass began, holds only a part of the line and lies in its rows or moved it only sideways
-(`isSplitByAMovement`, each line of a paragraph on its own): the rest of the line slid because a
-value in it changed its width ("10" to "9"), and its old value would be drawn over the new one; its
-place is read once everything over it rests. While a list whose rows differ only in a digit or two
-moves fast, a row's translation can still lie over the next row for a frame or two, and while such a
-list glides, a hidden block can be dropped and read before the list rests (more passes, nothing
-wrong drawn). A step of less than a pixel over fewer than `minSecondMotionTiles` tiles that no
-movement of the frame before leads up to is a movement only when those tiles differ from where it
+began carried one end and not the other, and the scrolling area the middle of that line lay in
+rested when the pass began, holds only a part of the line and lies in its rows, or the line moved
+only sideways (`isSplitByAMovement`, each line of a paragraph on its own): the rest of the line slid
+because a value in it changed its width ("10" to "9"), and its old value would be drawn over the new
+one; its place is read once everything over it rests. A reading by a pass that began after one
+change in place and ended just after the next is still taken when `numbersFit` cannot tell the new
+digits from the old (two numbers in one line that change at different times, a caret right after a
+value): its old value is drawn until the next reading, and with slow passes this can keep in step
+with the changes. On a page whose scrolling area last moved sideways (one that slid in), the tail of
+a line whose value changed its width joins that area as a strip gliding sideways does
+(`updateScrollAreas`), so the rules for a line of which only a part moved do not apply and the old
+value can be drawn for up to a second; and a block such a movement placed keeps that place when a
+reading at rest confirms its text (`absorb`), so a fraction of a pixel off, a digit that changes to
+one of the same width can pass `numbersFit` once. While a list whose rows differ only in a digit or
+two moves fast, a row's translation can still lie over another row for up to about a second, and
+while such a list glides, a hidden block can be dropped and read before the list rests (more passes,
+nothing wrong drawn). A step of less than a pixel over fewer than `minSecondMotionTiles` tiles that
+no movement of the frame before leads up to is a movement only when those tiles differ from where it
 says they came from by at most `maxCreepResidual` of how much they differ in place
 (`MotionEstimator.explainsCreep`): digits that tick in their line are a change, not a scrolling area
 of their own.
@@ -162,8 +171,10 @@ cannot be seen completely, at the edge of the frame or of its scrolling area, wa
 movement when it is asked for while what it lies in rests already (`ReadingPlan.dueAtRest`), so on a
 still page it is not read: on a mirrored phone this leaves, now and then, the lowest row of a new
 page (a bottom edge that does not hold is one way there, and another one is not traced yet), rows of
-search results that changed under a keyboard and rows at the ends of a flung list untranslated until
-the page moves (the dump shows such a place with `dueIn` null).
+search results that changed under a keyboard and rows at the edges of a list flung or scrolled fast
+untranslated until the page moves (the dump shows such a place with `dueIn` null). Now and then a
+row of a new page is also left untranslated with no place of the plan over it; that path is not
+traced yet.
 
 A pass at rest that brought nothing new leaves the pictures of the tiles it read known
 (`knownTilePictures`), and a change that shows only known pictures is not read: a blinking caret
@@ -274,8 +285,9 @@ connection), `ShowcaseTests` (the pictures, with Translate as the mirrored sessi
 tracker's long tests (`OverlayTrackerNumbersTests`, `OverlayTrackerEdgeTests`,
 `OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`, `OverlayTrackerCountdownTests`)
 play only a part of their settings in a debug build, chosen so that each still fails without the
-rule it guards (`TestBuild`); a release build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of
-them.
+rule it guards (`TestBuild`; in `OverlayTrackerCountdownTests` the paragraph of two sizes, which
+guards `isSplitByAMovement` for each line of a paragraph, plays in a release build only); a release
+build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of them.
 
 ### The tracking bench
 

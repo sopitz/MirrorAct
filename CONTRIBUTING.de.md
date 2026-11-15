@@ -135,19 +135,31 @@ mit Ziffern wird ebenso verborgen, wenn sich das Bild darunter an Ort ändert, w
 ganz trägt und kein bekanntes Bild zu sehen ist (`moveBlocks`): Seine Zeilen müssen sein Rechteck
 nicht zu gleichen Teilen einnehmen (der Text eines Feldes, mit einem kleineren Countdown darunter zu
 einem Absatz gelesen), also sucht `numbersFit` seine Ziffern unter Umständen auf einer anderen Zeile
-als ihrer. Ein gelesener Text wird nicht übernommen, wenn über einer seiner Zeilen eine Bewegung
-seit Beginn des Durchgangs das eine Ende getragen hat und das andere nicht und der Scrollbereich
-dieser Bewegung ruhte, als der Durchgang begann, nur einen Teil der Zeile enthält und in ihren
-Zeilen liegt oder sie nur seitwärts bewegt hat (`isSplitByAMovement`, jede Zeile eines Absatzes für
-sich): Der Rest der Zeile ist verrutscht, weil ein Wert darin seine Breite geändert hat («10» zu
-«9»), und sein alter Wert würde über den neuen gezeichnet; seine Stelle wird gelesen, sobald alles
-darüber ruht. Während eine Liste, deren Zeilen sich nur in einer oder zwei Ziffern unterscheiden,
-schnell gleitet, kann die Übersetzung einer Zeile für ein oder zwei Bilder noch über der nächsten
-liegen, und während eine solche Liste gleitet, kann ein verborgener Block fallen gelassen und
-gelesen werden, bevor die Liste ruht (mehr Durchgänge, nichts Falsches gezeichnet). Ein Schritt von
-weniger als einem Pixel über weniger als `minSecondMotionTiles` Kacheln, zu dem keine Bewegung des
-Bildes davor hinführt, ist nur dann eine Bewegung, wenn diese Kacheln von dort, woher er sie kommen
-lässt, höchstens `maxCreepResidual`-mal so stark abweichen wie an Ort
+als auf ihrer eigenen. Ein gelesener Text wird nicht übernommen, wenn über einer seiner Zeilen eine
+Bewegung seit Beginn des Durchgangs das eine Ende getragen hat und das andere nicht und der
+Scrollbereich, in dem die Mitte dieser Zeile lag, ruhte, als der Durchgang begann, nur einen Teil
+der Zeile enthält und in ihrer Höhe liegt oder die Zeile nur seitwärts bewegt wurde
+(`isSplitByAMovement`, jede Zeile eines Absatzes für sich): Der Rest der Zeile ist verrutscht, weil
+ein Wert darin seine Breite geändert hat («10» zu «9»), und sein alter Wert würde über den neuen
+gezeichnet; seine Stelle wird gelesen, sobald alles darüber ruht. Was ein Durchgang gelesen hat, der
+nach einer Änderung an Ort begann und gleich nach der nächsten endete, wird noch übernommen, wenn
+`numbersFit` die neuen Ziffern nicht von den alten unterscheiden kann (zwei Zahlen in einer Zeile,
+die sich zu verschiedenen Zeiten ändern, ein Cursor direkt nach einem Wert): Sein alter Wert wird
+bis zum nächsten Lesen gezeichnet, und mit langsamen Durchgängen kann das mit den Änderungen Schritt
+halten. Auf einer Seite, deren Scrollbereich sich zuletzt seitwärts bewegt hat (einer, die
+hereingeglitten ist), wird das Ende einer Zeile, deren Wert seine Breite geändert hat, Teil dieses
+Bereichs, wie ein Streifen, der seitwärts gleitet (`updateScrollAreas`); die Regeln für eine Zeile,
+von der sich nur ein Teil bewegt hat, gelten dann nicht, und der alte Wert kann bis zu einer Sekunde
+lang gezeichnet werden. Und ein Block, den eine solche Bewegung platziert hat, behält diesen Platz,
+wenn ein Lesen auf dem ruhenden Bild seinen Text bestätigt (`absorb`); um einen Bruchteil eines
+Pixels daneben kann so eine Ziffer, die sich in eine gleich breite ändert, einmal als passend gelten
+(`numbersFit`). Während eine Liste, deren Zeilen sich nur in einer oder zwei Ziffern unterscheiden,
+schnell gleitet, kann die Übersetzung einer Zeile bis zu etwa einer Sekunde lang noch über einer
+anderen liegen, und während eine solche Liste gleitet, kann ein verborgener Block fallen gelassen
+und gelesen werden, bevor die Liste ruht (mehr Durchgänge, nichts Falsches gezeichnet). Ein Schritt
+von weniger als einem Pixel über weniger als `minSecondMotionTiles` Kacheln, zu dem keine Bewegung
+des Bildes davor hinführt, ist nur dann eine Bewegung, wenn diese Kacheln von dort, woher er sie
+kommen lässt, höchstens `maxCreepResidual`-mal so stark abweichen wie an Ort
 (`MotionEstimator.explainsCreep`): Ziffern, die sich in ihrer Zeile ändern, sind eine Änderung, kein
 eigener Scrollbereich.
 
@@ -176,8 +188,10 @@ wird, während das, worin sie liegt, schon ruht (`ReadingPlan.dueAtRest`); auf e
 wird sie also nicht gelesen: An einem gespiegelten Telefon bleiben so ab und zu die unterste Zeile
 einer neuen Seite (eine untere Kante, die nicht hält, ist ein Weg dorthin, ein anderer ist noch
 nicht verfolgt), Zeilen von Suchergebnissen, die sich unter einer Tastatur geändert haben, und
-Zeilen an den Enden einer mit Schwung gewischten Liste unübersetzt, bis sich die Seite bewegt (der
-Dump zeigt eine solche Stelle mit `dueIn` null).
+Zeilen an den Rändern einer Liste, die mit Schwung gewischt oder schnell gescrollt wurde,
+unübersetzt, bis sich die Seite bewegt (der Dump zeigt eine solche Stelle mit `dueIn` null). Ab und
+zu bleibt auch eine Zeile einer neuen Seite unübersetzt, ohne dass eine Stelle des Plans über ihr
+liegt; dieser Weg ist noch nicht verfolgt.
 
 Ein Durchgang auf dem ruhenden Bild, der nichts Neues gebracht hat, lässt die Bilder der Kacheln,
 die er gelesen hat, als bekannt zurück (`knownTilePictures`), und eine Änderung, die nur bekannte
@@ -298,8 +312,10 @@ aufgenommen); die Tests des Kerns liegen in `MirrorActTests/TextCore` (`OverlayT
 hält fest, was jeder Tracker tun muss). Die langen Tests des Trackers (`OverlayTrackerNumbersTests`,
 `OverlayTrackerEdgeTests`, `OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`,
 `OverlayTrackerCountdownTests`) spielen im Debug-Build nur einen Teil ihrer Einstellungen, so
-gewählt, dass jeder ohne die Regel, die er schützt, noch fehlschlägt (`TestBuild`); ein
-Release-Build oder `TRACKING_ALL=1 scripts/test.sh` spielt alle.
+gewählt, dass jeder ohne die Regel, die er schützt, noch fehlschlägt (`TestBuild`; in
+`OverlayTrackerCountdownTests` läuft der Absatz aus zwei Grössen, der `isSplitByAMovement` für jede
+Zeile eines Absatzes schützt, nur im Release-Build); ein Release-Build oder
+`TRACKING_ALL=1 scripts/test.sh` spielt alle.
 
 ### Der Prüfstand für das Nachführen
 
