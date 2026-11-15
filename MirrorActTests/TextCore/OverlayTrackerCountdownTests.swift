@@ -244,21 +244,54 @@ final class OverlayTrackerCountdownTests: XCTestCase {
     /// moves sideways. `MotionEstimator` takes that for a movement of a part of the line, its
     /// block is carried with it and not found: lost. The change at the next tick is read with
     /// the whole line the lost block lay on (`addChangedAreas`), as with a block that is found.
-    /// No frame shows another number, at least eight values in ten are drawn, about one pass a
-    /// value, and the last one within 1.5 s once it stops. (Before, the line rule needed a
-    /// block that was found: the changes were read around the digits only, the cut readings
-    /// asked a little more each time, and that place lay across the edge of the scrolling area
-    /// the sideways step had made, so it was never due: the line stayed untranslated until a
-    /// tick that changed its width again, 22 values of 42 drawn.)
+    /// No frame shows another number, at least eight values in ten are drawn (seven with the
+    /// caret blinking), about one pass a value, and the last one within 1.5 s once it stops.
+    /// (Before, the line rule needed a block that was found: the changes were read around the
+    /// digits only, the cut readings asked a little more each time, and that place lay across
+    /// the edge of the scrolling area the sideways step had made, so it was never due: the line
+    /// stayed untranslated until a tick that changed its width again, 22 values of 42 drawn.)
     func testACountdownWhoseNumberChangesItsWidthIsReadAtEveryValue() {
         let cases: [(String, Page)] = Self.everything
-            ? [("no focus", Page(caret: false)), ("gap", Page(gap: true))]
+            ? [("no focus", Page(caret: false)), ("caret", Page()), ("gap", Page(gap: true))]
             : [("no focus", Page(caret: false))]
         for (name, page) in cases {
             let outcome = run(page, first: Self.first, ticking: Self.ticking, still: Self.still, fps: Self.fps)
             print("COUNTDOWN \(name): \(describe(outcome))")
-            // (with the caret: its two pictures, read at the first blinks)
-            check(outcome, name, passesPerValue: page.caret ? 2 : 1.5)
+            // (with the caret: its two pictures, read at the first blinks; a tick of the caret's
+            // blink and a tick of the countdown in one frame can cost a value: seven in ten)
+            check(outcome, name, passesPerValue: page.caret ? 2 : 1.5, drawnShare: page.caret ? 7 : 8)
+        }
+    }
+
+    /// The rest of the countdown's line slides sideways while a pass reads it (the tick from 10 to
+    /// 9 comes after the pass began, at 10 frames a second the frame the pass read is the one
+    /// right before it): the reading is not carried with the part of the line that moved, its
+    /// old value is not drawn there, and its place is read again (`finishRecognition`). No frame
+    /// shows another number. (Before, the reading was taken where the tail's movement carried it,
+    /// and "Noch 10 Sekunden" was drawn shifted over "Noch 9 Sekunden" for a second: 13 frames.)
+    func testAReadingOfALineWhoseTailSlidMeanwhileIsNotTaken() {
+        let outcome = run(Page(caret: false), first: 12, ticking: 9, still: 3, fps: 10)
+        print("COUNTDOWN 10 frames a second: \(describe(outcome))")
+        XCTAssertEqual(outcome.wrong, 0, "\(outcome.wrongExamples)")
+    }
+
+    /// The recognizer leaves the countdown out for a while (from 3 s to 15 s; a debug build to
+    /// 7 s) and its block goes; then it reads it again. Its changes are read around the digits
+    /// only: a reading of a part of the line, cut by the edge of what the pass read, over which
+    /// no known block lies, is read again along its whole line (`askToReread`), and from then on
+    /// the line is known. At least seven values in ten are drawn after that, with the caret
+    /// blinking or not. (Before, it was read again only a little beyond the cut each time and
+    /// given up: 0 of 23 values drawn with the caret, 4 of 23 without it.)
+    func testALineTheRecognizerLeftOutIsReadWholeOnceItReadsItAgain() {
+        let back = Self.everything ? 15.0 : 7
+        for caret in Self.everything ? [true, false] : [true] {
+            let outcome = run(Page(caret: caret), first: Self.first, ticking: back + (Self.everything ? 25 : 6),
+                              still: Self.still, fps: Self.fps, from: back + 1) { time, blocks in
+                guard time >= 3, time < back else { return blocks }
+                return blocks.filter { !$0.text.contains("Sekunden") }
+            }
+            print("COUNTDOWN left out, caret \(caret): \(describe(outcome))")
+            check(outcome, "left out, caret \(caret)", passesPerValue: caret ? 2 : 1.5, drawnShare: 7)
         }
     }
 }

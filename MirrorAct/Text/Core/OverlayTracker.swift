@@ -305,7 +305,10 @@ final class OverlayTracker {
         /// numbers that no place of the plan reaches into any more is dropped and its place read
         /// once, `dropHiddenBlocksNothingReads`: a block read from a still picture fits its
         /// numbers, so it is not hidden again; the place where lines are no longer left out is
-        /// read once, `linesNoLongerLeftOut`); this bounds them all
+        /// read once, `linesNoLongerLeftOut`; a line cut by the region of a pass is read along
+        /// its whole line once, `askToReread`, and that region no longer cuts it; a reading over a
+        /// line whose tail slid sideways meanwhile needs a movement, `isSplitByAMovement`); this
+        /// bounds them all
         /// together (on a picture that nothing changes: any change anywhere, such as a blinking
         /// cursor, lets the next passes begin anew), also two of them that keep starting each
         /// other anew, and a recognizer that keeps failing. A screen that came to rest is read a
@@ -735,6 +738,8 @@ final class OverlayTracker {
         /// the tiles that had changed since they were last read and that it reads
         /// (`Configuration.knownTilePictures`)
         var changedTiles: [Int] = []
+        /// the scrolling areas that had rested for `restDelay` when it started
+        var restingAreas: Set<Int> = []
     }
 
     private var previous: LumaImage?
@@ -2040,6 +2045,7 @@ final class OverlayTracker {
         }
         unreadChangedTiles.subtract(reads)
         running?.changedTiles = reads.sorted()
+        running?.restingAreas = Set(areas.filter { time - $0.lastMoved >= configuration.restDelay }.map(\.id))
         return request
     }
 
@@ -2179,6 +2185,27 @@ final class OverlayTracker {
                             settles: settles, isGarbled: found.isGarbled, time: time)
                 continue
             }
+            // A reading of a line over which a movement since the pass began carried one part and
+            // not another (its two ends moved apart by more than a pixel), with the scrolling area
+            // of that movement holding only a part of it, resting when the pass began, and lying
+            // in the line's rows or moving the line only sideways, is not taken: the rest of the
+            // line slid sideways because a value in it changed its width ("10" to "9"), so the
+            // line no longer shows what was read. Carried with that part, its old value would be
+            // drawn over the new one. Its place is read once everything over it rests. This holds
+            // for each line of a paragraph (its middle, between two lines, may not have moved at
+            // all), and for an area that also took in a change above the line (a caret that blinked
+            // at the same moment) as long as it moved the line only sideways.
+            if isSplitByAMovement(rect, lineCount: found.lineCount, pass: pass) {
+                let frame = CGRect(x: 0, y: 0, width: current.width, height: current.height)
+                let place = rect.union(now).intersection(frame)
+                if !place.isNull, place.width >= 1, place.height >= 1 {
+                    plan.add(UnreadArea(rect: place, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
+                }
+                for block in tracked where block.seen != nil && thumbnailRect(of: block).intersects(now) {
+                    taken.insert(block.id)
+                }
+                continue
+            }
             var made = makeBlock(found, rect: rect, picture: pass.picture, shift: (shift.dx, shift.dy), in: current,
                                  mustShowWhole: false, keepsUnseen: false, time: time)
             if made == nil, abs(shift.tileDX - shift.dx) > configuration.tileShiftDifference
@@ -2267,6 +2294,31 @@ final class OverlayTracker {
             plan.add(UnreadArea(rect: rect, kind: .changed, since: time))
         }
         if !dropped.isEmpty { tracked.removeAll { dropped.contains($0.id) } }
+    }
+
+    /// A reading at `rect` (thumbnail pixels of the frame the pass read) over one of whose lines
+    /// (`lineCount` bands of equal height) the movements since the pass began carried one end and
+    /// not the other by more than a pixel, while the scrolling area the middle of that line lay
+    /// in rested when the pass began, does not hold all of the line, and lies within its rows (a
+    /// tile more above and below) or moved it only sideways: a part of the line moved, not the
+    /// page
+    private func isSplitByAMovement(_ rect: CGRect, lineCount: Int, pass: Pass) -> Bool {
+        let count = max(1, lineCount), tile = Double(configuration.tileSize)
+        for line in 0..<count {
+            let band = CGRect(x: rect.minX, y: rect.minY + rect.height * Double(line) / Double(count),
+                              width: rect.width, height: rect.height / Double(count))
+            guard let left = pass.probes.displacement(atX: band.minX + 1, y: band.midY),
+                  let right = pass.probes.displacement(atX: band.maxX - 1, y: band.midY),
+                  abs(left.dx - right.dx) > 1 || abs(left.dy - right.dy) > 1 else { continue }
+            let start = pass.probes.startArea(atX: band.midX, y: band.midY)
+            guard pass.restingAreas.contains(start),
+                  let area = pass.probes.startAreas.first(where: { $0.id == start })?.rect else { continue }
+            let box = CGRect(x: area.x, y: area.y, width: area.width, height: area.height)
+            guard !box.insetBy(dx: -1, dy: -1).contains(band) else { continue }
+            if box.minY >= band.minY - tile && box.maxY <= band.maxY + tile { return true }
+            if abs(left.dy - right.dy) <= 1 { return true }
+        }
+        return false
     }
 
     /// The pass failed: its region still has to be read.
@@ -2463,6 +2515,29 @@ final class OverlayTracker {
                 let known = thumbnailRect(of: block), common = known.intersection(now)
                 guard !common.isNull, common.width * common.height * 2 >= now.width * now.height else { continue }
                 place = place.union(known.insetBy(dx: -air, dy: -air))
+            }
+            // A reading of one line at rest cut only by the edge of what the pass read (not by the
+            // view, not by what `TextLayout` saw), over which no known block lies, is read again
+            // along the whole line it lies on (`wholeLine`) once everything over it rests: read
+            // again only a little beyond the cut each time, a line whose block went (the recognizer
+            // left it out for a while, a value in it changed its width) was never read whole while
+            // only its changing digits asked for it. (Not over a known paragraph: a line there may
+            // be something that slid over it, such as a banner.) The line read whole is no longer
+            // cut by the region of the pass that reads it, so this asks once for each line.
+            let overKnown = tracked.contains { block in
+                let common = thumbnailRect(of: block).intersection(now)
+                return !common.isNull && common.width * common.height * 2 >= now.width * now.height
+            }
+            let frame = ThumbnailRect(x: 0, y: 0, width: previous.width, height: previous.height)
+            let viewEdges = cutEdges(of: now, in: frame)
+            let sideways = cutEdges(of: rect, in: pass.region) & (FrameMotion.left | FrameMotion.right)
+            if sideways != 0, viewEdges == 0, !isGarbled, !overKnown {
+                let line = wholeLine(around: now, in: previous).insetBy(dx: -air, dy: -air)
+                    .intersection(CGRect(x: 0, y: 0, width: previous.width, height: previous.height))
+                if !line.isNull, line.width > place.width + 1 {
+                    plan.add(UnreadArea(rect: line, kind: .confirm, since: time, areaID: UnreadArea.everythingOver))
+                    return
+                }
             }
         }
         // the lines of the same paragraph that are known already are read with it

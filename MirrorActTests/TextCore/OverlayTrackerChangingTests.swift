@@ -386,8 +386,10 @@ final class OverlayTrackerChangingTests: XCTestCase {
     /// nothing changes in those lines afterwards. Passes over them had brought nothing new,
     /// so nothing read them again: they are read within 1.5 s once the caller says that they
     /// are no longer left out (`linesNoLongerLeftOut`, at the end of the first reading begun
-    /// after the keyboard went, as `ScreenTranslator` does), and never without it. 10 frames a
-    /// second, 3 s after the keyboard.
+    /// after the keyboard went, as `ScreenTranslator` does). Without it the value is never read;
+    /// the field is, because its caret went with the keyboard: the pass over that change reads
+    /// a piece of the field's line, cut by its region, which no known block holds, and so has
+    /// the whole line read (`askToReread`). 10 frames a second, 3 s after the keyboard.
     func testLinesLeftOutUnderAKeyboardAreReadOnceItHasGone() {
         let gone: TimeInterval = 4, leftOutBelow = 950.0
         let field = Self.field("Wasserkocher")
@@ -434,6 +436,6 @@ final class OverlayTrackerChangingTests: XCTestCase {
               + "without saying so field \(without.field ?? -1) value \(without.value ?? -1)")
         XCTAssertLessThan(with.field ?? .infinity, 1.5)
         XCTAssertLessThan(with.value ?? .infinity, 1.5)
-        XCTAssertNil(without.field)
+        XCTAssertNil(without.value)
     }
 }
