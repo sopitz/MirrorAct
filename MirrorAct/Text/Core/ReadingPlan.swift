@@ -41,7 +41,8 @@ struct UnreadArea: Equatable {
     /// `everythingOver`: it waits for every scrolling area it overlaps or that lies near it
     var areaID = -1
     /// For a change: the known line it lies in or at the end of (also one whose block a movement
-    /// of a part of that line carried off), which a pass reads whole with it (`OverlayTracker.addChangedAreas`); it neither
+    /// of a part of that line carried off), or the box of a paragraph hidden for its numbers that
+    /// it lies in, which a pass reads whole with it (`OverlayTracker.addChangedAreas`); it neither
     /// cuts other changes nor becomes due by itself
     var readWith: CGRect?
 

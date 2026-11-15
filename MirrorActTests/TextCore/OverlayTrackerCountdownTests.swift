@@ -22,6 +22,9 @@ final class OverlayTrackerCountdownTests: XCTestCase {
         /// the recognizer joins the field's text and the countdown into one paragraph of two lines
         /// (as `TextLayout` did on the phone in two runs of five)
         var joined = false
+        /// no field: a bold line of 66 pixels over a countdown of 40 (joined: a paragraph of two
+        /// lines of two sizes)
+        var sizes = false
 
         static let title = Line(text: "Suche im Katalog", top: 315, fontSize: 64, left: 52)
         static let fieldText = Line(text: "Wasserkocher", top: 518, fontSize: 58, left: 77, fontName: "Helvetica")
@@ -29,11 +32,20 @@ final class OverlayTrackerCountdownTests: XCTestCase {
         static let field = CGRect(x: 53, y: 437, width: 878, height: 208)
         static let caret = CGRect(x: 452, y: 512, width: 4, height: 66)
 
+        static let heading = Line(text: "Ihr Zug nach Bern", top: 600, fontSize: 66, left: 55)
+
         var shift: Double { gap ? 180 : 0 }
 
+        /// the line above the countdown that may be read with it
+        var upper: Line { sizes ? Self.heading : Self.fieldText }
+
         func countdown(_ value: Int) -> Line {
-            Line(text: "Noch \(value) Sekunden bis zur Abfahrt", top: 686 + shift, fontSize: 52, left: 55,
-                 fontName: "Helvetica")
+            if sizes {
+                return Line(text: "Noch \(value) Sekunden bis zur Abfahrt", top: 690, fontSize: 40, left: 55,
+                            fontName: "Helvetica")
+            }
+            return Line(text: "Noch \(value) Sekunden bis zur Abfahrt", top: 686 + shift, fontSize: 52, left: 55,
+                        fontName: "Helvetica")
         }
 
         /// the lines below the countdown: a paragraph of two lines, a heading and a paragraph
@@ -55,7 +67,7 @@ final class OverlayTrackerCountdownTests: XCTestCase {
 
     /// The thumbnail of the page showing `value`, with or without the caret (no noise)
     private func picture(_ page: Page, value: Int, caretOn: Bool) -> LumaImage {
-        let key = "\(page.gap) \(value) \(caretOn)"
+        let key = "\(page.gap) \(page.sizes) \(value) \(caretOn)"
         if let known = pictures[key] { return known }
         var gray = [UInt8](repeating: 255, count: Self.width * Self.height)
         gray.withUnsafeMutableBytes { bytes in
@@ -63,15 +75,17 @@ final class OverlayTrackerCountdownTests: XCTestCase {
                                           bitsPerComponent: 8, bytesPerRow: Self.width,
                                           space: CGColorSpaceCreateDeviceGray(),
                                           bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return }
-            for line in [Page.title, Page.fieldText, page.countdown(value)] + page.below {
+            for line in [Page.title, page.upper, page.countdown(value)] + page.below {
                 line.draw(in: context, frameHeight: Self.height)
             }
             func flipped(_ rect: CGRect) -> CGRect {
                 CGRect(x: rect.minX, y: Double(Self.height) - rect.maxY, width: rect.width, height: rect.height)
             }
-            context.setStrokeColor(CGColor(gray: 146 / 255, alpha: 1))
-            context.setLineWidth(3)
-            context.stroke(flipped(Page.field).insetBy(dx: 1.5, dy: 1.5))
+            if !page.sizes {
+                context.setStrokeColor(CGColor(gray: 146 / 255, alpha: 1))
+                context.setLineWidth(3)
+                context.stroke(flipped(Page.field).insetBy(dx: 1.5, dy: 1.5))
+            }
             if caretOn {
                 context.setFillColor(CGColor(gray: 0.1, alpha: 1))
                 context.fill(flipped(Page.caret))
@@ -93,8 +107,8 @@ final class OverlayTrackerCountdownTests: XCTestCase {
     private static func readings(_ page: Page, value: Int, in region: CGRect) -> [RecognizedBlock] {
         var result: [RecognizedBlock] = []
         for line in [Page.title] { if let reading = line.reading(in: region) { result.append(reading) } }
-        let field = Page.fieldText.reading(in: region), countdown = page.countdown(value).reading(in: region)
-        if page.joined, let field, let countdown, field.text == Page.fieldText.text,
+        let field = page.upper.reading(in: region), countdown = page.countdown(value).reading(in: region)
+        if page.joined, let field, let countdown, field.text == page.upper.text,
            countdown.text == page.countdown(value).text {
             result.append(RecognizedBlock(text: field.text + " " + countdown.text, rect: field.rect.union(countdown.rect),
                                           lineCount: 2))
@@ -237,6 +251,35 @@ final class OverlayTrackerCountdownTests: XCTestCase {
                                  "\(name): \(describe(outcome))")
         XCTAssertLessThanOrEqual(outcome.drawnAfterStop ?? .infinity, 1.5, "\(name): \(describe(outcome))")
         XCTAssertEqual(outcome.missingAfterDrawn, 0, "\(name): \(describe(outcome))")
+    }
+
+    /// The recognizer reads the field's text and the countdown under it as one paragraph of two
+    /// lines (Vision's box of the field's text took in the handle under its caret on the phone,
+    /// and `TextLayout` measured the gap against that box). `numbersFit` looked for the digits
+    /// on the field's line: the lines of the paragraph are of two sizes and the field's frame
+    /// lies inside its box, so splitting the box in equal bands and the text by the widths of
+    /// the bands put the number where nothing changes. The paragraph stays hidden from the frame
+    /// whose picture changed under it until a reading of its box confirms it, and that change is
+    /// read with its box: no frame shows another number, at least eight values in ten are drawn,
+    /// and the last one within 1.5 s once it stops. With the caret blinking and without it, and
+    /// with a bold line of 66 pixels over a countdown of 40 instead of the field: there the
+    /// middle of the paragraph, between its lines, does not move when the tail of the countdown
+    /// slides, and a pass that read the line before the tick is not taken for that line
+    /// (`isSplitByAMovement`). (Before, its first translation stayed drawn over the countdown for
+    /// the whole minute, right only when the value came round: 2 values of 42 drawn, 1410 frames
+    /// of 1530 wrong.)
+    func testACountdownReadWithTheFieldAboveItNeverShowsAnotherNumber() {
+        let cases: [(String, Page)] = Self.everything
+            ? [("caret", Page(joined: true)), ("no caret", Page(caret: false, joined: true)),
+               ("two sizes", Page(caret: false, joined: true, sizes: true))]
+            : [("caret", Page(joined: true))]
+        for (name, page) in cases {
+            let outcome = run(page, first: Self.first, ticking: Self.ticking, still: Self.still, fps: Self.fps)
+            print("COUNTDOWN joined, \(name): \(describe(outcome))")
+            // (a tick, and the two pictures of the caret, which the new text of the paragraph
+            // made unknown again: `Configuration.knownTilePictures`)
+            check(outcome, "joined, \(name)", passesPerValue: page.caret ? 3 : 1.5)
+        }
     }
 
     /// The countdown as a line of its own under the field, close to it or 40 CSS pixels lower:

@@ -307,8 +307,9 @@ final class OverlayTracker {
         /// numbers, so it is not hidden again; the place where lines are no longer left out is
         /// read once, `linesNoLongerLeftOut`; a line cut by the region of a pass is read along
         /// its whole line once, `askToReread`, and that region no longer cuts it; a reading over a
-        /// line whose tail slid sideways meanwhile needs a movement, `isSplitByAMovement`); this
-        /// bounds them all
+        /// line whose tail slid sideways meanwhile needs a movement, `isSplitByAMovement`; a block
+        /// of several lines hidden for a change under it needs a frame that changed the picture,
+        /// `moveBlocks`); this bounds them all
         /// together (on a picture that nothing changes: any change anywhere, such as a blinking
         /// cursor, lets the next passes begin anew), also two of them that keep starting each
         /// other anew, and a recognizer that keeps failing. A screen that came to rest is read a
@@ -569,7 +570,9 @@ final class OverlayTracker {
         /// is found (`moveBlocks`, `makeBlock`); its place is read again once everything over it
         /// rests (`askToReadLine`: the whole line of a block of one line, the box of a
         /// paragraph). When no place of the plan reaches into it any more, it is dropped and its
-        /// place is read as new text (`dropHiddenBlocksNothingReads`).
+        /// place is read as new text (`dropHiddenBlocksNothingReads`). A block of several lines
+        /// with digits is also not drawn from a frame that changed the picture under it in place
+        /// (`moveBlocks`): `numbersFit` may look for its digits on another line than theirs.
         var numbersDifferSince: TimeInterval?
         /// It showed whole and stayed where it was while its scrolling area moved, outside of that
         /// area (`moveBlocks`): it lies over the content there (the title of a bar, a header that
@@ -1513,6 +1516,18 @@ final class OverlayTracker {
                 block.numbersDifferSince = time
                 askToReadLine(of: block, in: current, time: time)
             }
+            // A block of several lines holding digits, under which the picture changed where no
+            // movement that carries all of it explains it and no known picture shows
+            // (`Configuration.knownTilePictures`: a caret that blinks), may show other numbers now,
+            // whatever `numbersFit` makes of it: its lines need not share its box equally (the text
+            // of a field read as one paragraph with a smaller countdown under it, the field's frame
+            // inside the box), so its digits may be looked for on another line than theirs. It is
+            // not drawn until a reading of its box confirms it, as when its numbers do not fit.
+            if found, block.numbersDifferSince == nil, block.lineCount > 1, !isCarriedWhole(rect, motions: motions),
+               block.text.contains(where: TextSimilarity.isDigit), changedInPlaceUnknown(under: rect, in: current) {
+                block.numbersDifferSince = time
+                askToReadLine(of: block, in: current, time: time)
+            }
             if !found {
                 // out of sight: it goes on moving with its area (or what moved under it), it may come back
                 if let moving = likely.primary {
@@ -1673,6 +1688,16 @@ final class OverlayTracker {
         return false
     }
 
+    /// A movement of this frame whose scrolling area holds all of `rect`: what lies there moves as one
+    private func isCarriedWhole(_ rect: CGRect, motions: [FrameMotion]) -> Bool {
+        for (index, motion) in motions.enumerated() {
+            let area = scrollArea(id: motionAreaIDs[index])?.rect ?? motion.area
+            let box = CGRect(x: area.x, y: area.y, width: area.width, height: area.height)
+            if box.insetBy(dx: -1, dy: -1).contains(rect) { return true }
+        }
+        return false
+    }
+
     /// The scrolling area of a movement of this frame lies within the rows of `line` (a tile more
     /// above and below) and does not hold all of it: a part of that line moved, not the page
     private func isPartOfLine(moved motion: Int, motions: [FrameMotion], line: CGRect) -> Bool {
@@ -1681,6 +1706,21 @@ final class OverlayTracker {
         let tile = Double(configuration.tileSize)
         return rect.minY >= line.minY - tile && rect.maxY <= line.maxY + tile
             && !rect.insetBy(dx: -1, dy: -1).contains(line)
+    }
+
+    /// Tiles under `rect` changed in a way no movement explains, and one of them shows no picture
+    /// known to hold nothing new (`Configuration.knownTilePictures`)
+    private func changedInPlaceUnknown(under rect: CGRect, in current: LumaImage) -> Bool {
+        let range = estimator.tileRange(of: rect)
+        for row in range.rows {
+            for column in range.columns {
+                let tile = row * estimator.columns + column
+                let kind = estimator.kinds[tile]
+                guard kind == .changed || kind == .moved || kind == .entered || kind == .drifted else { continue }
+                if knownTiles.isEmpty || !isKnown(tile, in: current) { return true }
+            }
+        }
+        return false
     }
 
     /// The place of a block whose numbers changed is read once everything over it rests: a
@@ -3169,6 +3209,9 @@ final class OverlayTracker {
             // place where that movement left it: the rest of a countdown's line slid sideways when
             // its number changed its width ("10" to "9"), and its next change was read only around
             // the digits, cut, again and again.
+            // A change inside a block of several lines hidden for its numbers (`moveBlocks`) is read
+            // with that block's box: read around the change only, a line of it is cut, and the
+            // paragraph stays hidden until its box is read.
             let still = movingArea(atX: center.x, y: center.y) == nil
                 && time - lastMoved(area: -1, around: area.rect) >= configuration.restDelay
             for block in tracked where still && block.lineCount == 1
@@ -3178,6 +3221,12 @@ final class OverlayTracker {
                 guard rows * 2 >= line.height, change.height <= 2 * line.height + Double(configuration.tileSize),
                       change.minX <= line.maxX + line.height, change.maxX >= line.minX - line.height else { continue }
                 area.readWith = area.readWith.map { $0.union(line) } ?? line
+            }
+            for block in tracked where still && block.lineCount > 1 && block.numbersDifferSince != nil
+                && (block.seen != nil || block.lostSince != nil && block.lostToPartOfIt) {
+                let box = thumbnailRect(of: block)
+                guard box.contains(CGPoint(x: area.rect.midX, y: area.rect.midY)) else { continue }
+                area.readWith = area.readWith.map { $0.union(box) } ?? box
             }
             plan.add(area)
         }
