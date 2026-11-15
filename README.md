@@ -185,18 +185,20 @@ under it count as separate paragraphs when the bar is shaded differently from th
 - When a number changes in a line or a paragraph, such as a counter or a storage summary, its
   translation disappears for a moment until it has been read and translated again, instead of
   showing the old number. A number that changes every second or faster, such as a countdown,
-  therefore shows untranslated much of the time, and with a language model service each value that
-  is read is sent to be translated. When such a line is taken into one paragraph with the line above
-  it, such as the text of a field, the translation can keep the first number for as long as the
-  number goes on changing. On a blurry picture or in small text, a digit that changes into one that
-  looks alike (15 into 18) can keep the old translation for two or three seconds. In a list whose
-  rows differ only by a number, translations can vanish while the list scrolls fast and come back
-  when it stops.
+  therefore shows untranslated for a moment after each change, also when its line is taken into one
+  paragraph with the line above it, such as the text of a field; once it stops, its last value is
+  translated. With a language model service each value that is read is sent to be translated. When
+  a line holds two numbers that change at different times, or a number sits right beside a blinking
+  cursor, the translation can show the number before for up to about a second after a change. On a
+  blurry picture or in small text, a digit that changes into one that looks alike (15 into 18) can
+  keep the old translation for two or three seconds. In a list whose rows differ only by a number,
+  translations can vanish while the list scrolls fast and come back when it stops.
 - Once the screen has come to rest, it is read a few more times and then not again until
   something on it changes; a blinking cursor in a text field costs a few readings and then no
   more. What keeps changing keeps the Mac reading that part of the screen: a clock with seconds
-  about once a second, a countdown up to three times a second, a progress bar that fills several
-  times a second, and a cursor that fades in and out, as on an iPhone or iPad, many times a minute.
+  about once a second, a countdown that ticks every second one to two times a second (about a third
+  of a processor core), a progress bar that fills several times a second, and a cursor that fades
+  in and out, as on an iPhone or iPad, many times a minute.
 - Text over a playing video, such as subtitles, is not translated while the video plays, and text
   that keeps moving by itself, such as a ticker or a carousel, may stay untranslated while it
   moves; a ticker that never stops keeps the Mac busy (about half a processor core) for as long as
@@ -224,11 +226,11 @@ under it count as separate paragraphs when the bar is shaded differently from th
   Arabic line may be taken apart from the rest of its paragraph: Translate translates it on its
   own, and Text copies it on a line of its own.
 - Now and then a row stays untranslated on a still screen: after some changes to another screen,
-  such as to the next page of settings, most often the lowest row just above the bottom edge and
-  sometimes several rows; in a list of search results once the keyboard has closed, above all rows
-  that changed while you typed; and at the end or start of a list that was flung there, a floating
-  button or a label of a tab bar at its edge among them. Scrolling a little, or turning "Translate"
-  off and on, has it read and translated again.
+  such as to the next page of settings, the lowest row just above the bottom edge or another row,
+  and sometimes several rows; in a list of search results once the keyboard has closed, above all
+  rows that changed while you typed; and at the end or start of a list that was flung there, a
+  floating button or a label of a tab bar at its edge among them. Scrolling a little, or turning
+  "Translate" off and on, has it read and translated again.
 
 When the device disconnects, "Translate" turns off; turn it on again. When MirrorAct itself moves
 an Android window to the other connection (the cable unplugged while Wi-Fi is there or the other

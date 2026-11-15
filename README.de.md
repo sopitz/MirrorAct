@@ -198,20 +198,23 @@ getönt ist als die Seite.
 - Ändert sich eine Zahl in einer Zeile oder einem Absatz, etwa ein Zähler oder eine Angabe zum
   Speicherplatz, verschwindet deren Übersetzung kurz, bis die Zeile oder der Absatz neu gelesen und
   übersetzt ist, statt die alte Zahl zu zeigen. Eine Zahl, die sich jede Sekunde oder öfter ändert,
-  etwa ein Countdown, ist darum einen guten Teil der Zeit unübersetzt zu sehen, und mit einem
-  Sprachmodell-Dienst wird jeder Wert, der gelesen wird, zum Übersetzen gesendet. Wird eine solche
-  Zeile mit der Zeile darüber, etwa dem Text eines Feldes, zu einem Absatz zusammengenommen, kann
-  die Übersetzung die erste Zahl behalten, solange sich die Zahl weiter ändert. Bei einem unscharfen
-  Bild oder in kleiner Schrift kann eine Ziffer, die sich in eine ähnlich aussehende ändert (15 in
-  18), die alte Übersetzung zwei oder drei Sekunden lang behalten. In einer Liste, deren Zeilen sich
-  nur in einer Zahl unterscheiden, können Übersetzungen beim schnellen Scrollen verschwinden und
-  wiederkommen, sobald die Liste steht.
+  etwa ein Countdown, ist darum nach jeder Änderung einen Moment lang unübersetzt zu sehen, auch
+  wenn ihre Zeile mit der Zeile darüber, etwa dem Text eines Feldes, zu einem Absatz
+  zusammengenommen wird; hält sie an, wird ihr letzter Wert übersetzt. Mit einem Sprachmodell-Dienst
+  wird jeder Wert, der gelesen wird, zum Übersetzen gesendet. Stehen in einer Zeile zwei Zahlen, die
+  sich zu verschiedenen Zeiten ändern, oder steht eine Zahl direkt neben einem blinkenden Cursor,
+  kann die Übersetzung nach einer Änderung bis zu etwa einer Sekunde lang die Zahl davor zeigen. Bei
+  einem unscharfen Bild oder in kleiner Schrift kann eine Ziffer, die sich in eine ähnlich
+  aussehende ändert (15 in 18), die alte Übersetzung zwei oder drei Sekunden lang behalten. In einer
+  Liste, deren Zeilen sich nur in einer Zahl unterscheiden, können Übersetzungen beim schnellen
+  Scrollen verschwinden und wiederkommen, sobald die Liste steht.
 - Ist der Bildschirm zur Ruhe gekommen, wird er noch einige Male gelesen und dann nicht mehr, bis
   sich etwas auf ihm ändert; ein blinkender Cursor in einem Textfeld kostet einige wenige
   Lesedurchgänge und dann keine mehr. Was sich laufend ändert, lässt den Mac diesen Teil des
-  Bildschirms weiter lesen: eine Uhr mit Sekunden etwa einmal in der Sekunde, ein Countdown bis zu
-  dreimal in der Sekunde, ein Fortschrittsbalken, der sich füllt, mehrmals in der Sekunde, und ein
-  Cursor, der ein- und ausblendet, wie auf einem iPhone oder iPad, viele Male in der Minute.
+  Bildschirms weiter lesen: eine Uhr mit Sekunden etwa einmal in der Sekunde, ein Countdown, der
+  jede Sekunde weiterzählt, ein- bis zweimal in der Sekunde (etwa ein Drittel eines
+  Prozessorkerns), ein Fortschrittsbalken, der sich füllt, mehrmals in der Sekunde, und ein Cursor,
+  der ein- und ausblendet, wie auf einem iPhone oder iPad, viele Male in der Minute.
 - Text über einem laufenden Video, etwa Untertitel, wird nicht übersetzt, solange das Video läuft,
   und Text, der sich von selbst weiterbewegt, etwa ein Ticker oder ein Karussell, bleibt unter
   Umständen unübersetzt, solange er sich bewegt; ein Ticker, der nie anhält, hält den Mac
@@ -243,8 +246,8 @@ getönt ist als die Seite.
   Absatzes getrennt: «Übersetzen» übersetzt sie für sich, «Text» kopiert sie auf eine eigene
   Zeile.
 - Ab und zu bleibt auf einem ruhenden Bildschirm eine Zeile unübersetzt: nach manchen Wechseln auf
-  einen anderen Bildschirm, etwa zur nächsten Seite der Einstellungen, am häufigsten die unterste
-  Zeile direkt über dem unteren Rand und manchmal mehrere Zeilen; in einer Liste von
+  einen anderen Bildschirm, etwa zur nächsten Seite der Einstellungen, die unterste Zeile direkt
+  über dem unteren Rand oder eine andere Zeile und manchmal mehrere Zeilen; in einer Liste von
   Suchergebnissen, nachdem sich die Tastatur geschlossen hat, vor allem Zeilen, die sich beim Tippen
   geändert haben; und am Ende oder Anfang einer Liste, die mit Schwung dorthin gewischt wurde,
   darunter ein schwebender Knopf oder eine Beschriftung einer Tab-Leiste an ihrem Rand. Ein wenig
