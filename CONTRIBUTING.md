@@ -57,7 +57,7 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes, stopped when a wireless connection ends), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
 | `MirrorAct/Text` | text on the screen: `TextRecognizer` (Vision; `LeadingMark` leaves out an icon read as a character in front of a line, `LineTone` measures how bright and how colored the letters of a line are), `FramePixels` (thumbnails and colors straight from the frame), `ScreenTranslator` (a `FrameProcessor` in the `FrameSink`: reads, translates and draws beside the frames), `TranslationCompositor` with `BlockPlacement`, `BlockTextMask` and `ChromaPlane` (draws the translations into a copy of the frame, in its own pixel format and in the size of the original text), `TranslationEngine` (the interface every engine implements), `TranslationEngines` (picks the engine the settings name), `AppleTranslationEngine` (Apple's Translation framework; sorts the texts by language with `LanguageMatching` and sends the short labels of a screen together, `AppleTranslationJoining`; its sessions live in a hidden host window, `AppleTranslationHost`), `LLMTranslationEngine` (language model services with the user's key from `KeychainStore`) |
-| `MirrorAct/Text/Core` | the part that uses Foundation alone (and CoreGraphics where it is available), so that other MirrorAct apps can use it: `TextLayout` (lines into paragraphs; leaves out the status bar and, for Translate, the icons of rows read as letters, keeps the title of a row apart from its summary by the brightness of their letters, marks lines that are cut off), `TextTracking` (the values the recognition, the tracker and the drawing exchange), `LumaImage` (thumbnails), `OverlayTracker` with `MotionEstimator`, `ReadingPlan` and `BlockPatch` (keeps translations on their text while the content moves, and decides what is read and what is sent for translation when), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt` (what is sent to a service and how its replies are read, without the network), `LanguageMatching` (the language of each text and of the screen, and when macOS may be asked for a language). Its rules are written in its comments, and a change to a rule is described there. Its tests are in `MirrorActTests/TextCore` (with a simulator of scrolling phone screens and a bench, `Tracking*.swift`) |
+| `MirrorAct/Text/Core` | the part that uses Foundation alone (and CoreGraphics where it is available), so that other MirrorAct apps can use it: `TextLayout` (lines into paragraphs; leaves out the status bar and, for Translate, the icons of rows read as letters and the on-screen keyboard, keeps the title of a row apart from its summary by the brightness of their letters and the title of a bar apart from a row under it by their ground, marks lines that are cut off), `TextTracking` (the values the recognition, the tracker and the drawing exchange), `LumaImage` (thumbnails), `OverlayTracker` with `MotionEstimator`, `ReadingPlan` and `BlockPatch` (keeps translations on their text while the content moves, and decides what is read and what is sent for translation when), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt` (what is sent to a service and how its replies are read, without the network), `LanguageMatching` (the language of each text and of the screen, and when macOS may be asked for a language). Its rules are written in its comments, and a change to a rule is described there. Its tests are in `MirrorActTests/TextCore` (with a simulator of scrolling phone screens and a bench, `Tracking*.swift`) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |
 | `MirrorAct/Launcher` | start window, settings |
@@ -72,7 +72,7 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 "Text" reads the current frame as the device sent it (`FrameSink.latestSource`, so the device's
 own text also while "Translate" is on) with `TextRecognizer` and copies `TextLayout.plainText`,
 which keeps everything but the status bar, lines cut off at the top or bottom edge and garbage
-(`TextLayout.Purpose.copying`).
+(`TextLayout.Purpose.copying`; the lines of an on-screen keyboard stay).
 
 While "Translate" is on, `ScreenTranslator` is the `FrameProcessor` of the window's `FrameSink`,
 and every frame passes through it:
@@ -81,11 +81,15 @@ and every frame passes through it:
    it (`MotionEstimator` tells what stayed, moved or changed) and says where each is drawn and
    whether a region has to be read.
 2. Beside the frames, `TextRecognizer` reads that region of the frame as the device sent it,
-   `TextLayout.content` (`.translating`) leaves out the status bar and the icons of rows, and
-   `TextLayout.blocks` forms the paragraphs, never across a known edge of a scrolling area.
-   `OverlayTracker.finishRecognition` takes them in; `ReadingPlan` keeps what still has to be
-   read and when (what scrolled into view at once, what changed once it rests, a cut-off line once
-   all of it shows).
+   `TextLayout.content` (`.translating`) leaves out the status bar, the icons of rows and the
+   on-screen keyboard (`TextLayout.keyboard`: its keys, the strip of suggestions and the row
+   below; `ScreenTranslator` keeps it while the picture is read in parts, until a whole reading
+   finds none or the picture over its keys has changed, and then has the band it covered read
+   again, `OverlayTracker.linesNoLongerLeftOut`), and `TextLayout.blocks` forms the paragraphs,
+   never across a known edge of a scrolling area. `OverlayTracker.finishRecognition` takes them
+   in; `ReadingPlan` keeps what still has to be read and when (what scrolled into view at once,
+   what changed once it rests, what a movement replaced once everything over it rests, a cut-off
+   line once all of it shows).
 3. The tracker decides which texts go to the engine when (`textsAwaitingTranslation`, at most 40
    in a request). An engine that `prefersSettledText` (a language model service) waits up to
    1.5 s for the picture to rest first. A text that failed is offered again after 5, 10, 20 and
@@ -106,26 +110,62 @@ the same results; times are seconds of any steady clock), and measures a block's
 the pixels it was read from, never adding it up from frame to frame. `LLMWire` holds values and
 pure functions only, so that the same code and tests describe what goes to a service. Rectangles
 between the parts are in frame pixels with the origin at the top left; those of `TextLayout` in 0…1
-of the picture. `TextLayout` keeps a row's title apart from its summary only where the recognizer
-measured `RecognizedLine.tone`; without it that rule does nothing.
+of the picture. `TextLayout` keeps a row's title apart from its summary, and a line from a paragraph
+of one line on another ground (`sameGround` in `continues`: the title of a bar and a row right under
+it; a paragraph of two lines or more is not held to it, so a gradient behind it does not cut it),
+only where the recognizer measured `RecognizedLine.tone`; without it those rules do nothing.
 
 Some rules of `OverlayTracker` hold for every case and are easily undone by a change elsewhere. A
 translation is never handed on to a text with other numbers: a reading whose digits differ does not
-show the old translation while its own is on its way (`TextSimilarity.hasOtherNumbers`). A block of
-one line whose digits no longer fit the picture under it (`numbersFit`, against the median of all
-its letters, digits included) is not drawn until a reading by a later pass confirms it
-(`Block.numbersDifferSince`); a block of several lines is not checked this way and keeps its
-translation until it is read again, and while a list whose rows differ only in a digit or two moves
-fast, a row's translation can still lie over the next row for a frame or two. A refined bottom edge
-of a scrolling area is checked again on the picture at rest and dropped when the rows beyond it no
-longer show what they showed and the page's ground goes on in them (`dropBottomEdgesThatDoNotHold`);
-top edges are not checked. A block that shows whole and stays while its scrolling area moves under
-it, such as the title of a bar, is not cut at that area's edges (`Block.staysOverArea`). A place
-where a block may be cut off, or where two blocks may be one paragraph, is read again at most
-`maxRereads` times, and a picture that nothing changes is read by at most `maxPassesOnPicture`
-passes; what is left then waits for the next change. The bench has no rows that differ only in their
-numbers: `OverlayTrackerNumbersTests` covers them, `OverlayTrackerEdgeTests` the edges and
-`OverlayTrackerStillPictureTests` the still picture.
+show the old translation while its own is on its way (`TextSimilarity.hasOtherNumbers`). A block
+whose digits no longer fit the picture under it (`numbersFit`, against the median of all its
+letters, digits included; in a block of several lines each letter is placed on its own line,
+`letterParts`) is not drawn until a reading by a later pass confirms it
+(`Block.numbersDifferSince`); its place is read once everything over it rests, the whole line for a
+block of one line and the box for one of several (`askToReadLine`), and a hidden block that no place
+of the plan reaches into any more is dropped and its place read once as new text
+(`dropHiddenBlocksNothingReads`). While a list whose rows differ only in a digit or two moves fast,
+a row's translation can still lie over the next row for a frame or two, and while such a list
+glides, a hidden block can be dropped and read before the list rests (more passes, nothing wrong
+drawn). A step of less than a pixel over fewer than `minSecondMotionTiles` tiles that no movement of
+the frame before leads up to is a movement only when those tiles differ from where it says they came
+from by at most `maxCreepResidual` of how much they differ in place
+(`MotionEstimator.explainsCreep`): digits that tick in their line are a change, not a scrolling area
+of their own.
+
+A movement that carries at least `replacedBlocks` blocks that showed whole and finds none of them
+has replaced the picture (`moveBlocks`): the blocks it carried without finding them are dropped, and
+its area with its scrolling area is read once everything over it rests; until nothing over that
+place has moved for `restDelay`, every movement over it adds its scrolling area as well (`follow`: a
+page that comes up in steps). A scrolling area that no movement reaches is forgotten when
+`replacedShare` of its tiles that show something changed (`updateScrollAreas`: a page faded into
+another), and a lost block is forgotten after `lostLifetime` also on a frame that does not change
+the picture and when a pass ends (`forgetLostBlocks`: a still phone sends no frames). A refined
+bottom edge of a scrolling area is checked again on the picture at rest and dropped when the rows
+beyond it no longer show what they showed and the page's ground goes on in them
+(`dropBottomEdgesThatDoNotHold`); top edges are not checked. A block that shows whole and stays
+while its scrolling area moves under it, such as the title of a bar, is not cut at that area's edges
+(`Block.staysOverArea`).
+
+A pass at rest that brought nothing new leaves the pictures of the tiles it read known
+(`knownTilePictures`), and a change that shows only known pictures is not read: a blinking caret
+costs two passes. They are forgotten under every block a pass made, changed or removed, where
+content moves, on `reset`, and where the caller stops leaving lines out (`linesNoLongerLeftOut`). A
+change in a known line on a still page is read with the whole line (`UnreadArea.readWith`), which
+never becomes due by itself and does not decide which area a region begins with
+(`ReadingPlan.takeRegion`). A place where a block may be cut off, or where two blocks may be one
+paragraph, is read again at most `maxRereads` times, and a picture that nothing changes is read by
+at most `maxPassesOnPicture` passes; what is left then waits for the next change. A clock with
+seconds costs about a pass a second, and a progress bar that fills several.
+
+The bench has no rows that differ only in their numbers and never makes a movement replace the
+picture, so these rules have tests of their own: `OverlayTrackerNumbersTests` (numbers),
+`OverlayTrackerEdgeTests` (edges), `OverlayTrackerStillPictureTests` (the still picture),
+`OverlayTrackerChangingTests` (a caret, typing, a counter, the lines under a keyboard),
+`OverlayTrackerPageTransitionTests` (pages that slide in and fade, or come up in steps),
+`OverlayTrackerScreenChangeTests` and `OverlayTrackerValueTickTests` (thumbnails of a real phone, as
+the app made them, in `MirrorActTests/TextCore/Frames`: a page change and a value that ticks),
+`TextLayoutKeyboardTests` (the keyboard) and `TextLayoutTests` (the ground of a bar).
 
 ## Test without a device
 
@@ -202,7 +242,11 @@ for the network), `TranslationStatusNoticeTests`, `TextSettingsViewTests`,
 app moves the window to another connection), `ShowcaseTests` (the pictures, with Translate as the
 mirrored session has it) and `FrameSinkTests` (the translated frame is shown and recorded); the
 tests of the core are in `MirrorActTests/TextCore` (`OverlayTrackerContractTests` holds what every
-tracker must do).
+tracker must do). The tracker's long tests (`OverlayTrackerNumbersTests`, `OverlayTrackerEdgeTests`,
+`OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`) play only a part of their
+settings in a debug build, chosen so that each still fails without the rule it guards
+(`TestBuild`); a release build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of them. In a debug
+build no test of the `OverlayTracker*Tests` then takes more than about forty seconds.
 
 ### The tracking bench
 
@@ -274,7 +318,10 @@ DistributedNotificationCenter.default().postNotificationName(
 For the text on the screen there are `cmd=translate on=1|0`, `cmd=copytext`, `cmd=translator` (logs
 the translator's state), `cmd=dump path=<folder>` (one frame as sent and as shown, and in
 `placement.json` what the translator draws into it, every paragraph the tracker knows with whether
-it shows, is lost or doubtful, and under `reading` what it still has to read and when),
+it shows, is lost or doubtful, since when it is hidden for its numbers and whether it stays over
+its scrolling area, and under `reading` what it still has to read and when, each place with the
+line it is read with, how many tile pictures it knows to hold nothing new, and the on-screen
+keyboard the translator keeps),
 `cmd=textsettings path=<file.png>` and `cmd=setting key=… value=…`
 (changes a setting while the app runs and puts the stored value back afterwards). With "Translate"
 on, a debug build falls behind the stream, because the tracker is many times slower without

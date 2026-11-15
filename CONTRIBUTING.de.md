@@ -57,7 +57,7 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Control` | Bedienung von iPhone/iPad: `IOSControl` (Gesten, Tastatur, Start des Agents über `xcodebuild`), `AgentRunners` (laufende Agents, einige Minuten gehalten, beim Ende einer kabellosen Verbindung gestoppt), `AgentConnection` (HTTP zu WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, Host-Zeit, variable Bildrate) |
 | `MirrorAct/Text` | Text auf dem Bildschirm: `TextRecognizer` (Vision; `LeadingMark` lässt ein Symbol weg, das als Zeichen vor einer Zeile gelesen wurde, `LineTone` misst, wie hell und wie farbig die Buchstaben einer Zeile sind), `FramePixels` (Vorschaubilder und Farben direkt aus dem Bild), `ScreenTranslator` (ein `FrameProcessor` im `FrameSink`: liest, übersetzt und zeichnet neben den Bildern her), `TranslationCompositor` mit `BlockPlacement`, `BlockTextMask` und `ChromaPlane` (zeichnet die Übersetzungen in eine Kopie des Bildes, in dessen eigenem Pixelformat und in der Grösse des ursprünglichen Textes), `TranslationEngine` (die Schnittstelle, die jeder Übersetzer erfüllt), `TranslationEngines` (wählt, was laut Einstellungen übersetzt), `AppleTranslationEngine` (Apples Translation-Framework; ordnet die Texte mit `LanguageMatching` nach Sprachen und sendet die kurzen Beschriftungen eines Bildschirms zusammen, `AppleTranslationJoining`; die Sitzungen leben in einem unsichtbaren Hilfsfenster, `AppleTranslationHost`), `LLMTranslationEngine` (Sprachmodell-Dienste mit dem Schlüssel des Nutzers aus `KeychainStore`) |
-| `MirrorAct/Text/Core` | der Teil, der nur Foundation verwendet (und CoreGraphics, wo es das gibt), damit andere MirrorAct-Apps ihn verwenden können: `TextLayout` (Zeilen zu Absätzen; lässt die Statusleiste weg und, für «Übersetzen», die als Buchstaben gelesenen Symbole von Listeneinträgen, hält den Titel eines Eintrags an der Helligkeit der Buchstaben von seiner Zusammenfassung getrennt, markiert abgeschnittene Zeilen), `TextTracking` (die Werte, die Texterkennung, Tracker und Zeichnen austauschen), `LumaImage` (Vorschaubilder), `OverlayTracker` mit `MotionEstimator`, `ReadingPlan` und `BlockPatch` (hält Übersetzungen auf ihrem Text, während sich der Inhalt bewegt, und entscheidet, was wann gelesen und was wann zum Übersetzen geschickt wird), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt` (was an einen Dienst geht und wie seine Antworten gelesen werden, ohne Netzwerk), `LanguageMatching` (die Sprache jedes Textes und des Bildschirms, und wann macOS nach einer Sprache gefragt werden darf). Seine Regeln stehen in seinen Kommentaren, und wer eine Regel ändert, beschreibt die Änderung dort. Die Tests liegen in `MirrorActTests/TextCore` (mit einem Simulator scrollender Telefonbildschirme und einem Prüfstand, `Tracking*.swift`) |
+| `MirrorAct/Text/Core` | der Teil, der nur Foundation verwendet (und CoreGraphics, wo es das gibt), damit andere MirrorAct-Apps ihn verwenden können: `TextLayout` (Zeilen zu Absätzen; lässt die Statusleiste weg und, für «Übersetzen», die als Buchstaben gelesenen Symbole von Listeneinträgen und die Bildschirmtastatur, hält den Titel eines Eintrags an der Helligkeit der Buchstaben von seiner Zusammenfassung getrennt und den Titel einer Leiste an ihrem Grund von einer Zeile darunter, markiert abgeschnittene Zeilen), `TextTracking` (die Werte, die Texterkennung, Tracker und Zeichnen austauschen), `LumaImage` (Vorschaubilder), `OverlayTracker` mit `MotionEstimator`, `ReadingPlan` und `BlockPatch` (hält Übersetzungen auf ihrem Text, während sich der Inhalt bewegt, und entscheidet, was wann gelesen und was wann zum Übersetzen geschickt wird), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt` (was an einen Dienst geht und wie seine Antworten gelesen werden, ohne Netzwerk), `LanguageMatching` (die Sprache jedes Textes und des Bildschirms, und wann macOS nach einer Sprache gefragt werden darf). Seine Regeln stehen in seinen Kommentaren, und wer eine Regel ändert, beschreibt die Änderung dort. Die Tests liegen in `MirrorActTests/TextCore` (mit einem Simulator scrollender Telefonbildschirme und einem Prüfstand, `Tracking*.swift`) |
 | `MirrorAct/Editor` | Editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + Export) |
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
@@ -72,7 +72,8 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 «Text» liest das aktuelle Bild, wie das Gerät es gesendet hat (`FrameSink.latestSource`, also den
 eigenen Text des Geräts auch, wenn «Übersetzen» an ist), mit `TextRecognizer` und kopiert
 `TextLayout.plainText`, das alles behält ausser der Statusleiste, Zeilen, die der obere oder untere
-Rand abschneidet, und Unlesbarem (`TextLayout.Purpose.copying`).
+Rand abschneidet, und Unlesbarem (`TextLayout.Purpose.copying`; die Zeilen einer
+Bildschirmtastatur bleiben).
 
 Solange «Übersetzen» an ist, ist `ScreenTranslator` der `FrameProcessor` im `FrameSink` des
 Fensters, und jedes Bild läuft durch ihn:
@@ -81,11 +82,16 @@ Fensters, und jedes Bild läuft durch ihn:
    darauf nach (`MotionEstimator` sagt, was blieb, sich verschob oder sich änderte) und sagt, wo
    jeder gezeichnet wird und ob ein Bereich gelesen werden muss.
 2. Neben den Bildern her liest `TextRecognizer` diesen Bereich des Bildes, wie das Gerät es
-   gesendet hat; `TextLayout.content` (`.translating`) lässt die Statusleiste und die Symbole von
-   Listeneinträgen weg, und `TextLayout.blocks` bildet die Absätze, nie über eine bekannte Kante
-   eines Scrollbereichs hinweg. `OverlayTracker.finishRecognition` übernimmt sie; `ReadingPlan`
-   hält fest, was noch wann gelesen werden muss (was ins Bild gescrollt ist, sofort; was sich
-   geändert hat, sobald es ruht; eine abgeschnittene Zeile, sobald sie ganz zu sehen ist).
+   gesendet hat; `TextLayout.content` (`.translating`) lässt die Statusleiste, die Symbole von
+   Listeneinträgen und die Bildschirmtastatur weg (`TextLayout.keyboard`: ihre Tasten, die Leiste
+   mit Vorschlägen und die Reihe darunter; `ScreenTranslator` behält sie, solange das Bild in
+   Teilen gelesen wird, bis eine Lesung des ganzen Bildes keine findet oder sich das Bild über
+   ihren Tasten geändert hat, und lässt dann das Band, das sie bedeckte, neu lesen,
+   `OverlayTracker.linesNoLongerLeftOut`), und `TextLayout.blocks` bildet die Absätze, nie über
+   eine bekannte Kante eines Scrollbereichs hinweg. `OverlayTracker.finishRecognition` übernimmt
+   sie; `ReadingPlan` hält fest, was noch wann gelesen werden muss (was ins Bild gescrollt ist,
+   sofort; was sich geändert hat, sobald es ruht; was eine Bewegung ersetzt hat, sobald alles
+   darüber ruht; eine abgeschnittene Zeile, sobald sie ganz zu sehen ist).
 3. Der Tracker entscheidet, welche Texte wann an den Übersetzer gehen (`textsAwaitingTranslation`,
    höchstens 40 in einer Anfrage). Ein Übersetzer mit `prefersSettledText` (ein Sprachmodell-Dienst)
    wartet vorher bis zu 1,5 s darauf, dass das Bild ruht. Ein Text, dessen Übersetzung fehlschlug,
@@ -108,30 +114,70 @@ beliebigen stetigen Uhr) und misst die Lage eines Blocks an den Pixeln, aus dene
 statt sie von Bild zu Bild aufzusummieren. `LLMWire` enthält nur Werte und reine Funktionen, damit
 derselbe Code und dieselben Tests beschreiben, was an einen Dienst geht. Rechtecke zwischen den
 Teilen sind in Pixeln des Bildes, Ursprung oben links; die von `TextLayout` in 0…1 des Bildes.
-`TextLayout` hält den Titel eines Eintrags nur dann von seiner Zusammenfassung getrennt, wenn die
-Texterkennung `RecognizedLine.tone` gemessen hat; ohne das bewirkt diese Regel nichts.
+`TextLayout` hält den Titel eines Eintrags von seiner Zusammenfassung getrennt, und eine Zeile von
+einem Absatz aus einer Zeile auf anderem Grund (`sameGround` in `continues`: der Titel einer Leiste
+und eine Zeile direkt darunter; ein Absatz aus zwei oder mehr Zeilen wird daran nicht gemessen,
+damit ein Verlauf hinter ihm ihn nicht trennt), nur dann, wenn die Texterkennung
+`RecognizedLine.tone` gemessen hat; ohne das bewirken diese Regeln nichts.
 
 Einige Regeln von `OverlayTracker` gelten für jeden Fall und gehen durch eine Änderung an anderer
 Stelle leicht verloren. Eine Übersetzung wird nie an einen Text mit anderen Zahlen weitergegeben:
 Ein neu gelesener Text mit anderen Ziffern zeigt nicht die alte Übersetzung, solange seine eigene
-unterwegs ist (`TextSimilarity.hasOtherNumbers`). Ein Block aus einer Zeile, dessen Ziffern nicht
-mehr zum Bild darunter passen (`numbersFit`, gemessen am Median aller seiner Zeichen, Ziffern
-eingeschlossen), wird nicht gezeichnet, bis ein späterer Lesedurchgang ihn bestätigt
-(`Block.numbersDifferSince`); ein Block aus mehreren Zeilen wird so nicht geprüft und behält seine
-Übersetzung, bis er neu gelesen ist, und während eine Liste, deren Zeilen sich nur in einer oder
-zwei Ziffern unterscheiden, schnell gleitet, kann die Übersetzung einer Zeile für ein oder zwei
-Bilder noch über der nächsten liegen. Eine genau bekannte untere Kante eines Scrollbereichs wird auf
-dem ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr zeigen,
-was sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt
-(`dropBottomEdgesThatDoNotHold`); obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen
-ist und stehen bleibt, während sich sein Scrollbereich unter ihm bewegt, etwa der Titel einer
-Leiste, wird nicht an den Kanten dieses Bereichs abgeschnitten (`Block.staysOverArea`). Eine Stelle,
-an der ein Block abgeschnitten sein kann oder zwei Blöcke ein Absatz sein können, wird höchstens
-`maxRereads`-mal erneut gelesen, und ein Bild, an dem sich nichts ändert, von höchstens
-`maxPassesOnPicture` Durchgängen; was dann noch übrig ist, wartet auf die nächste Änderung. Der
-Prüfstand hat keine Zeilen, die sich nur in ihren Zahlen unterscheiden: Diese deckt
-`OverlayTrackerNumbersTests` ab, die Kanten `OverlayTrackerEdgeTests` und das ruhende Bild
-`OverlayTrackerStillPictureTests`.
+unterwegs ist (`TextSimilarity.hasOtherNumbers`). Ein Block, dessen Ziffern nicht mehr zum Bild
+darunter passen (`numbersFit`, gemessen am Median aller seiner Zeichen, Ziffern eingeschlossen; in
+einem Block aus mehreren Zeilen wird jedes Zeichen auf seine eigene Zeile gelegt, `letterParts`),
+wird nicht gezeichnet, bis ein späterer Lesedurchgang ihn bestätigt (`Block.numbersDifferSince`);
+seine Stelle wird gelesen, sobald alles darüber ruht, bei einem Block aus einer Zeile die ganze
+Zeile, bei einem aus mehreren sein Rechteck (`askToReadLine`), und ein verborgener Block, in den
+keine Stelle des Plans mehr hineinreicht, wird fallen gelassen und seine Stelle einmal als neuer
+Text gelesen (`dropHiddenBlocksNothingReads`). Während eine Liste, deren Zeilen sich nur in einer
+oder zwei Ziffern unterscheiden, schnell gleitet, kann die Übersetzung einer Zeile für ein oder zwei
+Bilder noch über der nächsten liegen, und während eine solche Liste gleitet, kann ein verborgener
+Block fallen gelassen und gelesen werden, bevor die Liste ruht (mehr Durchgänge, nichts Falsches
+gezeichnet). Ein Schritt von weniger als einem Pixel über weniger als `minSecondMotionTiles`
+Kacheln, zu dem keine Bewegung des Bildes davor hinführt, ist nur dann eine Bewegung, wenn diese
+Kacheln von dort, woher er sie kommen lässt, höchstens `maxCreepResidual`-mal so stark abweichen wie
+an Ort (`MotionEstimator.explainsCreep`): Ziffern, die sich in ihrer Zeile ändern, sind eine
+Änderung, kein eigener Scrollbereich.
+
+Eine Bewegung, die mindestens `replacedBlocks` Blöcke trägt, die ganz zu sehen waren, und keinen von
+ihnen findet, hat das Bild ersetzt (`moveBlocks`): Die Blöcke, die sie trug, ohne sie zu finden,
+werden fallen gelassen, und ihr Bereich mit ihrem Scrollbereich wird gelesen, sobald alles darüber
+ruht; bis sich über dieser Stelle während `restDelay` nichts mehr bewegt hat, fügt jede Bewegung
+darüber ihren Scrollbereich hinzu (`follow`: eine Seite, die in Schritten von unten kommt). Ein
+Scrollbereich, den keine Bewegung erreicht, wird vergessen, wenn sich `replacedShare` seiner
+Kacheln, die etwas zeigen, geändert haben (`updateScrollAreas`: eine Seite, die in eine andere
+überblendet wurde), und ein verlorener Block wird nach `lostLifetime` auch mit einem Einzelbild
+vergessen, das nichts am Bild ändert, und wenn ein Durchgang endet (`forgetLostBlocks`: ein ruhendes
+Telefon sendet keine Bilder). Eine genau bekannte untere Kante eines Scrollbereichs wird auf dem
+ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr zeigen, was
+sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt (`dropBottomEdgesThatDoNotHold`);
+obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen ist und stehen bleibt, während sich
+sein Scrollbereich unter ihm bewegt, etwa der Titel einer Leiste, wird nicht an den Kanten dieses
+Bereichs abgeschnitten (`Block.staysOverArea`).
+
+Ein Durchgang auf dem ruhenden Bild, der nichts Neues gebracht hat, lässt die Bilder der Kacheln,
+die er gelesen hat, als bekannt zurück (`knownTilePictures`), und eine Änderung, die nur bekannte
+Bilder zeigt, wird nicht gelesen: Ein blinkender Cursor kostet zwei Durchgänge. Sie werden unter
+jedem Block vergessen, den ein Durchgang erzeugt, geändert oder entfernt hat, wo sich Inhalt bewegt,
+bei `reset` und dort, wo der Aufrufer keine Zeilen mehr weglässt (`linesNoLongerLeftOut`). Eine
+Änderung in einer bekannten Zeile auf einer ruhenden Seite wird mit der ganzen Zeile gelesen
+(`UnreadArea.readWith`), die nie von selbst fällig wird und nicht entscheidet, mit welchem Bereich
+ein Ausschnitt beginnt (`ReadingPlan.takeRegion`). Eine Stelle, an der ein Block abgeschnitten sein
+kann oder zwei Blöcke ein Absatz sein können, wird höchstens `maxRereads`-mal erneut gelesen, und
+ein Bild, an dem sich nichts ändert, von höchstens `maxPassesOnPicture` Durchgängen; was dann noch
+übrig ist, wartet auf die nächste Änderung. Eine Uhr mit Sekunden kostet etwa einen Durchgang in der
+Sekunde, ein Fortschrittsbalken, der sich füllt, mehrere.
+
+Der Prüfstand hat keine Zeilen, die sich nur in ihren Zahlen unterscheiden, und lässt nie eine
+Bewegung das Bild ersetzen; diese Regeln haben darum eigene Tests: `OverlayTrackerNumbersTests`
+(Zahlen), `OverlayTrackerEdgeTests` (Kanten), `OverlayTrackerStillPictureTests` (das ruhende Bild),
+`OverlayTrackerChangingTests` (ein Cursor, Tippen, ein Zähler, die Zeilen unter einer Tastatur),
+`OverlayTrackerPageTransitionTests` (Seiten, die hereingleiten und überblenden oder in Schritten von
+unten kommen), `OverlayTrackerScreenChangeTests` und `OverlayTrackerValueTickTests` (Vorschaubilder
+eines echten Telefons, wie die App sie gemacht hat, in `MirrorActTests/TextCore/Frames`: ein Wechsel
+der Seite und ein Wert, der weiterzählt), `TextLayoutKeyboardTests` (die Tastatur) und
+`TextLayoutTests` (der Grund einer Leiste).
 
 ## Ohne Gerät testen
 
@@ -214,7 +260,12 @@ nie gebeten, zu übersetzen oder eine Sprache zu laden), `LLMTranslationEngineTe
 Verbindung wechselt), `ShowcaseTests` (die Bilder, mit «Übersetzen» so, wie es die gespiegelte
 Sitzung hat) und `FrameSinkTests` (das übersetzte Bild wird gezeigt und aufgenommen); die Tests des
 Kerns liegen in `MirrorActTests/TextCore` (`OverlayTrackerContractTests` hält fest, was jeder
-Tracker tun muss).
+Tracker tun muss). Die langen Tests des Trackers (`OverlayTrackerNumbersTests`,
+`OverlayTrackerEdgeTests`, `OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`) spielen
+im Debug-Build nur einen Teil ihrer Einstellungen, so gewählt, dass jeder ohne die Regel, die er
+schützt, noch fehlschlägt (`TestBuild`); ein Release-Build oder `TRACKING_ALL=1 scripts/test.sh`
+spielt alle. Im Debug-Build dauert dann kein Test der `OverlayTracker*Tests` länger als etwa
+vierzig Sekunden.
 
 ### Der Prüfstand für das Nachführen
 
@@ -290,8 +341,11 @@ DistributedNotificationCenter.default().postNotificationName(
 Für den Text auf dem Bildschirm gibt es `cmd=translate on=1|0`, `cmd=copytext`, `cmd=translator`
 (schreibt den Zustand des Übersetzens ins Log), `cmd=dump path=<ordner>` (ein Bild, wie gesendet
 und wie gezeigt, und in `placement.json`, was der Übersetzer hineinzeichnet, welche Absätze der
-Tracker kennt und ob jeder zu sehen, verloren oder zweifelhaft ist, und unter `reading`, was er
-noch wann lesen muss), `cmd=textsettings path=<datei.png>` und
+Tracker kennt und ob jeder zu sehen, verloren oder zweifelhaft ist, seit wann er wegen seiner
+Zahlen verborgen ist und ob er über seinem Scrollbereich stehen bleibt, und unter `reading`, was er
+noch wann lesen muss, jede Stelle mit der Zeile, mit der sie gelesen wird, wie viele Bilder von
+Kacheln er kennt, die nichts Neues zeigen, und die Bildschirmtastatur, die der Übersetzer behält),
+`cmd=textsettings path=<datei.png>` und
 `cmd=setting key=… value=…` (ändert eine Einstellung, während die App läuft, und stellt den
 gespeicherten Wert danach wieder her). Mit eingeschaltetem «Übersetzen» kommt ein Debug-Build dem
 Videostrom nicht nach, weil das Nachführen ohne Optimierung um ein Vielfaches langsamer ist; um die
