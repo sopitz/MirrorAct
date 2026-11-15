@@ -305,7 +305,9 @@ final class OverlayTracker {
         /// numbers that no place of the plan reaches into any more is dropped and its place read
         /// once, `dropHiddenBlocksNothingReads`: a block read from a still picture fits its
         /// numbers, so it is not hidden again; the place where lines are no longer left out is
-        /// read once, `linesNoLongerLeftOut`; a line cut by the region of a pass is read along
+        /// read once, `linesNoLongerLeftOut`; a block that could not be found for long is
+        /// forgotten once, also on a picture that does not change and when a pass ends, and its
+        /// place is read once, `forgetLostBlocks`; a line cut by the region of a pass is read along
         /// its whole line once, `askToReread`, and that region no longer cuts it; a reading over a
         /// line whose tail slid sideways meanwhile needs a movement, `isSplitByAMovement`; a block
         /// of several lines hidden for a change under it needs a frame that changed the picture,
@@ -318,8 +320,10 @@ final class OverlayTracker {
         var maxPassesOnPicture = 24
         /// A pass that read at rest (everything over its changed places had rested for
         /// `restDelay` when it began, and nothing moved since) and brought nothing new – no block
-        /// made, none whose text changed or that went away – leaves the pictures of the tiles of
-        /// its changed places known: what they show holds nothing that is not read already. (A
+        /// made, none whose text changed or that went away; a block forgotten as the pass ends,
+        /// before its readings are judged (`forgetLostBlocks`), is not one that went away – leaves
+        /// the pictures of the tiles of its changed places known: what they show holds nothing
+        /// that is not read already. (A
         /// line it read cut off by the edge of its region is read again whole by a later pass,
         /// whose region holds those tiles too: when that one finds the text changed, they are
         /// forgotten.) A later change of which every tile shows again one
@@ -571,8 +575,10 @@ final class OverlayTracker {
         /// rests (`askToReadLine`: the whole line of a block of one line, the box of a
         /// paragraph). When no place of the plan reaches into it any more, it is dropped and its
         /// place is read as new text (`dropHiddenBlocksNothingReads`). A block of several lines
-        /// with digits is also not drawn from a frame that changed the picture under it in place
-        /// (`moveBlocks`): `numbersFit` may look for its digits on another line than theirs.
+        /// with digits is also not drawn from a frame that changed the picture under it where no
+        /// movement whose scrolling area holds all of it explains that and a tile shows no picture
+        /// known to hold nothing new (`moveBlocks`, `Configuration.knownTilePictures`):
+        /// `numbersFit` may look for its digits on another line than theirs.
         var numbersDifferSince: TimeInterval?
         /// It showed whole and stayed where it was while its scrolling area moved, outside of that
         /// area (`moveBlocks`): it lies over the content there (the title of a bar, a header that
@@ -793,7 +799,9 @@ final class OverlayTracker {
     /// reading plan after the plan moved with the frame
     private var replacedPlaces: [CGRect] = []
     /// where a movement replaced the picture (`moveBlocks`), and when a movement last brought more
-    /// of the new picture there (`follow`); nil when nothing was replaced, or that part rests
+    /// of the new picture there (`follow`); nil when nothing was replaced, and set to nil again
+    /// by the first frame that changes the picture after no movement brought more of it for
+    /// `restDelay`, or by `reset`
     private var replacing: (rect: CGRect, at: TimeInterval)?
 
     init(configuration: Configuration = Configuration()) {
@@ -1093,6 +1101,14 @@ final class OverlayTracker {
     /// cover most of each other, or when it covers most of the smaller of the two and moves the
     /// same way (up or down, or sideways, as the area last did): a strip that glides sideways
     /// inside a page that scrolls is an area of its own, and does not keep the page moving.
+    /// Known limit: on a page whose area last moved sideways (one that slid in), a strip that
+    /// glides sideways joins that area the same way, and so does the rest of a line that slid
+    /// sideways when a value in it changed its width ("10" to "9"): the page's area then holds
+    /// all of that line, the rules for a line of which only a part moved (`Block.lostToPartOfIt`,
+    /// `isSplitByAMovement`, a paragraph hidden for a change under it in `moveBlocks`) do not
+    /// apply, the block is carried with the tail and found with its old text, and the old value
+    /// is drawn over the new one for up to a second; each such step counts as a movement of the
+    /// whole page.
     private func updateScrollAreas(_ motions: [FrameMotion], in current: LumaImage, time: TimeInterval) {
         // forget what is gone
         areas.removeAll { area in
@@ -1600,9 +1616,11 @@ final class OverlayTracker {
     /// A block that could not be found for `lostLifetime` is forgotten. Where its place still
     /// lies in view (most of it in the frame and in its scrolling area), it may only have been
     /// lost to a picture the link damaged while it moved, or its text may have changed: that
-    /// place is read once everything over it rests (`Kind.confirm`). (A pass that read the
-    /// place at rest since it was lost removed it already, and one that read it while it moved
-    /// asked for the same.) A block read while the picture moved fast and never seen since is
+    /// place is read once everything over it rests (`Kind.confirm`). (A pass that ended since it
+    /// was lost and read the place at rest removed it already, and one that read it while it
+    /// moved asked for the same. When a pass ends, this runs before its readings are judged: a
+    /// block lost for long whose place that pass read is forgotten first, and its place is
+    /// asked for once more.) A block read while the picture moved fast and never seen since is
     /// left out: where it is, is only a guess, and the pass that read it asked for its own
     /// region to be confirmed. This runs for every frame, also for one that does not change the
     /// picture (`advance`), and when a pass ends (`finishRecognition`; a still phone sends no
@@ -1708,8 +1726,9 @@ final class OverlayTracker {
             && !rect.insetBy(dx: -1, dy: -1).contains(line)
     }
 
-    /// Tiles under `rect` changed in a way no movement explains, and one of them shows no picture
-    /// known to hold nothing new (`Configuration.knownTilePictures`)
+    /// Tiles under `rect` changed, moved, entered or drifted (the caller rules out a movement
+    /// that carries all of `rect`), and one of them shows no picture known to hold nothing new
+    /// (`Configuration.knownTilePictures`)
     private func changedInPlaceUnknown(under rect: CGRect, in current: LumaImage) -> Bool {
         let range = estimator.tileRange(of: rect)
         for row in range.rows {
@@ -1747,7 +1766,11 @@ final class OverlayTracker {
     /// strokes of a long number most: at the first frame of a slow scroll the eight digits of
     /// "Rechnung 20240142" differed by 9.6 to 11.6 where the median of the other letters was
     /// 6.3. Among all the letters of such a line the median is one of its digits; a number
-    /// that changed in one or two digits still stands out.) A block without digits fits.
+    /// that changed in one or two digits still stands out.) A block without digits fits. Known
+    /// limit: a block placed by a movement (a page that slid in) and read again at rest with the
+    /// same text keeps the place the movement gave it (`absorb`); a fraction of a pixel off
+    /// there, a digit that changed to another of the same width can pass for a fit, and the old
+    /// value is drawn until the next reading (once after the page came, up to about a second).
     private func numbersFit(_ block: Block, in current: LumaImage) -> Bool {
         // A text without a digit fits: its letters are not placed at all (a paragraph's
         // `lineSpans` reads every pixel of its box).
@@ -2556,14 +2579,16 @@ final class OverlayTracker {
                 guard !common.isNull, common.width * common.height * 2 >= now.width * now.height else { continue }
                 place = place.union(known.insetBy(dx: -air, dy: -air))
             }
-            // A reading of one line at rest cut only by the edge of what the pass read (not by the
-            // view, not by what `TextLayout` saw), over which no known block lies, is read again
-            // along the whole line it lies on (`wholeLine`) once everything over it rests: read
-            // again only a little beyond the cut each time, a line whose block went (the recognizer
-            // left it out for a while, a value in it changed its width) was never read whole while
-            // only its changing digits asked for it. (Not over a known paragraph: a line there may
-            // be something that slid over it, such as a banner.) The line read whole is no longer
-            // cut by the region of the pass that reads it, so this asks once for each line.
+            // A reading of one line at rest cut by the left or right edge of what the pass read,
+            // that reaches no edge of the view (the frame, a refined edge of the scrolling area it
+            // lies in) and over which no known block lies, is read again along the whole line it
+            // lies on (`wholeLine`) once everything over it rests, whatever else cut it as well
+            // (`TextLayout`, the top or bottom of the region): read again only a little beyond the
+            // cut each time, a line whose block went (the recognizer left it out for a while, a
+            // value in it changed its width) was never read whole while only its changing digits
+            // asked for it. (Not over a known paragraph: a line there may be something that slid
+            // over it, such as a banner.) The line read whole is no longer cut by the region of
+            // the pass that reads it, so this asks once for each line.
             let overKnown = tracked.contains { block in
                 let common = thumbnailRect(of: block).intersection(now)
                 return !common.isNull && common.width * common.height * 2 >= now.width * now.height
