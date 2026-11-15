@@ -105,11 +105,10 @@ language until you turn it off: the translation is drawn over the text, in the s
 replaces, stays on it while you scroll, and shows in screenshots, recordings and the presentation
 too. Both are in the tool rail, and in the context menu and the Device menu as "Copy Text on Screen"
 and "Translate Text on Screen". Both leave out the status bar, in landscape too, and a sign such as
-"€" or "#" set far apart in front of its text. Translate also leaves the device's on-screen keyboard
-as it is (its keys, the strip of suggestions above them and the row below them), while what you type
-into a field and the page above the keyboard are translated; Text copies what the keyboard shows
-too. A keyboard's page of digits and symbols and a floating keyboard are not recognized as a
-keyboard, so their suggestions can be translated. Under Settings → Text:
+"€" or "#" set far apart in front of its text. On an Android phone, Translate also leaves the
+on-screen keyboard as it is (its keys, the strip of suggestions above them and the row below them),
+while what you type into a field and the page above the keyboard are translated; Text copies what
+the keyboard shows too. Under Settings → Text:
 
 - **Translate into:** the system language or another one from the list. Where a language comes in
   several forms, the list names the region, such as "German (Switzerland)" or "English (United
@@ -185,17 +184,19 @@ under it count as separate paragraphs when the bar is shaded differently from th
   stay as it is: one word alone does not tell its language.
 - When a number changes in a line or a paragraph, such as a counter or a storage summary, its
   translation disappears for a moment until it has been read and translated again, instead of
-  showing the old number. A number that changes every second or faster therefore shows
-  untranslated much of the time, and with a language model service every new value is sent to be
-  translated. On a blurry picture or in small text, a digit that changes into one that looks alike
-  (15 into 18) can keep the old translation for two or three seconds. In a list whose rows differ
-  only by a number, translations can vanish while the list scrolls fast and come back when it
-  stops.
+  showing the old number. A number that changes every second or faster, such as a countdown,
+  therefore shows untranslated much of the time, and with a language model service each value that
+  is read is sent to be translated. When such a line is taken into one paragraph with the line above
+  it, such as the text of a field, the translation can keep the first number for as long as the
+  number goes on changing. On a blurry picture or in small text, a digit that changes into one that
+  looks alike (15 into 18) can keep the old translation for two or three seconds. In a list whose
+  rows differ only by a number, translations can vanish while the list scrolls fast and come back
+  when it stops.
 - Once the screen has come to rest, it is read a few more times and then not again until
-  something on it changes; a blinking cursor in a text field costs a reading or two and then no
+  something on it changes; a blinking cursor in a text field costs a few readings and then no
   more. What keeps changing keeps the Mac reading that part of the screen: a clock with seconds
-  about once a second, a progress bar that fills several times a second, and a cursor that fades
-  in and out, as on an iPhone or iPad, many times a minute.
+  about once a second, a countdown up to three times a second, a progress bar that fills several
+  times a second, and a cursor that fades in and out, as on an iPhone or iPad, many times a minute.
 - Text over a playing video, such as subtitles, is not translated while the video plays, and text
   that keeps moving by itself, such as a ticker or a carousel, may stay untranslated while it
   moves; a ticker that never stops keeps the Mac busy (about half a processor core) for as long as
@@ -203,10 +204,14 @@ under it count as separate paragraphs when the bar is shaded differently from th
 - Text that changes while the screen moves gets its new translation once the screen comes to rest.
   A line that a bar or the edge of the screen cuts off is translated once all of it shows, or,
   under a bar that stays, as far as it shows once the screen rests; "Text" leaves out a line cut
-  off at the top or bottom edge of the screen. The lines a keyboard covered are translated about a
-  second after it has gone. When a sheet slides away, a line it covered can stay untranslated
-  until the page moves, and so can the first paragraph under a title bar after the page was pulled
-  past its top end.
+  off at the top or bottom edge of the screen. When a sheet slides away, a line it covered can stay
+  untranslated until the page moves, and so can the first paragraph under a title bar after the
+  page was pulled past its top end.
+- The lines an on-screen keyboard covered are translated about a second after it has gone; now and
+  then a line or two of them stay untranslated. While you type into a search field, the field can
+  keep the translation of what it showed before beside the new letters, or stay untranslated once
+  the keyboard has closed. A keyboard's page of digits and symbols and a floating keyboard are not
+  recognized as a keyboard, so their suggestions can be translated.
 - Now and then, after fast scrolling, a paragraph stays translated line by line or in two pieces
   until the page moves.
 - While a side panel or drawer covers part of a page, the ends of words that show beside it may be
@@ -218,11 +223,12 @@ under it count as separate paragraphs when the bar is shaded differently from th
 - In very small text, such as a phone mirrored at a low resolution, a bold, an all-caps or an
   Arabic line may be taken apart from the rest of its paragraph: Translate translates it on its
   own, and Text copies it on a line of its own.
-- When a new screen comes, such as the next page of settings, every line on it is read once it
-  has stopped moving. Now and then a row still stays untranslated on a still screen: after some
-  screen changes, in a list of search results once the keyboard has closed, or after a list
-  stopped, mostly at its very end. Scrolling a little, or turning "Translate" off and on, has it
-  read and translated again.
+- Now and then a row stays untranslated on a still screen: after some changes to another screen,
+  such as to the next page of settings, most often the lowest row just above the bottom edge and
+  sometimes several rows; in a list of search results once the keyboard has closed, above all rows
+  that changed while you typed; and at the end or start of a list that was flung there, a floating
+  button or a label of a tab bar at its edge among them. Scrolling a little, or turning "Translate"
+  off and on, has it read and translated again.
 
 When the device disconnects, "Translate" turns off; turn it on again. When MirrorAct itself moves
 an Android window to the other connection (the cable unplugged while Wi-Fi is there or the other
