@@ -119,33 +119,41 @@ Some rules of `OverlayTracker` hold for every case and are easily undone by a ch
 translation is never handed on to a text with other numbers: a reading whose digits differ does not
 show the old translation while its own is on its way (`TextSimilarity.hasOtherNumbers`). A block
 whose digits no longer fit the picture under it (`numbersFit`, against the median of all its
-letters, digits included; in a block of several lines each letter is placed on its own line,
-`letterParts`) is not drawn until a reading by a later pass confirms it
+letters, digits included; in a block of several lines each letter is placed on the line it belongs
+to, `letterParts`) is not drawn until a reading by a later pass confirms it
 (`Block.numbersDifferSince`); its place is read once everything over it rests, the whole line for a
 block of one line and the box for one of several (`askToReadLine`), and a hidden block that no place
 of the plan reaches into any more is dropped and its place read once as new text
 (`dropHiddenBlocksNothingReads`). While a list whose rows differ only in a digit or two moves fast,
 a row's translation can still lie over the next row for a frame or two, and while such a list
 glides, a hidden block can be dropped and read before the list rests (more passes, nothing wrong
-drawn). A step of less than a pixel over fewer than `minSecondMotionTiles` tiles that no movement of
-the frame before leads up to is a movement only when those tiles differ from where it says they came
-from by at most `maxCreepResidual` of how much they differ in place
-(`MotionEstimator.explainsCreep`): digits that tick in their line are a change, not a scrolling area
-of their own.
+drawn). On a mirrored phone a countdown that ticks once a second is not kept right: read into one
+block of two lines with the text of a field above it, it kept its first number drawn for a minute,
+and as a block of its own it was read for its first few values and then left untranslated, with only
+a changed place over its digits and no `readWith` in the dump. A step of less than a pixel over
+fewer than `minSecondMotionTiles` tiles that no movement of the frame before leads up to is a
+movement only when those tiles differ from where it says they came from by at most
+`maxCreepResidual` of how much they differ in place (`MotionEstimator.explainsCreep`): digits that
+tick in their line are a change, not a scrolling area of their own.
 
 A movement that carries at least `replacedBlocks` blocks that showed whole and finds none of them
 has replaced the picture (`moveBlocks`): the blocks it carried without finding them are dropped, and
 its area with its scrolling area is read once everything over it rests; until nothing over that
 place has moved for `restDelay`, every movement over it adds its scrolling area as well (`follow`: a
-page that comes up in steps). A scrolling area that no movement reaches is forgotten when
-`replacedShare` of its tiles that show something changed (`updateScrollAreas`: a page faded into
-another), and a lost block is forgotten after `lostLifetime` also on a frame that does not change
-the picture and when a pass ends (`forgetLostBlocks`: a still phone sends no frames). A refined
-bottom edge of a scrolling area is checked again on the picture at rest and dropped when the rows
-beyond it no longer show what they showed and the page's ground goes on in them
+page that comes up in steps). A scrolling area that no movement reaches is forgotten when at least
+`replacedShare` of the tiles in it that show something have changed (`updateScrollAreas`: a page
+faded into another), and a lost block is forgotten after `lostLifetime` also on a frame that does
+not change the picture and when a pass ends (`forgetLostBlocks`: a still phone sends no frames). A
+refined bottom edge of a scrolling area is checked again on the picture at rest and dropped when the
+rows beyond it no longer show what they showed and the page's ground goes on in them
 (`dropBottomEdgesThatDoNotHold`); top edges are not checked. A block that shows whole and stays
 while its scrolling area moves under it, such as the title of a bar, is not cut at that area's edges
-(`Block.staysOverArea`).
+(`Block.staysOverArea`). A reread of a place that cannot be seen completely, at the edge of the
+frame or of its scrolling area, waits for the next movement when it is asked for while what it lies
+in rests already (`ReadingPlan.dueAtRest`), so on a still page it is not read: on a mirrored phone
+this leaves the lowest row of a new page, rows of search results that changed under a keyboard and
+rows at the ends of a flung list untranslated until the page moves (the dump shows such a place with
+`dueIn` null).
 
 A pass at rest that brought nothing new leaves the pictures of the tiles it read known
 (`knownTilePictures`), and a change that shows only known pictures is not read: a blinking caret
@@ -233,20 +241,19 @@ explicitly, and see that it passes with a display at scale 1 as well as at scale
 
 The tests of "Text" and "Translate" need no device and no network: `TextRecognizerTests`,
 `LeadingMarkTests`, `ScreenTranslatorTests` and `ScreenTranslatorCutOffTests` (synthetic frames,
-real Vision), `ScreenTranslatorRetryTests` (minutes of a failing service, with a clock of the
-test's own), `TranslationCompositorTests`, `ChromaPlaneTests`, `AppleTranslationEngineTests` (a
-stand-in answers in place of macOS, so macOS is never asked to translate or to download a
-language), `LLMTranslationEngineTests`, `LLMSessionTests` and `LocalServiceWaitTests` (a stand-in
-for the network), `TranslationStatusNoticeTests`, `TextSettingsViewTests`,
-`TextSettingsLanguageMenuTests`, `MirrorSessionTests` (Translate when the device goes away or the
-app moves the window to another connection), `ShowcaseTests` (the pictures, with Translate as the
-mirrored session has it) and `FrameSinkTests` (the translated frame is shown and recorded); the
-tests of the core are in `MirrorActTests/TextCore` (`OverlayTrackerContractTests` holds what every
-tracker must do). The tracker's long tests (`OverlayTrackerNumbersTests`, `OverlayTrackerEdgeTests`,
-`OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`) play only a part of their
-settings in a debug build, chosen so that each still fails without the rule it guards
-(`TestBuild`); a release build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of them. In a debug
-build no test of the `OverlayTracker*Tests` then takes more than about forty seconds.
+real Vision), `ScreenTranslatorRetryTests` (minutes of a failing service, with a clock of the test's
+own), `TranslationCompositorTests`, `ChromaPlaneTests`, `AppleTranslationEngineTests` (a stand-in
+answers in place of macOS, so macOS is never asked to translate or to download a language),
+`LLMTranslationEngineTests`, `LLMSessionTests` and `LocalServiceWaitTests` (a stand-in for the
+network), `TranslationStatusNoticeTests`, `TextSettingsViewTests`, `TextSettingsLanguageMenuTests`,
+`MirrorSessionTests` (Translate when the device goes away or the app moves the window to another
+connection), `ShowcaseTests` (the pictures, with Translate as the mirrored session has it) and
+`FrameSinkTests` (the translated frame is shown and recorded); the tests of the core are in
+`MirrorActTests/TextCore` (`OverlayTrackerContractTests` holds what every tracker must do). The
+tracker's long tests (`OverlayTrackerNumbersTests`, `OverlayTrackerEdgeTests`,
+`OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`) play only a part of their settings
+in a debug build, chosen so that each still fails without the rule it guards (`TestBuild`); a
+release build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of them.
 
 ### The tracking bench
 

@@ -125,36 +125,46 @@ Stelle leicht verloren. Eine Übersetzung wird nie an einen Text mit anderen Zah
 Ein neu gelesener Text mit anderen Ziffern zeigt nicht die alte Übersetzung, solange seine eigene
 unterwegs ist (`TextSimilarity.hasOtherNumbers`). Ein Block, dessen Ziffern nicht mehr zum Bild
 darunter passen (`numbersFit`, gemessen am Median aller seiner Zeichen, Ziffern eingeschlossen; in
-einem Block aus mehreren Zeilen wird jedes Zeichen auf seine eigene Zeile gelegt, `letterParts`),
-wird nicht gezeichnet, bis ein späterer Lesedurchgang ihn bestätigt (`Block.numbersDifferSince`);
-seine Stelle wird gelesen, sobald alles darüber ruht, bei einem Block aus einer Zeile die ganze
-Zeile, bei einem aus mehreren sein Rechteck (`askToReadLine`), und ein verborgener Block, in den
-keine Stelle des Plans mehr hineinreicht, wird fallen gelassen und seine Stelle einmal als neuer
-Text gelesen (`dropHiddenBlocksNothingReads`). Während eine Liste, deren Zeilen sich nur in einer
-oder zwei Ziffern unterscheiden, schnell gleitet, kann die Übersetzung einer Zeile für ein oder zwei
-Bilder noch über der nächsten liegen, und während eine solche Liste gleitet, kann ein verborgener
-Block fallen gelassen und gelesen werden, bevor die Liste ruht (mehr Durchgänge, nichts Falsches
-gezeichnet). Ein Schritt von weniger als einem Pixel über weniger als `minSecondMotionTiles`
-Kacheln, zu dem keine Bewegung des Bildes davor hinführt, ist nur dann eine Bewegung, wenn diese
-Kacheln von dort, woher er sie kommen lässt, höchstens `maxCreepResidual`-mal so stark abweichen wie
-an Ort (`MotionEstimator.explainsCreep`): Ziffern, die sich in ihrer Zeile ändern, sind eine
-Änderung, kein eigener Scrollbereich.
+einem Block aus mehreren Zeilen wird jedes Zeichen auf die Zeile gelegt, zu der es gehört,
+`letterParts`), wird nicht gezeichnet, bis ein späterer Lesedurchgang ihn bestätigt
+(`Block.numbersDifferSince`); seine Stelle wird gelesen, sobald alles darüber ruht, bei einem Block
+aus einer Zeile die ganze Zeile, bei einem aus mehreren sein Rechteck (`askToReadLine`), und ein
+verborgener Block, in den keine Stelle des Plans mehr hineinreicht, wird fallen gelassen und seine
+Stelle einmal als neuer Text gelesen (`dropHiddenBlocksNothingReads`). Während eine Liste, deren
+Zeilen sich nur in einer oder zwei Ziffern unterscheiden, schnell gleitet, kann die Übersetzung
+einer Zeile für ein oder zwei Bilder noch über der nächsten liegen, und während eine solche Liste
+gleitet, kann ein verborgener Block fallen gelassen und gelesen werden, bevor die Liste ruht (mehr
+Durchgänge, nichts Falsches gezeichnet). An einem gespiegelten Telefon wird ein Countdown, der jede
+Sekunde weiterzählt, nicht richtig gehalten: Mit dem Text eines Feldes darüber zu einem Block aus
+zwei Zeilen gelesen, blieb seine erste Zahl eine Minute lang gezeichnet, und als eigener Block wurde
+er für seine ersten Werte gelesen und blieb dann unübersetzt, mit nur einer geänderten Stelle über
+seinen Ziffern und ohne `readWith` im Dump. Ein Schritt von weniger als einem Pixel über weniger als
+`minSecondMotionTiles` Kacheln, zu dem keine Bewegung des Bildes davor hinführt, ist nur dann eine
+Bewegung, wenn diese Kacheln von dort, woher er sie kommen lässt, höchstens `maxCreepResidual`-mal
+so stark abweichen wie an Ort (`MotionEstimator.explainsCreep`): Ziffern, die sich in ihrer Zeile
+ändern, sind eine Änderung, kein eigener Scrollbereich.
 
 Eine Bewegung, die mindestens `replacedBlocks` Blöcke trägt, die ganz zu sehen waren, und keinen von
 ihnen findet, hat das Bild ersetzt (`moveBlocks`): Die Blöcke, die sie trug, ohne sie zu finden,
 werden fallen gelassen, und ihr Bereich mit ihrem Scrollbereich wird gelesen, sobald alles darüber
 ruht; bis sich über dieser Stelle während `restDelay` nichts mehr bewegt hat, fügt jede Bewegung
 darüber ihren Scrollbereich hinzu (`follow`: eine Seite, die in Schritten von unten kommt). Ein
-Scrollbereich, den keine Bewegung erreicht, wird vergessen, wenn sich `replacedShare` seiner
-Kacheln, die etwas zeigen, geändert haben (`updateScrollAreas`: eine Seite, die in eine andere
-überblendet wurde), und ein verlorener Block wird nach `lostLifetime` auch mit einem Einzelbild
-vergessen, das nichts am Bild ändert, und wenn ein Durchgang endet (`forgetLostBlocks`: ein ruhendes
-Telefon sendet keine Bilder). Eine genau bekannte untere Kante eines Scrollbereichs wird auf dem
-ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr zeigen, was
-sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt (`dropBottomEdgesThatDoNotHold`);
-obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen ist und stehen bleibt, während sich
-sein Scrollbereich unter ihm bewegt, etwa der Titel einer Leiste, wird nicht an den Kanten dieses
-Bereichs abgeschnitten (`Block.staysOverArea`).
+Scrollbereich, den keine Bewegung erreicht, wird vergessen, wenn sich mindestens `replacedShare`
+seiner Kacheln, die etwas zeigen, geändert haben (`updateScrollAreas`: eine Seite, die in eine
+andere überblendet wurde), und ein verlorener Block wird nach `lostLifetime` auch mit einem
+Einzelbild vergessen, das nichts am Bild ändert, und wenn ein Durchgang endet (`forgetLostBlocks`:
+ein ruhendes Telefon sendet keine Bilder). Eine genau bekannte untere Kante eines Scrollbereichs
+wird auf dem ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr
+zeigen, was sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt
+(`dropBottomEdgesThatDoNotHold`); obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen
+ist und stehen bleibt, während sich sein Scrollbereich unter ihm bewegt, etwa der Titel einer
+Leiste, wird nicht an den Kanten dieses Bereichs abgeschnitten (`Block.staysOverArea`). Eine Stelle,
+die nicht ganz zu sehen ist, am Rand des Bildes oder ihres Scrollbereichs, und erneut gelesen werden
+soll, wartet auf die nächste Bewegung, wenn sie verlangt wird, während das, worin sie liegt, schon
+ruht (`ReadingPlan.dueAtRest`); auf einer ruhenden Seite wird sie also nicht gelesen: An einem
+gespiegelten Telefon bleiben so die unterste Zeile einer neuen Seite, Zeilen von Suchergebnissen,
+die sich unter einer Tastatur geändert haben, und Zeilen an den Enden einer mit Schwung gewischten
+Liste unübersetzt, bis sich die Seite bewegt (der Dump zeigt eine solche Stelle mit `dueIn` null).
 
 Ein Durchgang auf dem ruhenden Bild, der nichts Neues gebracht hat, lässt die Bilder der Kacheln,
 die er gelesen hat, als bekannt zurück (`knownTilePictures`), und eine Änderung, die nur bekannte
@@ -250,22 +260,20 @@ mit einem Bildschirm mit Faktor 1 ebenso bestehen wie mit Faktor 2.
 
 Die Tests von «Text» und «Übersetzen» brauchen kein Gerät und kein Netzwerk: `TextRecognizerTests`,
 `LeadingMarkTests`, `ScreenTranslatorTests` und `ScreenTranslatorCutOffTests` (erzeugte Bilder,
-echtes Vision), `ScreenTranslatorRetryTests` (Minuten eines ausfallenden Dienstes, mit einer
-eigenen Uhr des Tests), `TranslationCompositorTests`, `ChromaPlaneTests`,
-`AppleTranslationEngineTests` (ein Stellvertreter antwortet an Stelle von macOS, macOS wird also
-nie gebeten, zu übersetzen oder eine Sprache zu laden), `LLMTranslationEngineTests`,
-`LLMSessionTests` und `LocalServiceWaitTests` (ein Stellvertreter für das Netzwerk),
-`TranslationStatusNoticeTests`, `TextSettingsViewTests`, `TextSettingsLanguageMenuTests`,
-`MirrorSessionTests` («Übersetzen», wenn das Gerät weggeht oder die App das Fenster auf eine andere
-Verbindung wechselt), `ShowcaseTests` (die Bilder, mit «Übersetzen» so, wie es die gespiegelte
-Sitzung hat) und `FrameSinkTests` (das übersetzte Bild wird gezeigt und aufgenommen); die Tests des
-Kerns liegen in `MirrorActTests/TextCore` (`OverlayTrackerContractTests` hält fest, was jeder
-Tracker tun muss). Die langen Tests des Trackers (`OverlayTrackerNumbersTests`,
+echtes Vision), `ScreenTranslatorRetryTests` (Minuten eines ausfallenden Dienstes, mit einer eigenen
+Uhr des Tests), `TranslationCompositorTests`, `ChromaPlaneTests`, `AppleTranslationEngineTests` (ein
+Stellvertreter antwortet an Stelle von macOS, macOS wird also nie gebeten, zu übersetzen oder eine
+Sprache zu laden), `LLMTranslationEngineTests`, `LLMSessionTests` und `LocalServiceWaitTests` (ein
+Stellvertreter für das Netzwerk), `TranslationStatusNoticeTests`, `TextSettingsViewTests`,
+`TextSettingsLanguageMenuTests`, `MirrorSessionTests` («Übersetzen», wenn das Gerät weggeht oder die
+App das Fenster auf eine andere Verbindung wechselt), `ShowcaseTests` (die Bilder, mit «Übersetzen»
+so, wie es die gespiegelte Sitzung hat) und `FrameSinkTests` (das übersetzte Bild wird gezeigt und
+aufgenommen); die Tests des Kerns liegen in `MirrorActTests/TextCore` (`OverlayTrackerContractTests`
+hält fest, was jeder Tracker tun muss). Die langen Tests des Trackers (`OverlayTrackerNumbersTests`,
 `OverlayTrackerEdgeTests`, `OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`) spielen
 im Debug-Build nur einen Teil ihrer Einstellungen, so gewählt, dass jeder ohne die Regel, die er
 schützt, noch fehlschlägt (`TestBuild`); ein Release-Build oder `TRACKING_ALL=1 scripts/test.sh`
-spielt alle. Im Debug-Build dauert dann kein Test der `OverlayTracker*Tests` länger als etwa
-vierzig Sekunden.
+spielt alle.
 
 ### Der Prüfstand für das Nachführen
 
