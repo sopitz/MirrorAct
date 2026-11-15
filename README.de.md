@@ -108,7 +108,12 @@ Text gezeichnet, in der Grösse des Textes, den sie ersetzt, bleibt beim Scrolle
 erscheint auch in Screenshots, Aufnahmen und beim Präsentieren. Beide gibt es in der Werkzeugleiste
 und, als «Text auf dem Bildschirm kopieren» und «Text auf dem Bildschirm übersetzen», im Kontextmenü
 und im Menü «Gerät». Beide lassen die Statusleiste weg, auch im Querformat, und ein Zeichen wie «€»
-oder «#», das weit vor seinem Text steht. Unter Einstellungen → Text:
+oder «#», das weit vor seinem Text steht. «Übersetzen» lässt ausserdem die Bildschirmtastatur des
+Geräts, wie sie ist (ihre Tasten, die Leiste mit Vorschlägen darüber und die Reihe darunter),
+während das, was man in ein Feld tippt, und die Seite über der Tastatur übersetzt werden; «Text»
+kopiert auch, was die Tastatur zeigt. Die Seite mit Ziffern und Zeichen einer Tastatur und eine
+schwebende Tastatur werden nicht als Tastatur erkannt, ihre Vorschläge können also übersetzt werden.
+Unter Einstellungen → Text:
 
 - **Übersetzen nach:** die Systemsprache oder eine andere aus der Liste. Gibt es eine Sprache in
   mehreren Formen, nennt die Liste die Region, etwa «Deutsch (Schweiz)» oder «Englisch
@@ -178,7 +183,9 @@ verwenden darf, das erlauben; sonst bittet das Spiegelfenster, den Schlüssel er
 Zeile darunter (etwa in den Einstellungen) gelten als eigene Absätze: «Text» kopiert sie auf
 getrennte Zeilen, «Übersetzen» übersetzt sie einzeln. Eine farbige Zeile, etwa ein Link oder eine
 @-Erwähnung, bleibt Teil ihres Absatzes, ebenso ein farbiger Status unter einem Titel, etwa ein
-grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner.
+grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner. Der Titel einer
+Leiste und eine Zeile der Seite direkt darunter gelten als eigene Absätze, wenn die Leiste anders
+getönt ist als die Seite.
 
 **Gut zu wissen:**
 
@@ -190,19 +197,20 @@ grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner
   kopiert und für sich übersetzt.
 - Mit «Dieser Mac» bleibt ein einzelnes Wort in der Sprache des Geräts zwischen Text, der schon in
   der eigenen Sprache ist, unter Umständen stehen: Ein Wort allein verrät seine Sprache nicht.
-- Ändert sich eine Zahl in einer kurzen Zeile, etwa ein Zähler oder eine Angabe zum Speicherplatz,
-  verschwindet die Übersetzung der Zeile kurz, bis die Zeile neu gelesen und übersetzt ist, statt
-  die alte Zahl zu zeigen; in einem Absatz aus mehreren Zeilen kann die alte Übersetzung einige
-  Sekunden lang stehen bleiben. Eine Zahl, die sich jede Sekunde oder öfter ändert, ist darum einen
+- Ändert sich eine Zahl in einer Zeile oder einem Absatz, etwa ein Zähler oder eine Angabe zum
+  Speicherplatz, verschwindet ihre Übersetzung kurz, bis sie neu gelesen und übersetzt ist, statt
+  die alte Zahl zu zeigen. Eine Zahl, die sich jede Sekunde oder öfter ändert, ist darum einen
   guten Teil der Zeit unübersetzt zu sehen, und mit einem Sprachmodell-Dienst wird jeder neue Wert
-  zum Übersetzen gesendet. In einer Liste, deren Zeilen sich nur in einer Zahl unterscheiden,
-  können Übersetzungen beim schnellen Scrollen verschwinden und wiederkommen, sobald die Liste
-  steht. Ab und zu bleibt eine Zeile mit einer Zahl unübersetzt, nachdem sie sich geändert hat oder
-  eine Liste stehen geblieben ist, bis sich die Seite bewegt oder sich der Bildschirm ändert.
+  zum Übersetzen gesendet. Bei einem unscharfen Bild oder in kleiner Schrift kann eine Ziffer, die
+  sich in eine ähnlich aussehende ändert (15 in 18), die alte Übersetzung zwei oder drei Sekunden
+  lang behalten. In einer Liste, deren Zeilen sich nur in einer Zahl unterscheiden, können
+  Übersetzungen beim schnellen Scrollen verschwinden und wiederkommen, sobald die Liste steht.
 - Ist der Bildschirm zur Ruhe gekommen, wird er noch einige Male gelesen und dann nicht mehr, bis
-  sich etwas auf ihm ändert; was sich laufend ändert, etwa eine Uhr mit Sekunden, wird bei jeder
-  Änderung neu gelesen. Ein blinkender Cursor in einem Textfeld lässt seine Zeile etwa bei jedem
-  Blinken neu lesen.
+  sich etwas auf ihm ändert; ein blinkender Cursor in einem Textfeld kostet ein oder zwei
+  Lesedurchgänge und dann keine mehr. Was sich laufend ändert, lässt den Mac diesen Teil des
+  Bildschirms weiter lesen: eine Uhr mit Sekunden etwa einmal in der Sekunde, ein
+  Fortschrittsbalken, der sich füllt, mehrmals in der Sekunde, und ein Cursor, der ein- und
+  ausblendet, wie auf einem iPhone oder iPad, viele Male in der Minute.
 - Text über einem laufenden Video, etwa Untertitel, wird nicht übersetzt, solange das Video läuft,
   und Text, der sich von selbst weiterbewegt, etwa ein Ticker oder ein Karussell, bleibt unter
   Umständen unübersetzt, solange er sich bewegt; ein Ticker, der nie anhält, hält den Mac
@@ -211,9 +219,10 @@ grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner
   sobald der Bildschirm zur Ruhe kommt. Eine Zeile, die eine Leiste oder der Bildschirmrand
   abschneidet, wird übersetzt, sobald sie ganz zu sehen ist, oder, unter einer Leiste, die stehen
   bleibt, so weit sie zu sehen ist, sobald der Bildschirm ruht; «Text» lässt eine Zeile weg, die
-  der obere oder untere Bildschirmrand abschneidet. Gleitet eine Tastatur oder ein Blatt weg, kann
-  eine Zeile, die darunter lag, unübersetzt bleiben, bis sich die Seite bewegt, ebenso der erste
-  Absatz unter einer Titelleiste, nachdem die Seite über ihr oberes Ende hinaus gezogen wurde.
+  der obere oder untere Bildschirmrand abschneidet. Die Zeilen, die eine Tastatur verdeckt hat,
+  werden etwa eine Sekunde, nachdem sie weg ist, übersetzt. Gleitet ein Blatt weg, kann eine
+  Zeile, die darunter lag, unübersetzt bleiben, bis sich die Seite bewegt, ebenso der erste Absatz
+  unter einer Titelleiste, nachdem die Seite über ihr oberes Ende hinaus gezogen wurde.
 - Ab und zu bleibt ein Absatz nach schnellem Scrollen Zeile für Zeile oder in zwei Stücken
   übersetzt, bis sich die Seite bewegt.
 - Solange ein Seitenpanel oder eine Schublade einen Teil der Seite verdeckt, werden die Wortenden
@@ -227,8 +236,12 @@ grünes «Verbunden», ausser er steht weiter entfernt oder ist deutlich kleiner
   eine fette, eine in Grossbuchstaben oder eine arabische Zeile unter Umständen vom Rest ihres
   Absatzes getrennt: «Übersetzen» übersetzt sie für sich, «Text» kopiert sie auf eine eigene
   Zeile.
-- Bleibt auf einem ruhenden Bildschirm eine Zeile unübersetzt, die übersetzt werden sollte, lässt
-  ein wenig Scrollen oder «Übersetzen» aus- und wieder einschalten sie neu lesen und übersetzen.
+- Kommt ein neuer Bildschirm, etwa die nächste Seite der Einstellungen, wird jede Zeile darauf
+  gelesen, sobald er sich nicht mehr bewegt. Ab und zu bleibt auf einem ruhenden Bildschirm
+  trotzdem eine Zeile unübersetzt: nach manchen Wechseln des Bildschirms, in einer Liste von
+  Suchergebnissen, nachdem sich die Tastatur geschlossen hat, oder nachdem eine Liste stehen
+  geblieben ist, meist an ihrem Ende. Ein wenig Scrollen oder «Übersetzen» aus- und wieder
+  einschalten lässt sie neu lesen und übersetzen.
 
 Trennt sich das Gerät, geht «Übersetzen» aus und muss wieder eingeschaltet werden. Wechselt
 MirrorAct ein Android-Fenster selbst auf die andere Verbindung (Kabel abgezogen bei bestehendem
