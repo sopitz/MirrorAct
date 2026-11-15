@@ -82,7 +82,7 @@ appears next to it; right-click shows every function.
 - **Editor:** frame existing screenshots and screen recordings afterwards, trim videos, two screenshots as a **duo** (side by side, staggered, tilted, perspective).
 - **Shortcuts:** "Frame screenshot" (usable as a Finder Quick Action), "Screenshot from iPhone", "Start or stop recording".
 
-The user interface is available in English and German; choose the language under Settings → General (System language, Deutsch, English).
+The user interface is available in English, German, and Simplified Chinese. Choose a language under Settings → General (System language, English, Deutsch, 简体中文).
 
 ## Keyboard and settings
 

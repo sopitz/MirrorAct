@@ -13,7 +13,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "· 无线镜像"
+            "value" : " · 无线镜像"
           }
         }
       }
@@ -205,7 +205,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "信任设备上的开发者证书：设置 → 通用 → VPN 和设备管理。"
+            "value" : "信任设备上的开发者证书：设置 → 通用 → VPN与设备管理。"
           }
         }
       }
@@ -221,7 +221,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在设备上开启开发者模式：设置 → 隐私与安全 → 开发者模式。设备将重启；请在重启后确认。"
+            "value" : "在设备上开启开发者模式：设置 → 隐私与安全性 → 开发者模式。设备将重启；请在重启后确认。"
           }
         }
       }
@@ -237,7 +237,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在设备上启用 UI 自动化：设置 → 开发人员 → 启用 UI 自动化。"
+            "value" : "在设备上启用 UI 自动化：设置 → 开发者 → 启用 UI 自动化。"
           }
         }
       }
@@ -301,7 +301,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Xcode 尚不认识“%@”。用数据线连接一次，解锁并信任这台 Mac。"
+            "value" : "Xcode 尚不认识“%@”。用线缆连接一次，解锁并信任这台 Mac。"
           }
         }
       }
@@ -477,7 +477,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过数据线连接？右键单击手机 → “使用 Wi-Fi 代替数据线”。不使用数据线（Android 11 或更高版本）：开发者选项 → 无线调试 → 使用配对码配对设备。"
+            "value" : "通过线缆连接？右键单击手机 → “使用 Wi-Fi 代替线缆”。不使用线缆（Android 11 或更高版本）：开发者选项 → 无线调试 → 使用配对码配对设备。"
           }
         }
       }
@@ -493,7 +493,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过Wi-Fi连接 – 您可以拔下线缆"
+            "value" : "通过 Wi-Fi 连接 — 您可以拔下线缆"
           }
         }
       }
@@ -509,7 +509,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已连接 – 手机显示在启动窗口中。"
+            "value" : "已连接 — 手机显示在启动窗口中。"
           }
         }
       }
@@ -621,7 +621,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已断开连接 – 请重新连接手机"
+            "value" : "已断开连接 — 请重新连接手机"
           }
         }
       }
@@ -637,7 +637,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "首页"
+            "value" : "主屏幕"
           }
         }
       }
@@ -829,7 +829,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已配对 – 手机稍后将出现在启动窗口中。如果未显示，请使用“无线调试”下显示的地址进行连接。"
+            "value" : "已配对 — 手机稍后将出现在启动窗口中。如果未显示，请使用“无线调试”下显示的地址进行连接。"
           }
         }
       }
@@ -941,7 +941,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在启动设备上的控制……"
+            "value" : "正在启动设备上的控制…"
           }
         }
       }
@@ -957,7 +957,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在启动……"
+            "value" : "正在启动…"
           }
         }
       }
@@ -1085,7 +1085,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "解锁手机，然后在“允许 USB 调试？”对话框中轻触“允许”。如果没有出现对话框，请拔下数据线，然后重新连接。"
+            "value" : "解锁手机，然后在“允许 USB 调试？”对话框中轻触“允许”。如果没有出现对话框，请拔下线缆，然后重新连接。"
           }
         }
       }
@@ -1181,7 +1181,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ – 拖动以分享，点击以编辑"
+            "value" : "%@ — 拖动以分享，点击以编辑"
           }
         }
       }
@@ -1271,7 +1271,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过有线连接的 %lld 设备"
+            "value" : "%lld 台设备通过有线连接"
           }
         }
       }
@@ -1287,7 +1287,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 台设备通过有线连接 – 点击以镜像"
+            "value" : "1 台设备通过有线连接 — 点击以镜像"
           }
         }
       }
@@ -1431,7 +1431,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同样显示在全屏应用程序上方"
+            "value" : "也显示在全屏应用上方"
           }
         }
       }
@@ -1447,7 +1447,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "也在全屏应用程序上方显示"
+            "value" : "也显示在全屏应用上方"
           }
         }
       }
@@ -1511,7 +1511,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "纵横比"
+            "value" : "宽高比"
           }
         }
       }
@@ -1837,7 +1837,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点击：截屏到桌面 · ⌥-click：复制 · 拖动：直接拖入应用"
+            "value" : "点击：截屏到桌面 · 按住 ⌥ 点击：复制 · 拖动：直接拖入应用"
           }
         }
       }
@@ -1997,7 +1997,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在连接……\n如果需要，请解锁设备"
+            "value" : "正在连接…\n如果需要，请解锁设备"
           }
         }
       }
@@ -2013,7 +2013,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在通过有线连接……"
+            "value" : "正在通过有线连接…"
           }
         }
       }
@@ -2221,7 +2221,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已断开连接 – 请在iPhone上再次选择“%@”"
+            "value" : "已断开连接 — 请在 iPhone 上再次选择“%@”"
           }
         }
       }
@@ -2253,7 +2253,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "完成 – 无需代码。"
+            "value" : "完成 — 无需代码。"
           }
         }
       }
@@ -2279,7 +2279,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Duo"
+            "value" : "双屏"
           }
         },
         "zh-Hans" : {
@@ -2317,7 +2317,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑 – %@"
+            "value" : "编辑 — %@"
           }
         }
       }
@@ -2349,7 +2349,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑上一个文件……"
+            "value" : "编辑上一个文件…"
           }
         }
       }
@@ -2365,7 +2365,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑屏幕截图或视频……"
+            "value" : "编辑屏幕截图或视频…"
           }
         }
       }
@@ -2381,7 +2381,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在iPhone上输入此代码：%@"
+            "value" : "在 iPhone 上输入此代码：%@"
           }
         }
       }
@@ -2429,7 +2429,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "退出演示文稿（Esc 或 ⌃⌘F）"
+            "value" : "退出演示（Esc 或 ⌃⌘F）"
           }
         }
       }
@@ -2749,7 +2749,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "如果“%@”未出现：在macOS的“通用”→“AirDrop和Handoff”下开启AirPlay接收器。请保持设备上的Wi-Fi和蓝牙处于开启状态。"
+            "value" : "如果未显示“%@”，请在 Mac 的“系统设置”→“通用”→“隔空投送与接力”（或“隔空投送与连续互通”）中打开“隔空播放接收器”。请保持设备上的 Wi-Fi 和蓝牙开启。"
           }
         }
       }
@@ -2799,7 +2799,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPad（无Home键）"
+            "value" : "iPad（无主屏幕按钮）"
           }
         }
       }
@@ -2833,7 +2833,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPhone SE（第3代）"
+            "value" : "iPhone SE（第 3 代）"
           }
         }
       }
@@ -2849,7 +2849,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保持在顶部"
+            "value" : "置顶"
           }
         }
       }
@@ -2865,7 +2865,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保持在顶部"
+            "value" : "置顶"
           }
         }
       }
@@ -2913,7 +2913,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "较大"
+            "value" : "放大"
           }
         }
       }
@@ -3041,7 +3041,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "macOS 将通过线缆连接的 iPhone 的屏幕显示为摄像头。请在“隐私与安全”→“摄像头”下允许 MirrorAct。"
+            "value" : "macOS 将通过线缆连接的 iPhone 的屏幕显示为摄像头。请在“隐私与安全性”→“摄像头”下允许 MirrorAct。"
           }
         }
       }
@@ -3089,7 +3089,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "镜像 iPhone 或 iPad……"
+            "value" : "镜像 iPhone 或 iPad…"
           }
         }
       }
@@ -3649,7 +3649,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "接收器故障 – 请参阅日志"
+            "value" : "接收器故障 — 请参阅日志"
           }
         }
       }
@@ -3729,7 +3729,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "录制中"
+            "value" : "录制"
           }
         }
       }
@@ -4017,7 +4017,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "界面截图"
+            "value" : "截图"
           }
         }
       }
@@ -4193,7 +4193,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "更小"
+            "value" : "缩小"
           }
         }
       }
@@ -4609,7 +4609,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用“裁剪…”进行裁剪；预览显示半分辨率。"
+            "value" : "使用“修剪…”修剪视频。预览以原分辨率的一半显示。"
           }
         }
       }

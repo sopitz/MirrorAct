@@ -84,7 +84,7 @@ Die Bilder zeigen die englische Oberfläche.
 - **Editor:** vorhandene Screenshots und Bildschirmaufnahmen nachträglich rahmen, Videos kürzen, zwei Screenshots als **Duo** (nebeneinander, versetzt, gekippt, perspektivisch).
 - **Kurzbefehle:** «Screenshot einrahmen» (auch als Finder-Schnellaktion), «Screenshot vom iPhone», «Aufnahme starten oder beenden».
 
-Die Oberfläche gibt es auf Englisch und Deutsch; die Sprache lässt sich unter Einstellungen → Allgemein wählen (Systemsprache, Deutsch, English).
+Die Oberfläche gibt es auf Englisch, Deutsch und vereinfachtem Chinesisch. Die Sprache lässt sich unter Einstellungen → Allgemein wählen (Systemsprache, English, Deutsch, 简体中文).
 
 ## Tastatur und Einstellungen
 

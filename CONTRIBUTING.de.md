@@ -58,7 +58,7 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 | `MirrorAct/Editor` | Editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + Export) |
 | `MirrorAct/Intents` | App Intents für Kurzbefehle |
 | `MirrorAct/Launcher` | Startfenster, Einstellungen |
-| `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche Übersetzung), Info.plist und Siri-Phrasen |
+| `MirrorAct/Localization` | String Catalogs (Englisch als Quelle, deutsche und vereinfachte chinesische Übersetzung), Info.plist und Siri-Phrasen |
 | `Shared` | `DeviceProfiles.json` – die Gerätebauformen (Notch, Dynamic Island, Kameraloch, Ecken, Rand, Tasten, Punkte, ppi; bei einem faltbaren Gerät auch der innere Bildschirm, unter `unfolded`) für alle MirrorAct-Apps; als Ressource in die App gebündelt; ausserhalb der App kompilierte Swift-Werkzeuge (z. B. mit swiftc) können mit `MIRRORACT_DEVICE_PROFILES` darauf zeigen; andere MirrorAct-Apps lesen dieselbe Datei. `scripts/build.sh` prüft sie als striktes JSON (keine Kommas am Ende), und die App bricht beim Start bei unbekannten Schlüsseln oder widersprüchlichen Einträgen ab. Ein Name darin, der eine Übersetzung braucht, bekommt einen manuellen Eintrag in `MirrorAct/Localization/Localizable.xcstrings`, weil der Compiler ihn nicht extrahieren kann |
 | `Agent` | MirrorActs Zusatzbefehle für WebDriverAgent (schnelle Berührungen), von `scripts/build-agent.sh` mitkompiliert |
 | `MirrorActTests` | Tests, laufen in einem Debug-Build der App (`scripts/test.sh`) |
