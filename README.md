@@ -184,21 +184,22 @@ under it count as separate paragraphs when the bar is shaded differently from th
   stay as it is: one word alone does not tell its language.
 - When a number changes in a line or a paragraph, such as a counter or a storage summary, its
   translation disappears for a moment until it has been read and translated again, instead of
-  showing the old number. A number that changes every second or faster, such as a countdown,
-  therefore shows untranslated for a moment after each change, also when its line is taken into one
-  paragraph with the line above it, such as the text of a field; once it stops, its last value is
-  translated. With a language model service each value that is read is sent to be translated. When
-  a line holds two numbers that change at different times, or a number sits right beside a blinking
-  cursor, the translation can show the number before for up to about a second after a change. On a
-  blurry picture or in small text, a digit that changes into one that looks alike (15 into 18) can
-  keep the old translation for two or three seconds. In a list whose rows differ only by a number,
-  translations can vanish while the list scrolls fast and come back when it stops.
-- Once the screen has come to rest, it is read a few more times and then not again until
-  something on it changes; a blinking cursor in a text field costs a few readings and then no
-  more. What keeps changing keeps the Mac reading that part of the screen: a clock with seconds
-  about once a second, a countdown that ticks every second one to two times a second (about a third
-  of a processor core), a progress bar that fills several times a second, and a cursor that fades
-  in and out, as on an iPhone or iPad, many times a minute.
+  showing the old number. A number that changes every second, such as a countdown, therefore shows
+  untranslated for a moment after each change, and its last value is translated once it stops; one
+  that changes faster shows untranslated much of the time. With a language model service each value
+  that is read is sent to be translated. When a line holds two numbers that change at different
+  times, or a number sits right beside a blinking cursor, the translation can show the previous
+  number for up to about a second after a change, now and then for several changes in a row; so can
+  a number that changes on a page that has just slid in sideways. On a blurry picture or in small
+  text, a digit that changes into one that looks alike (15 into 18) can keep the old translation for
+  two or three seconds. In a list whose rows differ only by a number, translations can vanish while
+  the list scrolls fast, or a row's translation can lie over a neighboring row for about a second;
+  once the list stops, they are right again.
+- Once the screen has come to rest, it is read a few more times and then not again until something
+  on it changes; a blinking cursor in a text field costs a few readings and then no more. What keeps
+  changing keeps the Mac reading that part of the screen: a clock with seconds about once a second,
+  a countdown that ticks every second one to two times a second, a progress bar that fills several
+  times a second, and a cursor that fades in and out, as on an iPhone or iPad, many times a minute.
 - Text over a playing video, such as subtitles, is not translated while the video plays, and text
   that keeps moving by itself, such as a ticker or a carousel, may stay untranslated while it
   moves; a ticker that never stops keeps the Mac busy (about half a processor core) for as long as
@@ -210,12 +211,12 @@ under it count as separate paragraphs when the bar is shaded differently from th
   untranslated until the page moves, and so can the first paragraph under a title bar after the
   page was pulled past its top end.
 - The lines an on-screen keyboard covered are translated about a second after it has gone; now and
-  then a line or two of them stay untranslated. While you type into a search field, the field can
-  keep the translation of what it showed before beside the new letters, or stay untranslated once
-  the keyboard has closed. A keyboard's page of digits and symbols and a floating keyboard are not
-  recognized as a keyboard, so their suggestions can be translated.
-- Now and then, after fast scrolling, a paragraph stays translated line by line or in two pieces
-  until the page moves.
+  then a line or two of them stay untranslated. While you type into a search field, what you typed
+  can stay untranslated, also after the keyboard has closed, or the field can keep the translation
+  of what it showed before beside the new letters. A keyboard's page of digits and symbols and a
+  floating keyboard are not recognized as a keyboard, so their suggestions can be translated.
+- Now and then, after fast scrolling, a paragraph stays translated line by line or in pieces until
+  the page moves.
 - While a side panel or drawer covers part of a page, the ends of words that show beside it may be
   translated as small labels, and a line half hidden behind a bar can come out as a few garbled
   letters in Text and in Translate.
@@ -228,9 +229,10 @@ under it count as separate paragraphs when the bar is shaded differently from th
 - Now and then a row stays untranslated on a still screen: after some changes to another screen,
   such as to the next page of settings, the lowest row just above the bottom edge or another row,
   and sometimes several rows; in a list of search results once the keyboard has closed, above all
-  rows that changed while you typed; and at the end or start of a list that was flung there, a
-  floating button or a label of a tab bar at its edge among them. Scrolling a little, or turning
-  "Translate" off and on, has it read and translated again.
+  rows that changed while you typed; and after a list was flung or scrolled fast, a row at its top
+  or bottom edge, a floating button or a label of a tab bar, of which only a narrow strip of
+  translation may show over the word. Scrolling a little, or turning "Translate" off and on, has it
+  read and translated again.
 
 When the device disconnects, "Translate" turns off; turn it on again. When MirrorAct itself moves
 an Android window to the other connection (the cable unplugged while Wi-Fi is there or the other

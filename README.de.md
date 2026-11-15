@@ -197,24 +197,26 @@ getönt ist als die Seite.
   der eigenen Sprache ist, unter Umständen stehen: Ein Wort allein verrät seine Sprache nicht.
 - Ändert sich eine Zahl in einer Zeile oder einem Absatz, etwa ein Zähler oder eine Angabe zum
   Speicherplatz, verschwindet deren Übersetzung kurz, bis die Zeile oder der Absatz neu gelesen und
-  übersetzt ist, statt die alte Zahl zu zeigen. Eine Zahl, die sich jede Sekunde oder öfter ändert,
-  etwa ein Countdown, ist darum nach jeder Änderung einen Moment lang unübersetzt zu sehen, auch
-  wenn ihre Zeile mit der Zeile darüber, etwa dem Text eines Feldes, zu einem Absatz
-  zusammengenommen wird; hält sie an, wird ihr letzter Wert übersetzt. Mit einem Sprachmodell-Dienst
-  wird jeder Wert, der gelesen wird, zum Übersetzen gesendet. Stehen in einer Zeile zwei Zahlen, die
-  sich zu verschiedenen Zeiten ändern, oder steht eine Zahl direkt neben einem blinkenden Cursor,
-  kann die Übersetzung nach einer Änderung bis zu etwa einer Sekunde lang die Zahl davor zeigen. Bei
-  einem unscharfen Bild oder in kleiner Schrift kann eine Ziffer, die sich in eine ähnlich
-  aussehende ändert (15 in 18), die alte Übersetzung zwei oder drei Sekunden lang behalten. In einer
-  Liste, deren Zeilen sich nur in einer Zahl unterscheiden, können Übersetzungen beim schnellen
-  Scrollen verschwinden und wiederkommen, sobald die Liste steht.
+  übersetzt ist, statt die alte Zahl zu zeigen. Eine Zahl, die sich jede Sekunde ändert, etwa ein
+  Countdown, ist darum nach jeder Änderung einen Moment lang unübersetzt zu sehen, und hält sie an,
+  wird ihr letzter Wert übersetzt; eine, die sich öfter ändert, ist einen guten Teil der Zeit
+  unübersetzt zu sehen. Mit einem Sprachmodell-Dienst wird jeder Wert, der gelesen wird, zum
+  Übersetzen gesendet. Stehen in einer Zeile zwei Zahlen, die sich zu verschiedenen Zeiten ändern,
+  oder steht eine Zahl direkt neben einem blinkenden Cursor, kann die Übersetzung nach einer
+  Änderung bis zu etwa einer Sekunde lang die vorherige Zahl zeigen, ab und zu bei mehreren
+  Änderungen nacheinander; ebenso eine Zahl, die sich auf einer Seite ändert, die eben seitwärts
+  hereingeglitten ist. Bei einem unscharfen Bild oder in kleiner Schrift kann eine Ziffer, die sich
+  in eine ähnlich aussehende ändert (15 in 18), die alte Übersetzung zwei oder drei Sekunden lang
+  behalten. In einer Liste, deren Zeilen sich nur in einer Zahl unterscheiden, können Übersetzungen
+  beim schnellen Scrollen verschwinden, oder die Übersetzung einer Zeile kann etwa eine Sekunde lang
+  über einer Nachbarzeile liegen; sobald die Liste steht, stimmen sie wieder.
 - Ist der Bildschirm zur Ruhe gekommen, wird er noch einige Male gelesen und dann nicht mehr, bis
   sich etwas auf ihm ändert; ein blinkender Cursor in einem Textfeld kostet einige wenige
   Lesedurchgänge und dann keine mehr. Was sich laufend ändert, lässt den Mac diesen Teil des
   Bildschirms weiter lesen: eine Uhr mit Sekunden etwa einmal in der Sekunde, ein Countdown, der
-  jede Sekunde weiterzählt, ein- bis zweimal in der Sekunde (etwa ein Drittel eines
-  Prozessorkerns), ein Fortschrittsbalken, der sich füllt, mehrmals in der Sekunde, und ein Cursor,
-  der ein- und ausblendet, wie auf einem iPhone oder iPad, viele Male in der Minute.
+  jede Sekunde weiterzählt, ein- bis zweimal in der Sekunde, ein Fortschrittsbalken, der sich füllt,
+  mehrmals in der Sekunde, und ein Cursor, der ein- und ausblendet, wie auf einem iPhone oder iPad,
+  viele Male in der Minute.
 - Text über einem laufenden Video, etwa Untertitel, wird nicht übersetzt, solange das Video läuft,
   und Text, der sich von selbst weiterbewegt, etwa ein Ticker oder ein Karussell, bleibt unter
   Umständen unübersetzt, solange er sich bewegt; ein Ticker, der nie anhält, hält den Mac
@@ -227,13 +229,13 @@ getönt ist als die Seite.
   darunter lag, unübersetzt bleiben, bis sich die Seite bewegt, ebenso der erste Absatz unter einer
   Titelleiste, nachdem die Seite über ihr oberes Ende hinaus gezogen wurde.
 - Die Zeilen, die eine Bildschirmtastatur verdeckt hat, werden etwa eine Sekunde, nachdem sie weg
-  ist, übersetzt; ab und zu bleiben ein oder zwei davon unübersetzt. Tippt man in ein Suchfeld,
-  kann das Feld die Übersetzung dessen, was es vorher zeigte, neben den neuen Buchstaben behalten
-  oder unübersetzt bleiben, nachdem sich die Tastatur geschlossen hat. Die Ziffern- und
-  Zeichenseite einer Tastatur und eine schwebende Tastatur werden nicht als Tastatur erkannt, ihre
-  Vorschläge können also übersetzt werden.
-- Ab und zu bleibt ein Absatz nach schnellem Scrollen Zeile für Zeile oder in zwei Stücken
-  übersetzt, bis sich die Seite bewegt.
+  ist, übersetzt; ab und zu bleiben ein oder zwei davon unübersetzt. Tippt man in ein Suchfeld, kann
+  das Getippte unübersetzt bleiben, auch nachdem sich die Tastatur geschlossen hat, oder das Feld
+  kann die Übersetzung dessen, was es vorher zeigte, neben den neuen Buchstaben behalten. Die
+  Ziffern- und Zeichenseite einer Tastatur und eine schwebende Tastatur werden nicht als Tastatur
+  erkannt, ihre Vorschläge können also übersetzt werden.
+- Ab und zu bleibt ein Absatz nach schnellem Scrollen Zeile für Zeile oder in Stücken übersetzt, bis
+  sich die Seite bewegt.
 - Solange ein Seitenpanel oder eine Schublade einen Teil der Seite verdeckt, werden die Wortenden
   daneben unter Umständen als kleine Beschriftungen übersetzt, und eine Zeile, die zur Hälfte
   hinter einer Leiste liegt, kann in «Text» und «Übersetzen» als einige verstümmelte Buchstaben
@@ -249,9 +251,11 @@ getönt ist als die Seite.
   einen anderen Bildschirm, etwa zur nächsten Seite der Einstellungen, die unterste Zeile direkt
   über dem unteren Rand oder eine andere Zeile und manchmal mehrere Zeilen; in einer Liste von
   Suchergebnissen, nachdem sich die Tastatur geschlossen hat, vor allem Zeilen, die sich beim Tippen
-  geändert haben; und am Ende oder Anfang einer Liste, die mit Schwung dorthin gewischt wurde,
-  darunter ein schwebender Knopf oder eine Beschriftung einer Tab-Leiste an ihrem Rand. Ein wenig
-  Scrollen oder «Übersetzen» aus- und wieder einschalten lässt sie neu lesen und übersetzen.
+  geändert haben; und nachdem eine Liste mit Schwung gewischt oder schnell gescrollt wurde, eine
+  Zeile an ihrem oberen oder unteren Rand, ein schwebender Knopf oder eine Beschriftung einer
+  Tab-Leiste, von der unter Umständen nur ein schmaler Streifen Übersetzung über dem Wort zu sehen
+  ist. Ein wenig Scrollen oder «Übersetzen» aus- und wieder einschalten lässt sie neu lesen und
+  übersetzen.
 
 Trennt sich das Gerät, geht «Übersetzen» aus und muss wieder eingeschaltet werden. Wechselt
 MirrorAct ein Android-Fenster selbst auf die andere Verbindung (Kabel abgezogen bei bestehendem
