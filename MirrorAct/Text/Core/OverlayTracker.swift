@@ -577,6 +577,12 @@ final class OverlayTracker {
         /// of other text in its place that takes its area takes the mark as well (`absorb`: the
         /// title of the bar changed in place).
         var staysOverArea = false
+        /// It is lost (`lostSince`) because a movement of only a part of its place carried it: the
+        /// rest of its line slid sideways when a value in it changed its width ("10" to "9"). On a
+        /// still page it still gives its line to the changes there (`addChangedAreas`), at the
+        /// place where that movement left it: like any lost block it goes on moving with what
+        /// carried it, so that place lies beside the line on the screen by the step of the tail.
+        var lostToPartOfIt = false
     }
 
     /// A part of the screen whose content was seen to move as one (the view of a page between
@@ -1509,6 +1515,9 @@ final class OverlayTracker {
                     block.y += motions[moving].dy
                     block.areaID = motionAreaIDs[moving]
                     carriedUnseen[block.id] = moving
+                    if block.lostSince == nil {
+                        block.lostToPartOfIt = isPartOfLine(moved: moving, motions: motions, line: rect)
+                    }
                 }
                 if block.seen != nil, !isActive(under: rect, kind: .changed) {
                     // gone without anything changing there (a slow fade): read the place again
@@ -1517,6 +1526,7 @@ final class OverlayTracker {
                 block.seen = nil
                 block.lostSince = block.lostSince ?? time
             }
+            if found { block.lostToPartOfIt = false }
             // (one that is not found where it is keeps the mark: covered for a moment, its text
             // changed in place; one that a movement carries goes with the content)
             if let seen = block.seen, seen != block.inner { block.staysOverArea = false }
@@ -1656,6 +1666,16 @@ final class OverlayTracker {
             }
         }
         return false
+    }
+
+    /// The scrolling area of a movement of this frame lies within the rows of `line` (a tile more
+    /// above and below) and does not hold all of it: a part of that line moved, not the page
+    private func isPartOfLine(moved motion: Int, motions: [FrameMotion], line: CGRect) -> Bool {
+        let area = scrollArea(id: motionAreaIDs[motion])?.rect ?? motions[motion].area
+        let rect = CGRect(x: area.x, y: area.y, width: area.width, height: area.height)
+        let tile = Double(configuration.tileSize)
+        return rect.minY >= line.minY - tile && rect.maxY <= line.maxY + tile
+            && !rect.insetBy(dx: -1, dy: -1).contains(line)
     }
 
     /// The place of a block whose numbers changed is read once everything over it rests: a
@@ -3069,10 +3089,15 @@ final class OverlayTracker {
             // a still page – nothing moves under it and nothing near it moved for `restDelay` – is
             // read with the whole line: read with only `readMargin` around the change, a long line
             // is cut, and a line read cut is read again, a little farther each time: a word typed
-            // at the end of a field was translated after 1.5 s, by the fifth pass)
+            // at the end of a field was translated after 1.5 s, by the fifth pass). The line of a
+            // block lost because a movement of only a part of it carried it counts as known, at the
+            // place where that movement left it: the rest of a countdown's line slid sideways when
+            // its number changed its width ("10" to "9"), and its next change was read only around
+            // the digits, cut, again and again.
             let still = movingArea(atX: center.x, y: center.y) == nil
                 && time - lastMoved(area: -1, around: area.rect) >= configuration.restDelay
-            for block in tracked where still && block.lineCount == 1 && block.seen != nil {
+            for block in tracked where still && block.lineCount == 1
+                && (block.seen != nil || block.lostSince != nil && block.lostToPartOfIt) {
                 let line = thumbnailRect(of: block), change = area.rect
                 let rows = min(change.maxY, line.maxY) - max(change.minY, line.minY)
                 guard rows * 2 >= line.height, change.height <= 2 * line.height + Double(configuration.tileSize),
