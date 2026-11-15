@@ -925,7 +925,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "声音功能需要 Android 11 或更高版本。受保护的应用程序（银行、流媒体）保持黑色。"
+            "value" : "声音功能需要 Android 11 或更高版本。受保护的应用（银行、流媒体）保持黑色。"
           }
         }
       }
@@ -2279,13 +2279,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "双屏"
+            "value" : "Duo"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Duo"
+            "value" : "双屏"
           }
         }
       }
@@ -3025,7 +3025,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最低延迟。其他应用程序（如 QuickTime）不得同时打开该设备。"
+            "value" : "最低延迟。其他应用（如 QuickTime）不得同时打开该设备。"
           }
         }
       }
@@ -4465,7 +4465,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "该设备已在另一个应用程序（如 QuickTime）中打开。"
+            "value" : "该设备已在另一个应用（如 QuickTime）中打开。"
           }
         }
       }
