@@ -130,19 +130,26 @@ einem Block aus mehreren Zeilen wird jedes Zeichen auf die Zeile gelegt, zu der 
 (`Block.numbersDifferSince`); seine Stelle wird gelesen, sobald alles darüber ruht, bei einem Block
 aus einer Zeile die ganze Zeile, bei einem aus mehreren sein Rechteck (`askToReadLine`), und ein
 verborgener Block, in den keine Stelle des Plans mehr hineinreicht, wird fallen gelassen und seine
-Stelle einmal als neuer Text gelesen (`dropHiddenBlocksNothingReads`). Während eine Liste, deren
-Zeilen sich nur in einer oder zwei Ziffern unterscheiden, schnell gleitet, kann die Übersetzung
-einer Zeile für ein oder zwei Bilder noch über der nächsten liegen, und während eine solche Liste
-gleitet, kann ein verborgener Block fallen gelassen und gelesen werden, bevor die Liste ruht (mehr
-Durchgänge, nichts Falsches gezeichnet). An einem gespiegelten Telefon wird ein Countdown, der jede
-Sekunde weiterzählt, nicht richtig gehalten: Mit dem Text eines Feldes darüber zu einem Block aus
-zwei Zeilen gelesen, blieb seine erste Zahl eine Minute lang gezeichnet, und als eigener Block wurde
-er für seine ersten Werte gelesen und blieb dann unübersetzt, mit nur einer geänderten Stelle über
-seinen Ziffern und ohne `readWith` im Dump. Ein Schritt von weniger als einem Pixel über weniger als
-`minSecondMotionTiles` Kacheln, zu dem keine Bewegung des Bildes davor hinführt, ist nur dann eine
-Bewegung, wenn diese Kacheln von dort, woher er sie kommen lässt, höchstens `maxCreepResidual`-mal
-so stark abweichen wie an Ort (`MotionEstimator.explainsCreep`): Ziffern, die sich in ihrer Zeile
-ändern, sind eine Änderung, kein eigener Scrollbereich.
+Stelle einmal als neuer Text gelesen (`dropHiddenBlocksNothingReads`). Ein Block aus mehreren Zeilen
+mit Ziffern wird ebenso verborgen, wenn sich das Bild darunter an Ort ändert, wo keine Bewegung ihn
+ganz trägt und kein bekanntes Bild zu sehen ist (`moveBlocks`): Seine Zeilen müssen sein Rechteck
+nicht zu gleichen Teilen einnehmen (der Text eines Feldes, mit einem kleineren Countdown darunter zu
+einem Absatz gelesen), also sucht `numbersFit` seine Ziffern unter Umständen auf einer anderen Zeile
+als ihrer. Ein gelesener Text wird nicht übernommen, wenn über einer seiner Zeilen eine Bewegung
+seit Beginn des Durchgangs das eine Ende getragen hat und das andere nicht und der Scrollbereich
+dieser Bewegung ruhte, als der Durchgang begann, nur einen Teil der Zeile enthält und in ihren
+Zeilen liegt oder sie nur seitwärts bewegt hat (`isSplitByAMovement`, jede Zeile eines Absatzes für
+sich): Der Rest der Zeile ist verrutscht, weil ein Wert darin seine Breite geändert hat («10» zu
+«9»), und sein alter Wert würde über den neuen gezeichnet; seine Stelle wird gelesen, sobald alles
+darüber ruht. Während eine Liste, deren Zeilen sich nur in einer oder zwei Ziffern unterscheiden,
+schnell gleitet, kann die Übersetzung einer Zeile für ein oder zwei Bilder noch über der nächsten
+liegen, und während eine solche Liste gleitet, kann ein verborgener Block fallen gelassen und
+gelesen werden, bevor die Liste ruht (mehr Durchgänge, nichts Falsches gezeichnet). Ein Schritt von
+weniger als einem Pixel über weniger als `minSecondMotionTiles` Kacheln, zu dem keine Bewegung des
+Bildes davor hinführt, ist nur dann eine Bewegung, wenn diese Kacheln von dort, woher er sie kommen
+lässt, höchstens `maxCreepResidual`-mal so stark abweichen wie an Ort
+(`MotionEstimator.explainsCreep`): Ziffern, die sich in ihrer Zeile ändern, sind eine Änderung, kein
+eigener Scrollbereich.
 
 Eine Bewegung, die mindestens `replacedBlocks` Blöcke trägt, die ganz zu sehen waren, und keinen von
 ihnen findet, hat das Bild ersetzt (`moveBlocks`): Die Blöcke, die sie trug, ohne sie zu finden,
@@ -156,15 +163,21 @@ Einzelbild vergessen, das nichts am Bild ändert, und wenn ein Durchgang endet (
 ein ruhendes Telefon sendet keine Bilder). Eine genau bekannte untere Kante eines Scrollbereichs
 wird auf dem ruhenden Bild erneut geprüft und fallen gelassen, wenn die Zeilen dahinter nicht mehr
 zeigen, was sie gezeigt haben, und der Grund der Seite sich in ihnen fortsetzt
-(`dropBottomEdgesThatDoNotHold`); obere Kanten werden nicht geprüft. Ein Block, der ganz zu sehen
-ist und stehen bleibt, während sich sein Scrollbereich unter ihm bewegt, etwa der Titel einer
-Leiste, wird nicht an den Kanten dieses Bereichs abgeschnitten (`Block.staysOverArea`). Eine Stelle,
-die nicht ganz zu sehen ist, am Rand des Bildes oder ihres Scrollbereichs, und erneut gelesen werden
-soll, wartet auf die nächste Bewegung, wenn sie verlangt wird, während das, worin sie liegt, schon
-ruht (`ReadingPlan.dueAtRest`); auf einer ruhenden Seite wird sie also nicht gelesen: An einem
-gespiegelten Telefon bleiben so die unterste Zeile einer neuen Seite, Zeilen von Suchergebnissen,
-die sich unter einer Tastatur geändert haben, und Zeilen an den Enden einer mit Schwung gewischten
-Liste unübersetzt, bis sich die Seite bewegt (der Dump zeigt eine solche Stelle mit `dueIn` null).
+(`dropBottomEdgesThatDoNotHold`, mit einem Einzelbild und, da ein ruhendes Telefon keine Bilder
+sendet, auch wenn ein Durchgang endet, bevor das Gelesene beurteilt wird); ein anderer Scrollbereich
+in oder neben diesen Zeilen verhindert die Prüfung der Kante, ausser mindestens die Hälfte dieses
+Bereichs liegt im geprüften (ein Teil seines Inhalts, etwa ein Streifen, für den eine Bewegung
+falsch eingeschätzt wurde, während eine Seite hereinglitt); obere Kanten werden nicht geprüft. Ein
+Block, der ganz zu sehen ist und stehen bleibt, während sich sein Scrollbereich unter ihm bewegt,
+etwa der Titel einer Leiste, wird nicht an den Kanten dieses Bereichs abgeschnitten
+(`Block.staysOverArea`). Eine Stelle, die nicht ganz zu sehen ist, am Rand des Bildes oder ihres
+Scrollbereichs, und erneut gelesen werden soll, wartet auf die nächste Bewegung, wenn sie verlangt
+wird, während das, worin sie liegt, schon ruht (`ReadingPlan.dueAtRest`); auf einer ruhenden Seite
+wird sie also nicht gelesen: An einem gespiegelten Telefon bleiben so ab und zu die unterste Zeile
+einer neuen Seite (eine untere Kante, die nicht hält, ist ein Weg dorthin, ein anderer ist noch
+nicht verfolgt), Zeilen von Suchergebnissen, die sich unter einer Tastatur geändert haben, und
+Zeilen an den Enden einer mit Schwung gewischten Liste unübersetzt, bis sich die Seite bewegt (der
+Dump zeigt eine solche Stelle mit `dueIn` null).
 
 Ein Durchgang auf dem ruhenden Bild, der nichts Neues gebracht hat, lässt die Bilder der Kacheln,
 die er gelesen hat, als bekannt zurück (`knownTilePictures`), und eine Änderung, die nur bekannte
@@ -173,21 +186,34 @@ jedem Block vergessen, den ein Durchgang erzeugt, geändert oder entfernt hat, w
 bei `reset` und dort, wo der Aufrufer keine Zeilen mehr weglässt (`linesNoLongerLeftOut`). Eine
 Änderung in einer bekannten Zeile auf einer ruhenden Seite wird mit der ganzen Zeile gelesen
 (`UnreadArea.readWith`), die nie von selbst fällig wird und nicht entscheidet, mit welchem Bereich
-ein Ausschnitt beginnt (`ReadingPlan.takeRegion`). Eine Stelle, an der ein Block abgeschnitten sein
-kann oder zwei Blöcke ein Absatz sein können, wird höchstens `maxRereads`-mal erneut gelesen, und
-ein Bild, an dem sich nichts ändert, von höchstens `maxPassesOnPicture` Durchgängen; was dann noch
-übrig ist, wartet auf die nächste Änderung. Eine Uhr mit Sekunden kostet etwa einen Durchgang in der
-Sekunde, ein Fortschrittsbalken, der sich füllt, mehrere.
+ein Ausschnitt beginnt (`ReadingPlan.takeRegion`); eine bekannte Zeile ist auch die eines Blocks aus
+einer Zeile, der verloren ist, weil eine Bewegung nur eines Teils seiner Zeile ihn getragen hat
+(`Block.lostToPartOfIt`: Der Rest der Zeile ist verrutscht, als ein Wert darin seine Breite geändert
+hat; die Zeile wird dort genommen, wo diese Bewegung den Block gelassen hat, um einen Schritt des
+Zeilenendes neben der Zeile auf dem Bildschirm), und eine Änderung in einem Block aus mehreren
+Zeilen, der für seine Zahlen verborgen ist, wird mit dem Rechteck dieses Blocks gelesen. Ein
+gelesener Text aus einer Zeile auf dem ruhenden Bild, den der Ausschnitt seines Durchgangs an einer
+Seite abgeschnitten hat, nicht das Bild, und über dem kein bekannter Block liegt, wird erneut der
+ganzen Zeile entlang gelesen (`askToReread`; der Ausschnitt, der sie ganz liest, schneidet sie nicht
+mehr ab, also verlangt das jede Zeile einmal); eine solche Zeile kann einmal ohne den Rest ihres
+Absatzes gelesen werden, der dann einmal in Teilen übersetzt wird. Eine Stelle, an der ein Block
+abgeschnitten sein kann oder zwei Blöcke ein Absatz sein können, wird höchstens `maxRereads`-mal
+erneut gelesen, und ein Bild, an dem sich nichts ändert, von höchstens `maxPassesOnPicture`
+Durchgängen; was dann noch übrig ist, wartet auf die nächste Änderung. Eine Uhr mit Sekunden kostet
+etwa einen Durchgang in der Sekunde, ein Fortschrittsbalken, der sich füllt, mehrere.
 
 Der Prüfstand hat keine Zeilen, die sich nur in ihren Zahlen unterscheiden, und lässt nie eine
 Bewegung das Bild ersetzen; diese Regeln haben darum eigene Tests: `OverlayTrackerNumbersTests`
 (Zahlen), `OverlayTrackerEdgeTests` (Kanten), `OverlayTrackerStillPictureTests` (das ruhende Bild),
 `OverlayTrackerChangingTests` (ein Cursor, Tippen, ein Zähler, die Zeilen unter einer Tastatur),
 `OverlayTrackerPageTransitionTests` (Seiten, die hereingleiten und überblenden oder in Schritten von
-unten kommen), `OverlayTrackerScreenChangeTests` und `OverlayTrackerValueTickTests` (Vorschaubilder
-eines echten Telefons, wie die App sie gemacht hat, in `MirrorActTests/TextCore/Frames`: ein Wechsel
-der Seite und ein Wert, der weiterzählt), `TextLayoutKeyboardTests` (die Tastatur) und
-`TextLayoutTests` (der Grund einer Leiste).
+unten kommen), `OverlayTrackerCountdownTests` (ein Countdown, der jede Sekunde weiterzählt, unter
+einem Textfeld oder einer Überschrift, als eigene Zeile oder mit der Zeile darüber zu einem Absatz
+gelesen, auf Seiten, die mit Core Text gezeichnet sind), `OverlayTrackerScreenChangeTests` und
+`OverlayTrackerValueTickTests` (Vorschaubilder eines echten Telefons, wie die App sie gemacht hat,
+in `MirrorActTests/TextCore/Frames`: Wechsel der Seite, darunter die letzte Zeile über dem Griff der
+Navigationsleiste in `DisplayLastRow`, und ein Wert, der weiterzählt), `TextLayoutKeyboardTests`
+(die Tastatur) und `TextLayoutTests` (der Grund einer Leiste).
 
 ## Ohne Gerät testen
 
@@ -270,10 +296,10 @@ App das Fenster auf eine andere Verbindung wechselt), `ShowcaseTests` (die Bilde
 so, wie es die gespiegelte Sitzung hat) und `FrameSinkTests` (das übersetzte Bild wird gezeigt und
 aufgenommen); die Tests des Kerns liegen in `MirrorActTests/TextCore` (`OverlayTrackerContractTests`
 hält fest, was jeder Tracker tun muss). Die langen Tests des Trackers (`OverlayTrackerNumbersTests`,
-`OverlayTrackerEdgeTests`, `OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`) spielen
-im Debug-Build nur einen Teil ihrer Einstellungen, so gewählt, dass jeder ohne die Regel, die er
-schützt, noch fehlschlägt (`TestBuild`); ein Release-Build oder `TRACKING_ALL=1 scripts/test.sh`
-spielt alle.
+`OverlayTrackerEdgeTests`, `OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`,
+`OverlayTrackerCountdownTests`) spielen im Debug-Build nur einen Teil ihrer Einstellungen, so
+gewählt, dass jeder ohne die Regel, die er schützt, noch fehlschlägt (`TestBuild`); ein
+Release-Build oder `TRACKING_ALL=1 scripts/test.sh` spielt alle.
 
 ### Der Prüfstand für das Nachführen
 

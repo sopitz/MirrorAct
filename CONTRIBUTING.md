@@ -124,17 +124,23 @@ to, `letterParts`) is not drawn until a reading by a later pass confirms it
 (`Block.numbersDifferSince`); its place is read once everything over it rests, the whole line for a
 block of one line and the box for one of several (`askToReadLine`), and a hidden block that no place
 of the plan reaches into any more is dropped and its place read once as new text
-(`dropHiddenBlocksNothingReads`). While a list whose rows differ only in a digit or two moves fast,
-a row's translation can still lie over the next row for a frame or two, and while such a list
-glides, a hidden block can be dropped and read before the list rests (more passes, nothing wrong
-drawn). On a mirrored phone a countdown that ticks once a second is not kept right: read into one
-block of two lines with the text of a field above it, it kept its first number drawn for a minute,
-and as a block of its own it was read for its first few values and then left untranslated, with only
-a changed place over its digits and no `readWith` in the dump. A step of less than a pixel over
-fewer than `minSecondMotionTiles` tiles that no movement of the frame before leads up to is a
-movement only when those tiles differ from where it says they came from by at most
-`maxCreepResidual` of how much they differ in place (`MotionEstimator.explainsCreep`): digits that
-tick in their line are a change, not a scrolling area of their own.
+(`dropHiddenBlocksNothingReads`). A block of several lines with digits is hidden in the same way
+when the picture under it changes in place, where no movement carries all of it and no known picture
+shows (`moveBlocks`): its lines need not share its box equally (the text of a field read as one
+paragraph with a smaller countdown under it), so `numbersFit` may look for its digits on another
+line than theirs. A reading is not taken when, over one of its lines, a movement since the pass
+began carried one end and not the other, and the scrolling area of that movement rested when the
+pass began, holds only a part of the line and lies in its rows or moved it only sideways
+(`isSplitByAMovement`, each line of a paragraph on its own): the rest of the line slid because a
+value in it changed its width ("10" to "9"), and its old value would be drawn over the new one; its
+place is read once everything over it rests. While a list whose rows differ only in a digit or two
+moves fast, a row's translation can still lie over the next row for a frame or two, and while such a
+list glides, a hidden block can be dropped and read before the list rests (more passes, nothing
+wrong drawn). A step of less than a pixel over fewer than `minSecondMotionTiles` tiles that no
+movement of the frame before leads up to is a movement only when those tiles differ from where it
+says they came from by at most `maxCreepResidual` of how much they differ in place
+(`MotionEstimator.explainsCreep`): digits that tick in their line are a change, not a scrolling area
+of their own.
 
 A movement that carries at least `replacedBlocks` blocks that showed whole and finds none of them
 has replaced the picture (`moveBlocks`): the blocks it carried without finding them are dropped, and
@@ -146,14 +152,18 @@ faded into another), and a lost block is forgotten after `lostLifetime` also on 
 not change the picture and when a pass ends (`forgetLostBlocks`: a still phone sends no frames). A
 refined bottom edge of a scrolling area is checked again on the picture at rest and dropped when the
 rows beyond it no longer show what they showed and the page's ground goes on in them
-(`dropBottomEdgesThatDoNotHold`); top edges are not checked. A block that shows whole and stays
-while its scrolling area moves under it, such as the title of a bar, is not cut at that area's edges
-(`Block.staysOverArea`). A reread of a place that cannot be seen completely, at the edge of the
-frame or of its scrolling area, waits for the next movement when it is asked for while what it lies
-in rests already (`ReadingPlan.dueAtRest`), so on a still page it is not read: on a mirrored phone
-this leaves the lowest row of a new page, rows of search results that changed under a keyboard and
-rows at the ends of a flung list untranslated until the page moves (the dump shows such a place with
-`dueIn` null).
+(`dropBottomEdgesThatDoNotHold`, on a frame and, as a still phone sends no frames, also when a pass
+ends, before its readings are judged); another scrolling area in or next to those rows keeps the
+edge from being checked, unless at least half of that area lies inside the checked one (a part of
+its content, such as a strip a movement was misjudged for while a page slid in); top edges are not
+checked. A block that shows whole and stays while its scrolling area moves under it, such as the
+title of a bar, is not cut at that area's edges (`Block.staysOverArea`). A reread of a place that
+cannot be seen completely, at the edge of the frame or of its scrolling area, waits for the next
+movement when it is asked for while what it lies in rests already (`ReadingPlan.dueAtRest`), so on a
+still page it is not read: on a mirrored phone this leaves, now and then, the lowest row of a new
+page (a bottom edge that does not hold is one way there, and another one is not traced yet), rows of
+search results that changed under a keyboard and rows at the ends of a flung list untranslated until
+the page moves (the dump shows such a place with `dueIn` null).
 
 A pass at rest that brought nothing new leaves the pictures of the tiles it read known
 (`knownTilePictures`), and a change that shows only known pictures is not read: a blinking caret
@@ -161,18 +171,29 @@ costs two passes. They are forgotten under every block a pass made, changed or r
 content moves, on `reset`, and where the caller stops leaving lines out (`linesNoLongerLeftOut`). A
 change in a known line on a still page is read with the whole line (`UnreadArea.readWith`), which
 never becomes due by itself and does not decide which area a region begins with
-(`ReadingPlan.takeRegion`). A place where a block may be cut off, or where two blocks may be one
-paragraph, is read again at most `maxRereads` times, and a picture that nothing changes is read by
-at most `maxPassesOnPicture` passes; what is left then waits for the next change. A clock with
-seconds costs about a pass a second, and a progress bar that fills several.
+(`ReadingPlan.takeRegion`); a known line is also that of a block of one line lost because a movement
+of only a part of its line carried it (`Block.lostToPartOfIt`: the rest of the line slid when a
+value in it changed its width; the line is taken where that movement left the block, a step of the
+tail beside the line on the screen), and a change inside a block of several lines hidden for its
+numbers is read with that block's box. A reading of one line at rest that the region of its pass cut
+off at a side, not the view, and over which no known block lies, is read again along its whole line
+(`askToReread`; the region that reads it whole no longer cuts it, so this asks once for each line);
+such a line can be read once without the rest of its paragraph, which is then translated in parts
+once. A place where a block may be cut off, or where two blocks may be one paragraph, is read again
+at most `maxRereads` times, and a picture that nothing changes is read by at most
+`maxPassesOnPicture` passes; what is left then waits for the next change. A clock with seconds costs
+about a pass a second, and a progress bar that fills several.
 
 The bench has no rows that differ only in their numbers and never makes a movement replace the
 picture, so these rules have tests of their own: `OverlayTrackerNumbersTests` (numbers),
 `OverlayTrackerEdgeTests` (edges), `OverlayTrackerStillPictureTests` (the still picture),
 `OverlayTrackerChangingTests` (a caret, typing, a counter, the lines under a keyboard),
 `OverlayTrackerPageTransitionTests` (pages that slide in and fade, or come up in steps),
-`OverlayTrackerScreenChangeTests` and `OverlayTrackerValueTickTests` (thumbnails of a real phone, as
-the app made them, in `MirrorActTests/TextCore/Frames`: a page change and a value that ticks),
+`OverlayTrackerCountdownTests` (a countdown that ticks once a second under a text field or a
+heading, as a line of its own or read as one paragraph with the line above it, on pages drawn with
+Core Text), `OverlayTrackerScreenChangeTests` and `OverlayTrackerValueTickTests` (thumbnails of a
+real phone, as the app made them, in `MirrorActTests/TextCore/Frames`: page changes, among them the
+last row above the navigation bar's handle in `DisplayLastRow`, and a value that ticks),
 `TextLayoutKeyboardTests` (the keyboard) and `TextLayoutTests` (the ground of a bar).
 
 ## Test without a device
@@ -251,9 +272,10 @@ connection), `ShowcaseTests` (the pictures, with Translate as the mirrored sessi
 `FrameSinkTests` (the translated frame is shown and recorded); the tests of the core are in
 `MirrorActTests/TextCore` (`OverlayTrackerContractTests` holds what every tracker must do). The
 tracker's long tests (`OverlayTrackerNumbersTests`, `OverlayTrackerEdgeTests`,
-`OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`) play only a part of their settings
-in a debug build, chosen so that each still fails without the rule it guards (`TestBuild`); a
-release build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of them.
+`OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`, `OverlayTrackerCountdownTests`)
+play only a part of their settings in a debug build, chosen so that each still fails without the
+rule it guards (`TestBuild`); a release build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of
+them.
 
 ### The tracking bench
 
