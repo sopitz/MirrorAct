@@ -30,10 +30,11 @@ scripts/build.sh
 ```
 
 The script fetches UxPlay at a pinned commit into `Vendor/`, builds only its AirPlay library,
-downloads the scrcpy server for Android (pinned version, checked against its SHA-256),
-generates the Xcode project with XcodeGen, builds the app and installs it to
-`~/Applications/MirrorAct.app`. `--debug` builds the debug configuration, `--no-install` skips the
-installation.
+downloads the scrcpy server for Android (pinned version, checked against its SHA-256), generates
+the Xcode project with XcodeGen, builds the app and installs it to `~/Applications/MirrorAct.app`.
+`--debug` builds the debug configuration, `--no-install` skips the installation, and `NAME=VALUE`
+arguments are passed on to xcodebuild as build settings; `MIRRORACT_DERIVED` chooses another build
+folder than `~/Library/Caches/MirrorAct/DerivedData`.
 
 By default the app is signed ad hoc. macOS then asks for camera access again after every build.
 To keep the permission, sign with your own certificate: copy `Config/Local.xcconfig.example` to
@@ -55,6 +56,8 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `MirrorAct/Mirror` | mirror window, tool rail, style panel, presentation, `DeviceControl` (interface for controlling a device) |
 | `MirrorAct/Control` | iPhone/iPad control: `IOSControl` (gestures, keyboard, start of the agent via `xcodebuild`), `AgentRunners` (running agents, kept for a few minutes, stopped when a wireless connection ends), `AgentConnection` (HTTP to WebDriverAgent), `USBMux` (usbmuxd) |
 | `MirrorAct/Recording` | `MirrorRecorder` (AVAssetWriter, host time, variable frame rate) |
+| `MirrorAct/Text` | text on the screen: `TextRecognizer` (Vision; `LeadingMark` leaves out an icon read as a character in front of a line, `LineTone` measures how bright and how colored the letters of a line are), `FramePixels` (thumbnails and colors straight from the frame), `ScreenTranslator` (a `FrameProcessor` in the `FrameSink`: reads, translates and draws beside the frames), `TranslationCompositor` with `BlockPlacement`, `BlockTextMask` and `ChromaPlane` (draws the translations into a copy of the frame, in its own pixel format and in the size of the original text), `TranslationEngine` (the interface every engine implements), `TranslationEngines` (picks the engine the settings name), `AppleTranslationEngine` (Apple's Translation framework; sorts the texts by language with `LanguageMatching` and sends the short labels of a screen together, `AppleTranslationJoining`; its sessions live in a hidden host window, `AppleTranslationHost`), `LLMTranslationEngine` (language model services with the user's key from `KeychainStore`) |
+| `MirrorAct/Text/Core` | the part that uses Foundation alone (and CoreGraphics where it is available), so that other MirrorAct apps can use it: `TextLayout` (lines into paragraphs; leaves out the status bar and, for Translate, the icons of rows read as letters and the on-screen keyboard, keeps the title of a row apart from its summary by the brightness of their letters and the title of a bar apart from a row under it by their ground, marks lines that are cut off), `TextTracking` (the values the recognition, the tracker and the drawing exchange), `LumaImage` (thumbnails), `OverlayTracker` with `MotionEstimator`, `ReadingPlan` and `BlockPatch` (keeps translations on their text while the content moves, and decides what is read and what is sent for translation when), `YCbCrColor`, `LLMProvider`/`LLMWire`/`TranslationPrompt` (what is sent to a service and how its replies are read, without the network), `LanguageMatching` (the language of each text and of the screen, and when macOS may be asked for a language). Its rules are written in its comments, and a change to a rule is described there. Its tests are in `MirrorActTests/TextCore` (with a simulator of scrolling phone screens and a bench, `Tracking*.swift`) |
 | `MirrorAct/Editor` | editor, `DuoRenderer`, `VideoFramer` (AVVideoComposition + export) |
 | `MirrorAct/Intents` | App Intents for Shortcuts |
 | `MirrorAct/Launcher` | start window, settings |
@@ -63,6 +66,158 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 | `Agent` | MirrorAct's additional commands for WebDriverAgent (fast touches), compiled in by `scripts/build-agent.sh` |
 | `MirrorActTests` | tests, run inside a debug build of the app (`scripts/test.sh`) |
 | `scripts` | build, test, agent, release, icon and device profile check scripts |
+
+### Text and Translate
+
+"Text" and "Translate" are experimental: the app shows them only while the setting "Experimental
+features" (`AppSettings.experimentalFeatures`, Settings → General, off by default) is on.
+`FeatureGate` says what the setting lets through: the tool rail's buttons, the items of the Device
+menu and the context menu, and the tabs of the settings window; these views ask it and follow a
+change while the app runs. The mirror session asks it too: `ScreenTranslator.mayStart` keeps the
+translator from starting while the setting is off, whoever asks, and turning the setting off stops
+"Translate" in every window. Another experimental function gets a case in `FeatureGate.Feature` and
+its items there, and the places where it shows ask `AppSettings.featureGate` for them.
+`ExperimentalFeaturesTests`, `MirrorSessionTests` and `ShowcaseTests` show the gates, each failing
+without its gate; tests that turn "Translate" on through a session turn the setting on first
+(`setExperimentalFeatures` in `MirrorActTests/TestSupport.swift`).
+
+"Text" reads the current frame as the device sent it (`FrameSink.latestSource`, so the device's
+own text also while "Translate" is on) with `TextRecognizer` and copies `TextLayout.plainText`,
+which keeps everything but the status bar, lines cut off at the top or bottom edge and garbage
+(`TextLayout.Purpose.copying`; the lines of an on-screen keyboard stay).
+
+While "Translate" is on, `ScreenTranslator` is the `FrameProcessor` of the window's `FrameSink`,
+and every frame passes through it:
+
+1. `FramePixels` makes a thumbnail, and `OverlayTracker.advance` follows the known paragraphs to
+   it (`MotionEstimator` tells what stayed, moved or changed) and says where each is drawn and
+   whether a region has to be read.
+2. Beside the frames, `TextRecognizer` reads that region of the frame as the device sent it,
+   `TextLayout.content` (`.translating`) leaves out the status bar, the icons of rows and the
+   on-screen keyboard (`TextLayout.keyboard`: its keys, the strip of suggestions and the row
+   below; `ScreenTranslator` keeps it while the picture is read in parts, until a whole reading
+   finds none or the picture over its keys has changed, and then has the band it covered read
+   again, `OverlayTracker.linesNoLongerLeftOut`), and `TextLayout.blocks` forms the paragraphs,
+   never across a known edge of a scrolling area. `OverlayTracker.finishRecognition` takes them
+   in; `ReadingPlan` keeps what still has to be read and when (what scrolled into view at once,
+   what changed once it rests, what a movement replaced once everything over it rests, a cut-off
+   line once all of it shows).
+3. The tracker decides which texts go to the engine when (`textsAwaitingTranslation`, at most 40
+   in a request). An engine that `prefersSettledText` (a language model service) waits up to
+   1.5 s for the picture to rest first. A text that failed is offered again after 5, 10, 20 and
+   40 s and then every 60 s; the engine of a service waits the same steps for the service as a
+   whole (`TranslationWait`), so that neither wait adds to the other.
+4. `TranslationCompositor.prepare` sets the translations with Core Text off the frame thread
+   (`BlockTextMask`, in font sizes of quarter-pixel steps, so that Core Text keeps few fonts), and
+   `compose` draws them into a copy of each frame, which the window, screenshots and recordings
+   show.
+
+Each time "Translate" is turned on, or its settings change, it starts over with the engine
+`TranslationEngines` makes from the settings.
+
+The rules of the core, as its comments state them: it uses Foundation alone (and CoreGraphics where
+it is available), so that other MirrorAct apps can use it. `OverlayTracker` is not thread safe (the
+caller makes sure that calls never overlap), has no clock and no randomness (the same calls give
+the same results; times are seconds of any steady clock), and measures a block's position against
+the pixels it was read from, never adding it up from frame to frame. `LLMWire` holds values and
+pure functions only, so that the same code and tests describe what goes to a service. Rectangles
+between the parts are in frame pixels with the origin at the top left; those of `TextLayout` in 0…1
+of the picture. `TextLayout` keeps a row's title apart from its summary, and a line from a paragraph
+of one line on another ground (`sameGround` in `continues`: the title of a bar and a row right under
+it; a paragraph of two lines or more is not held to it, so a gradient behind it does not cut it),
+only where the recognizer measured `RecognizedLine.tone`; without it those rules do nothing.
+
+Some rules of `OverlayTracker` hold for every case and are easily undone by a change elsewhere. A
+translation is never handed on to a text with other numbers: a reading whose digits differ does not
+show the old translation while its own is on its way (`TextSimilarity.hasOtherNumbers`). A block
+whose digits no longer fit the picture under it (`numbersFit`, against the median of all its
+letters, digits included; in a block of several lines each letter is placed on the line it belongs
+to, `letterParts`) is not drawn until a reading by a later pass confirms it
+(`Block.numbersDifferSince`); its place is read once everything over it rests, the whole line for a
+block of one line and the box for one of several (`askToReadLine`), and a hidden block that no place
+of the plan reaches into any more is dropped and its place read once as new text
+(`dropHiddenBlocksNothingReads`). A block of several lines with digits is hidden in the same way
+when the picture under it changes in place, where no movement carries all of it and no known picture
+shows (`moveBlocks`): its lines need not share its box equally (the text of a field read as one
+paragraph with a smaller countdown under it), so `numbersFit` may look for its digits on another
+line than theirs. A reading is not taken when, over one of its lines, a movement since the pass
+began carried one end and not the other, and the scrolling area the middle of that line lay in
+rested when the pass began, holds only a part of the line and lies in its rows, or the line moved
+only sideways (`isSplitByAMovement`, each line of a paragraph on its own): the rest of the line slid
+because a value in it changed its width ("10" to "9"), and its old value would be drawn over the new
+one; its place is read once everything over it rests. A reading by a pass that began after one
+change in place and ended just after the next is still taken when `numbersFit` cannot tell the new
+digits from the old (two numbers in one line that change at different times, a caret right after a
+value): its old value is drawn until the next reading, and with slow passes this can keep in step
+with the changes. On a page whose scrolling area last moved sideways (one that slid in), the tail of
+a line whose value changed its width joins that area as a strip gliding sideways does
+(`updateScrollAreas`), so the rules for a line of which only a part moved do not apply and the old
+value can be drawn for up to a second; and a block such a movement placed keeps that place when a
+reading at rest confirms its text (`absorb`), so a fraction of a pixel off, a digit that changes to
+one of the same width can pass `numbersFit` once. While a list whose rows differ only in a digit or
+two moves fast, a row's translation can still lie over another row for up to about a second, and
+while such a list glides, a hidden block can be dropped and read before the list rests (more passes,
+nothing wrong drawn). A step of less than a pixel over fewer than `minSecondMotionTiles` tiles that
+no movement of the frame before leads up to is a movement only when those tiles differ from where it
+says they came from by at most `maxCreepResidual` of how much they differ in place
+(`MotionEstimator.explainsCreep`): digits that tick in their line are a change, not a scrolling area
+of their own.
+
+A movement that carries at least `replacedBlocks` blocks that showed whole and finds none of them
+has replaced the picture (`moveBlocks`): the blocks it carried without finding them are dropped, and
+its area with its scrolling area is read once everything over it rests; until nothing over that
+place has moved for `restDelay`, every movement over it adds its scrolling area as well (`follow`: a
+page that comes up in steps). A scrolling area that no movement reaches is forgotten when at least
+`replacedShare` of the tiles in it that show something have changed (`updateScrollAreas`: a page
+faded into another), and a lost block is forgotten after `lostLifetime` also on a frame that does
+not change the picture and when a pass ends (`forgetLostBlocks`: a still phone sends no frames). A
+refined bottom edge of a scrolling area is checked again on the picture at rest and dropped when the
+rows beyond it no longer show what they showed and the page's ground goes on in them
+(`dropBottomEdgesThatDoNotHold`, on a frame and, as a still phone sends no frames, also when a pass
+ends, before its readings are judged); another scrolling area in or next to those rows keeps the
+edge from being checked, unless at least half of that area lies inside the checked one (a part of
+its content, such as a strip a movement was misjudged for while a page slid in); top edges are not
+checked. A block that shows whole and stays while its scrolling area moves under it, such as the
+title of a bar, is not cut at that area's edges (`Block.staysOverArea`). A reread of a place that
+cannot be seen completely, at the edge of the frame or of its scrolling area, waits for the next
+movement when it is asked for while what it lies in rests already (`ReadingPlan.dueAtRest`), so on a
+still page it is not read: on a mirrored phone this leaves, now and then, the lowest row of a new
+page (a bottom edge that does not hold is one way there, and another one is not traced yet), rows of
+search results that changed under a keyboard and rows at the edges of a list flung or scrolled fast
+untranslated until the page moves (the dump shows such a place with `dueIn` null). Now and then a
+row of a new page is also left untranslated with no place of the plan over it; that path is not
+traced yet.
+
+A pass at rest that brought nothing new leaves the pictures of the tiles it read known
+(`knownTilePictures`), and a change that shows only known pictures is not read: a blinking caret
+costs two passes. They are forgotten under every block a pass made, changed or removed, where
+content moves, on `reset`, and where the caller stops leaving lines out (`linesNoLongerLeftOut`). A
+change in a known line on a still page is read with the whole line (`UnreadArea.readWith`), which
+never becomes due by itself and does not decide which area a region begins with
+(`ReadingPlan.takeRegion`); a known line is also that of a block of one line lost because a movement
+of only a part of its line carried it (`Block.lostToPartOfIt`: the rest of the line slid when a
+value in it changed its width; the line is taken where that movement left the block, a step of the
+tail beside the line on the screen), and a change inside a block of several lines hidden for its
+numbers is read with that block's box. A reading of one line at rest that the region of its pass cut
+off at a side, not the view, and over which no known block lies, is read again along its whole line
+(`askToReread`; the region that reads it whole no longer cuts it, so this asks once for each line);
+such a line can be read once without the rest of its paragraph, which is then translated in parts
+once. A place where a block may be cut off, or where two blocks may be one paragraph, is read again
+at most `maxRereads` times, and a picture that nothing changes is read by at most
+`maxPassesOnPicture` passes; what is left then waits for the next change. A clock with seconds costs
+about a pass a second, and a progress bar that fills several.
+
+The bench has no rows that differ only in their numbers and never makes a movement replace the
+picture, so these rules have tests of their own: `OverlayTrackerNumbersTests` (numbers),
+`OverlayTrackerEdgeTests` (edges), `OverlayTrackerStillPictureTests` (the still picture),
+`OverlayTrackerChangingTests` (a caret, typing, a counter, the lines under a keyboard),
+`OverlayTrackerPageTransitionTests` (pages that slide in and fade, or come up in steps),
+`OverlayTrackerCountdownTests` (a countdown that ticks once a second under a text field or a
+heading, as a line of its own or read as one paragraph with the line above it, on pages drawn with
+Core Text), `OverlayTrackerScreenChangeTests` and `OverlayTrackerValueTickTests` (thumbnails of a
+real phone, as the app made them, in `MirrorActTests/TextCore/Frames`: page changes, among them the
+last row above the navigation bar's handle in `DisplayLastRow`, and a value that ticks),
+`TextLayoutKeyboardTests` (the keyboard) and `TextLayoutTests` (the ground of a bar).
 
 ## Test without a device
 
@@ -87,16 +242,172 @@ screens are told apart by the image size.
 scripts/test.sh
 ```
 
-Runs `MirrorActTests` in a debug build of the app; `scripts/test.sh PresentationTests` runs a single
-class. The app starts without the AirPlay receiver, USB and adb. The tests briefly open real windows,
-including the full-screen presentation.
+Runs `MirrorActTests` in a debug build of the app, which is the tests' host; `scripts/test.sh
+PresentationTests` runs a single class (also `Class/testName`, and several names at once). The
+script fetches `Vendor/` and the scrcpy server where they are missing, generates the project,
+builds into `~/Library/Caches/MirrorAct/DerivedData` (`MIRRORACT_DERIVED` chooses another
+folder), writes the whole output to `test.log` there and prints the failures, or the count of
+tests run. It hands every `TRACKING_*` variable on to the tests (see the tracking bench below).
+
+Running as the host, the app starts without the AirPlay receiver, USB and adb, keeps its settings
+apart from yours (domain `io.github.sopitz.MirrorAct.tests`, emptied when a run starts and when it
+ends; API keys under a keychain name of their own) and logs only to the system log. Two test runs
+at the same time share that domain and disturb each other: run one at a time.
+
+Some tests open real windows. `PresentationTests` presents a mirror window, activates the app and
+goes full screen; `StylePanelAppearanceTests` presents a mirror window and activates the app;
+`TextSettingsViewTests` shows the Text settings in a window and makes it key; `OnTopTests` presents
+a mirror window, activates the app, lets the window float above other windows and on every desktop,
+and goes full screen once. (`SettingsLayoutTests` and `ShowcaseTests` place their windows outside
+the screens; `AppleTranslationEngineTests` moves an almost transparent window, which takes no
+clicks and no keys, onto the screen for a moment.) To work on the Mac meanwhile, leave those four
+out: run the classes you need by name, or call xcodebuild as the script does, with `-skip-testing`:
+
+```bash
+caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -configuration Debug \
+  -derivedDataPath ~/Library/Caches/MirrorAct/DerivedData HOMEBREW_PREFIX=$(brew --prefix) \
+  -skip-testing:MirrorActTests/PresentationTests \
+  -skip-testing:MirrorActTests/StylePanelAppearanceTests \
+  -skip-testing:MirrorActTests/TextSettingsViewTests \
+  -skip-testing:MirrorActTests/OnTopTests test
+```
+
+The suite needs the display awake: while it sleeps, the animations of those windows never end, each
+holds a thread, and once no thread is left a test that reads text waits in Vision forever.
+`scripts/test.sh` therefore wakes the display and keeps it awake while the tests run
+(`caffeinate`).
+
+A test that draws with AppKit must not depend on the displays attached: `NSImage`, SF Symbols
+above all, lays an image out on the pixels of the main display even when it draws into a bitmap of
+its own. Give such a test explicit geometry (`LeadingMarkTests.SettingsRows` makes each symbol a
+hundred times as large and draws it at its exact size), a fixed appearance and font smoothing set
+explicitly, and see that it passes with a display at scale 1 as well as at scale 2.
+
+The tests of "Text" and "Translate" need no device and no network: `TextRecognizerTests`,
+`LeadingMarkTests`, `ScreenTranslatorTests` and `ScreenTranslatorCutOffTests` (synthetic frames,
+real Vision), `ScreenTranslatorRetryTests` (minutes of a failing service, with a clock of the test's
+own), `TranslationCompositorTests`, `ChromaPlaneTests`, `AppleTranslationEngineTests` (a stand-in
+answers in place of macOS, so macOS is never asked to translate or to download a language),
+`LLMTranslationEngineTests`, `LLMSessionTests` and `LocalServiceWaitTests` (a stand-in for the
+network), `TranslationStatusNoticeTests`, `TextSettingsViewTests`, `TextSettingsLanguageMenuTests`,
+`MirrorSessionTests` (Translate when the device goes away or the app moves the window to another
+connection), `ShowcaseTests` (the pictures, with Translate as the mirrored session has it) and
+`FrameSinkTests` (the translated frame is shown and recorded); the tests of the core are in
+`MirrorActTests/TextCore` (`OverlayTrackerContractTests` holds what every tracker must do). The
+tracker's long tests (`OverlayTrackerNumbersTests`, `OverlayTrackerEdgeTests`,
+`OverlayTrackerChangingTests`, `OverlayTrackerStillPictureTests`, `OverlayTrackerCountdownTests`)
+play only a part of their settings in a debug build, chosen so that each still fails without the
+rule it guards (`TestBuild`; in `OverlayTrackerCountdownTests` the paragraph of two sizes, which
+guards `isSplitByAMovement` for each line of a paragraph, plays in a release build only); a release
+build, or `TRACKING_ALL=1 scripts/test.sh`, plays all of them.
+
+### The tracking bench
+
+`TrackingBenchTests` plays the tracker through scenarios of a simulated phone screen
+(`TrackingScenarios.swift`: scrolling, flicks, bars, banners, alerts, a keyboard, new screens, a
+video, and strips that glide sideways by themselves, such as a carousel and a ticker) and scores
+what it draws against the truth of the simulation (`TrackingBench.swift`). Each scenario has a
+regression test on seed 1 with a minimum score and a maximum number of misplaced frames, and a
+traced seed can have a test of its own (`testAlikeRowsSeed19` …). The bench is deterministic: a
+test that fails means the tracker got worse, or the bench changed.
+
+A debug build plays it fifty to a hundred times slower than a release build, so `scripts/test.sh`
+plays only a few scenarios and skips the rest on purpose; the skipped tests say so.
+`TRACKING_ALL=1 TRACKING_SEEDS=1 scripts/test.sh TrackingBenchTests` plays all of them in a debug
+build, which takes close to an hour. In a release build, after `scripts/build.sh --no-install`
+(which fetches `Vendor/` and generates the project), the whole bench and its report over seeds 1
+to 3 take a few minutes:
+
+```bash
+TEST_RUNNER_TRACKING_REPORT=/tmp/tracking.json xcodebuild -project MirrorAct.xcodeproj \
+  -scheme MirrorAct -configuration Release ENABLE_TESTABILITY=YES HOMEBREW_PREFIX=$(brew --prefix) \
+  -only-testing:MirrorActTests/TrackingBenchTests test
+```
+
+xcodebuild hands a variable to the tests only with the prefix `TEST_RUNNER_`; `scripts/test.sh`
+adds it to every `TRACKING_*` variable. `TRACKING_SEEDS=1,2,3` chooses the seeds of the report
+(`testReport`; a debug build makes it only when this is set), `TRACKING_SCENARIOS` the scenarios,
+`TRACKING_REPORT=<file>` writes the report as JSON (give an absolute path); the other variables
+are described at the top of `TrackingBenchTests.swift`. The report is a table with a line per
+scenario and seed: the score (0 to 100), the misplaced block × display frames (the most at once,
+the longest run, the first), how much of the text at rest and of moving text was covered, the
+latency, the alignment error and jitter, flickers and half-read translations, and what it cost
+(recognition passes, area read, translation requests and texts drawn, each against its budget);
+then the mean score per scenario and overall. How the score is made is described at the top of
+`TrackingBench.swift`: a misplaced translation weighs far more than a missing one. The JSON report
+also counts, without scoring them, the passes begun on a picture that had not changed for a second
+or more (`restPasses`) and the most passes begun on one picture (`mostPassesOnPicture`): a change
+should keep both low, and one that brings the latter near `maxPassesOnPicture` runs into that
+bound.
+
+A change to the tracker comes with a unit test of the case it settles (in the
+`OverlayTracker*Tests` of `MirrorActTests/TextCore`), passes all regression tests of the bench in a
+release build, and shows the report over the same seeds before and after: no scenario may get more
+misplaced frames or lose score without a reason that the change states. A limit of the bench is
+raised only after the events the failing test lists were looked at. `TrackingParityTests` writes
+checksums of what the tracker did in a few scenarios to the file `TRACKING_PARITY` names; comparing
+two such files, from before and after a change or from another MirrorAct app with the same core,
+shows whether its behavior changed.
+
+### Trying Translate on a mirrored phone
+
+In a debug build, the distributed notification `io.github.sopitz.MirrorAct.android-test` drives a
+mirrored Android phone or emulator without clicking; the commands are listed at the top of
+`MirrorAct/Android/AndroidDebug.swift`, and `device=<serial>` chooses the window. To post one from
+the shell, save this as `post.swift` and run, for example,
+`swift post.swift cmd=translate on=1 device=<serial>`:
+
+```swift
+import Foundation
+var info: [String: String] = [:]
+for arg in CommandLine.arguments.dropFirst() {
+    let parts = arg.split(separator: "=", maxSplits: 1).map(String.init)
+    if parts.count == 2 { info[parts[0]] = parts[1] }
+}
+DistributedNotificationCenter.default().postNotificationName(
+    .init("io.github.sopitz.MirrorAct.android-test"), object: nil, userInfo: info, deliverImmediately: true)
+```
+
+For the text on the screen there are `cmd=translate on=1|0`, `cmd=copytext`, `cmd=translator` (logs
+the translator's state), `cmd=dump path=<folder>` (one frame as sent and as shown, and in
+`placement.json` what the translator draws into it, every paragraph the tracker knows with whether
+it shows, is lost or doubtful, since when it is hidden for its numbers and whether it stays over
+its scrolling area, and under `reading` what it still has to read and when, each place with the
+line it is read with, how many tile pictures it knows to hold nothing new, and the on-screen
+keyboard the translator keeps),
+`cmd=textsettings path=<file.png>` and `cmd=setting key=… value=…`
+(changes a setting while the app runs and puts the stored value back afterwards). `cmd=translate`
+and `cmd=copytext` do nothing while experimental features are off;
+`cmd=setting key=experimentalFeatures value=1` turns them on in the running app. With "Translate"
+on, a debug build falls behind the stream, because the tracker is many times slower without
+optimization; to try the feature this way, build with
+`scripts/build.sh --debug --no-install SWIFT_OPTIMIZATION_LEVEL=-O` (the app is then in
+`~/Library/Caches/MirrorAct/DerivedData/Build/Products/Debug/MirrorAct.app`).
 
 ## Screenshots
 
-The pictures in `docs/` are drawn by the app itself from its real views: in a debug build with
-`MirrorAct --showcase <folder>`, or while mirroring via the distributed notification
-`io.github.sopitz.MirrorAct.showcase`; the device screen is the live mirrored frame. No mocked-up
-or retouched images.
+The pictures in `docs/` are drawn by the app itself from its real views, in a debug build
+(`scripts/build.sh --debug` installs it to `~/Applications/MirrorAct.app`):
+
+- `~/Applications/MirrorAct.app/Contents/MacOS/MirrorAct --showcase <folder>` writes `mirror.png`,
+  `start-window.png`, `editor.png` and `framed.png` with a test image on the device and quits;
+- while mirroring, the distributed notification `io.github.sopitz.MirrorAct.android-test` with
+  `cmd=showcase device=<serial> path=<folder>` (posted as shown above) writes the same pictures
+  from exactly that window, with the live mirrored frame on the device. (The notification
+  `io.github.sopitz.MirrorAct.showcase` with `dir=<folder>` does the same for the frontmost mirror
+  window; name the device instead, so that no other window with private content is taken.)
+
+The pictures show the tool rail as the user has it: with "Text" and "Translate" only while
+experimental features are on. `mirror.jpg` and `android.jpg` are drawn with the setting off. The
+picture of a translated screen (`translate.jpg`) is the mirror picture of a session whose
+"Translate" is on (`cmd=setting key=experimentalFeatures value=1` and
+`cmd=translate on=1 device=<serial>` first, and wait until the screen is translated): the device
+then shows the translations, and the tool rail shows "Translate" as on; the `mirror.png` written
+then becomes `docs/translate.jpg`. The pictures are drawn at 2 pixels per point, whatever displays
+are attached (`MirrorAct/App/Showcase.swift`); convert them to JPEG, 1600 px wide, at the quality of
+the pictures in `docs/`, for example with
+`sips -s format jpeg -s formatOptions 85 -Z 1600 mirror.png --out docs/mirror.jpg`. No mocked-up or
+retouched images.
 
 Format like the existing ones: JPEG, 1600 px wide; PNG only where transparency is needed. No
 private content (messages, contacts, notifications) on the device screen.
