@@ -69,6 +69,18 @@ for controlling an iPhone or iPad (`scripts/build-agent.sh`, see the
 
 ### Text and Translate
 
+"Text" and "Translate" are experimental: the app shows them only while the setting "Experimental
+features" (`AppSettings.experimentalFeatures`, Settings → General, off by default) is on.
+`FeatureGate` says what the setting lets through: the tool rail's buttons, the items of the Device
+menu and the context menu, and the tabs of the settings window; these views ask it and follow a
+change while the app runs. The mirror session asks it too: `ScreenTranslator.mayStart` keeps the
+translator from starting while the setting is off, whoever asks, and turning the setting off stops
+"Translate" in every window. Another experimental function gets a case in `FeatureGate.Feature` and
+its items there, and the places where it shows ask `AppSettings.featureGate` for them.
+`ExperimentalFeaturesTests`, `MirrorSessionTests` and `ShowcaseTests` show the gates, each failing
+without its gate; tests that turn "Translate" on through a session turn the setting on first
+(`setExperimentalFeatures` in `MirrorActTests/TestSupport.swift`).
+
 "Text" reads the current frame as the device sent it (`FrameSink.latestSource`, so the device's
 own text also while "Translate" is on) with `TextRecognizer` and copies `TextLayout.plainText`,
 which keeps everything but the status bar, lines cut off at the top or bottom edge and garbage
@@ -364,7 +376,9 @@ its scrolling area, and under `reading` what it still has to read and when, each
 line it is read with, how many tile pictures it knows to hold nothing new, and the on-screen
 keyboard the translator keeps),
 `cmd=textsettings path=<file.png>` and `cmd=setting key=… value=…`
-(changes a setting while the app runs and puts the stored value back afterwards). With "Translate"
+(changes a setting while the app runs and puts the stored value back afterwards). `cmd=translate`
+and `cmd=copytext` do nothing while experimental features are off;
+`cmd=setting key=experimentalFeatures value=1` turns them on in the running app. With "Translate"
 on, a debug build falls behind the stream, because the tracker is many times slower without
 optimization; to try the feature this way, build with
 `scripts/build.sh --debug --no-install SWIFT_OPTIMIZATION_LEVEL=-O` (the app is then in
@@ -383,12 +397,14 @@ The pictures in `docs/` are drawn by the app itself from its real views, in a de
   `io.github.sopitz.MirrorAct.showcase` with `dir=<folder>` does the same for the frontmost mirror
   window; name the device instead, so that no other window with private content is taken.)
 
-The picture of a translated screen (`translate.jpg`) is the mirror picture of a session whose
-"Translate" is on (`cmd=translate on=1 device=<serial>` first, and wait until the screen is
-translated): the device then shows the translations, and the tool rail shows "Translate" as on; the
-`mirror.png` written then becomes `docs/translate.jpg`. The pictures are drawn at 2 pixels per
-point, whatever displays are attached (`MirrorAct/App/Showcase.swift`); convert them to JPEG, 1600
-px wide, for example with
+The pictures show the tool rail as the user has it: with "Text" and "Translate" only while
+experimental features are on. `mirror.jpg` and `android.jpg` are drawn with the setting off. The
+picture of a translated screen (`translate.jpg`) is the mirror picture of a session whose
+"Translate" is on (`cmd=setting key=experimentalFeatures value=1` and
+`cmd=translate on=1 device=<serial>` first, and wait until the screen is translated): the device
+then shows the translations, and the tool rail shows "Translate" as on; the `mirror.png` written
+then becomes `docs/translate.jpg`. The pictures are drawn at 2 pixels per point, whatever displays
+are attached (`MirrorAct/App/Showcase.swift`); convert them to JPEG, 1600 px wide, for example with
 `sips -s format jpeg --resampleWidth 1600 mirror.png --out docs/mirror.jpg`. No mocked-up or
 retouched images.
 

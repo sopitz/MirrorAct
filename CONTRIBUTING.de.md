@@ -69,6 +69,20 @@ eintragen. Dasselbe Team signiert den Agent für die Bedienung von iPhone und iP
 
 ### Text und Übersetzen
 
+«Text» und «Übersetzen» sind experimentell: Die App zeigt sie nur, solange die Einstellung
+«Experimentelle Funktionen» (`AppSettings.experimentalFeatures`, Einstellungen → Allgemein,
+standardmässig aus) eingeschaltet ist. `FeatureGate` sagt, was die Einstellung durchlässt: die
+Knöpfe der Werkzeugleiste, die Einträge im Menü «Gerät» und im Kontextmenü und die Tabs des
+Einstellungsfensters; diese Ansichten fragen es und folgen einer Änderung, während die App läuft.
+Auch die Spiegelsitzung fragt es: `ScreenTranslator.mayStart` lässt den Übersetzer nicht starten,
+solange die Einstellung aus ist, wer auch immer es verlangt, und das Ausschalten der Einstellung
+beendet «Übersetzen» in jedem Fenster. Eine weitere experimentelle Funktion bekommt einen Fall in
+`FeatureGate.Feature` und dort ihre Einträge, und die Stellen, an denen sie erscheint, fragen
+`AppSettings.featureGate` danach. `ExperimentalFeaturesTests`, `MirrorSessionTests` und
+`ShowcaseTests` zeigen die Sperren; jeder dieser Tests schlägt ohne seine Sperre fehl. Tests, die
+«Übersetzen» über eine Sitzung einschalten, schalten zuerst die Einstellung ein
+(`setExperimentalFeatures` in `MirrorActTests/TestSupport.swift`).
+
 «Text» liest das aktuelle Bild, wie das Gerät es gesendet hat (`FrameSink.latestSource`, also den
 eigenen Text des Geräts auch, wenn «Übersetzen» an ist), mit `TextRecognizer` und kopiert
 `TextLayout.plainText`, das alles behält ausser der Statusleiste, Zeilen, die der obere oder untere
@@ -397,7 +411,9 @@ noch wann lesen muss, jede Stelle mit der Zeile, mit der sie gelesen wird, wie v
 Kacheln er kennt, die nichts Neues zeigen, und die Bildschirmtastatur, die der Übersetzer behält),
 `cmd=textsettings path=<datei.png>` und
 `cmd=setting key=… value=…` (ändert eine Einstellung, während die App läuft, und stellt den
-gespeicherten Wert danach wieder her). Mit eingeschaltetem «Übersetzen» kommt ein Debug-Build dem
+gespeicherten Wert danach wieder her). `cmd=translate` und `cmd=copytext` tun nichts, solange die
+experimentellen Funktionen aus sind; `cmd=setting key=experimentalFeatures value=1` schaltet sie in
+der laufenden App ein. Mit eingeschaltetem «Übersetzen» kommt ein Debug-Build dem
 Videostrom nicht nach, weil das Nachführen ohne Optimierung um ein Vielfaches langsamer ist; um die
 Funktion so auszuprobieren, mit `scripts/build.sh --debug --no-install SWIFT_OPTIMIZATION_LEVEL=-O`
 bauen (die App liegt dann in
@@ -418,14 +434,17 @@ Die Bilder in `docs/` zeichnet die App selbst aus ihren echten Ansichten, im Deb
   Spiegelfenster; besser das Gerät nennen, damit kein anderes Fenster mit privaten Inhalten
   genommen wird.)
 
-Das Bild eines übersetzten Bildschirms (`translate.jpg`) ist das Spiegelfenster-Bild einer Sitzung,
-in der «Übersetzen» an ist (zuerst `cmd=translate on=1 device=<serial>`, und warten, bis der
-Bildschirm übersetzt ist): Das Gerät zeigt dann die Übersetzungen, und die Werkzeugleiste zeigt
-«Übersetzen» als eingeschaltet; das dabei geschriebene `mirror.png` wird zu `docs/translate.jpg`.
-Die Bilder werden mit 2 Pixeln pro Punkt gezeichnet, welche Bildschirme auch angeschlossen sind
-(`MirrorAct/App/Showcase.swift`); danach in JPEG mit 1600 px Breite umwandeln, etwa mit
-`sips -s format jpeg --resampleWidth 1600 mirror.png --out docs/mirror.jpg`. Keine nachgebauten
-oder retuschierten Bilder.
+Die Bilder zeigen die Werkzeugleiste so, wie der Benutzer sie hat: mit «Text» und «Übersetzen»
+nur, solange die experimentellen Funktionen eingeschaltet sind. `mirror.jpg` und `android.jpg`
+werden mit ausgeschalteter Einstellung gezeichnet. Das Bild eines übersetzten Bildschirms
+(`translate.jpg`) ist das Spiegelfenster-Bild einer Sitzung, in der «Übersetzen» an ist (zuerst
+`cmd=setting key=experimentalFeatures value=1` und `cmd=translate on=1 device=<serial>`, und
+warten, bis der Bildschirm übersetzt ist): Das Gerät zeigt dann die Übersetzungen, und die
+Werkzeugleiste zeigt «Übersetzen» als eingeschaltet; das dabei geschriebene `mirror.png` wird zu
+`docs/translate.jpg`. Die Bilder werden mit 2 Pixeln pro Punkt gezeichnet, welche Bildschirme
+auch angeschlossen sind (`MirrorAct/App/Showcase.swift`); danach in JPEG mit 1600 px Breite
+umwandeln, etwa mit `sips -s format jpeg --resampleWidth 1600 mirror.png --out docs/mirror.jpg`.
+Keine nachgebauten oder retuschierten Bilder.
 
 Format wie die vorhandenen: JPEG, 1600 px breit; PNG nur, wo Transparenz nötig ist. Keine privaten
 Inhalte (Nachrichten, Kontakte, Benachrichtigungen) auf dem Gerätebildschirm.
