@@ -339,7 +339,11 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
                            showFrame: settings.showFrame)
     }
 
+    /// The size the rail needs. Its view is laid out first: a hosting view takes on what changed
+    /// (a setting, the session) when it is laid out, and until then its fitting size is the one
+    /// from before, also in a layout that answers that very change.
     private var railSize: CGSize {
+        railView.layoutSubtreeIfNeeded()
         let fitting = railView.fittingSize
         return CGSize(width: MirrorToolRail.width, height: max(fitting.height, 100))
     }
