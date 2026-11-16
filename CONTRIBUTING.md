@@ -259,9 +259,12 @@ goes full screen; `StylePanelAppearanceTests` presents a mirror window and activ
 `TextSettingsViewTests` shows the Text settings in a window and makes it key; `OnTopTests` presents
 a mirror window, activates the app, lets the window float above other windows and on every desktop,
 and goes full screen once. (`SettingsLayoutTests` and `ShowcaseTests` place their windows outside
-the screens; `AppleTranslationEngineTests` moves an almost transparent window, which takes no
-clicks and no keys, onto the screen for a moment.) To work on the Mac meanwhile, leave those four
-out: run the classes you need by name, or call xcodebuild as the script does, with `-skip-testing`:
+the screens, with one exception: `SettingsLayoutTests.testWindowChromeCoversTheRealSettingsWindow`
+opens the app's real Settings window for a moment, and AppKit saves that window's position and size
+in the preferences of the installed app. `AppleTranslationEngineTests` moves an almost transparent
+window, which takes no clicks and no keys, onto the screen for a moment.) To work on the Mac
+meanwhile, leave those four classes and that test out: run the classes you need by name, or call
+xcodebuild as the script does, with `-skip-testing`:
 
 ```bash
 caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -configuration Debug \
@@ -269,7 +272,8 @@ caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -conf
   -skip-testing:MirrorActTests/PresentationTests \
   -skip-testing:MirrorActTests/StylePanelAppearanceTests \
   -skip-testing:MirrorActTests/TextSettingsViewTests \
-  -skip-testing:MirrorActTests/OnTopTests test
+  -skip-testing:MirrorActTests/OnTopTests \
+  -skip-testing:MirrorActTests/SettingsLayoutTests/testWindowChromeCoversTheRealSettingsWindow test
 ```
 
 The suite needs the display awake: while it sleeps, the animations of those windows never end, each

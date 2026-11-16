@@ -285,11 +285,13 @@ vorn und geht ins Vollbild; `StylePanelAppearanceTests` zeigt ein Spiegelfenster
 nach vorn; `TextSettingsViewTests` zeigt die Text-Einstellungen in einem Fenster und macht es zum
 aktiven; `OnTopTests` zeigt ein Spiegelfenster, holt die App nach vorn, lässt das Fenster über
 anderen Fenstern und auf jedem Schreibtisch schweben und geht einmal ins Vollbild.
-(`SettingsLayoutTests` und `ShowcaseTests` legen ihre Fenster ausserhalb der Bildschirme ab;
-`AppleTranslationEngineTests` holt kurz ein fast durchsichtiges Fenster auf den Bildschirm, das
-weder Klicks noch Tasten annimmt.) Wer währenddessen am Mac arbeiten will, lässt diese vier weg:
-die nötigen Klassen mit Namen aufrufen, oder xcodebuild wie das Skript aufrufen, mit
-`-skip-testing`:
+(`SettingsLayoutTests` und `ShowcaseTests` legen ihre Fenster ausserhalb der Bildschirme ab, mit
+einer Ausnahme: `SettingsLayoutTests.testWindowChromeCoversTheRealSettingsWindow` öffnet kurz das
+echte Einstellungsfenster der App, und AppKit speichert Position und Grösse dieses Fensters in den
+Einstellungen der installierten App. `AppleTranslationEngineTests` holt kurz ein fast
+durchsichtiges Fenster auf den Bildschirm, das weder Klicks noch Tasten annimmt.) Wer
+währenddessen am Mac arbeiten will, lässt diese vier Klassen und diesen Test weg: die nötigen
+Klassen mit Namen aufrufen, oder xcodebuild wie das Skript aufrufen, mit `-skip-testing`:
 
 ```bash
 caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -configuration Debug \
@@ -297,7 +299,8 @@ caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -conf
   -skip-testing:MirrorActTests/PresentationTests \
   -skip-testing:MirrorActTests/StylePanelAppearanceTests \
   -skip-testing:MirrorActTests/TextSettingsViewTests \
-  -skip-testing:MirrorActTests/OnTopTests test
+  -skip-testing:MirrorActTests/OnTopTests \
+  -skip-testing:MirrorActTests/SettingsLayoutTests/testWindowChromeCoversTheRealSettingsWindow test
 ```
 
 Die Tests brauchen einen wachen Bildschirm: Schläft er, enden die Animationen dieser Fenster nie,
