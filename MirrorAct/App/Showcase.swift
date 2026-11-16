@@ -36,7 +36,8 @@ enum Showcase {
                                     modelIdentifier: model, muted: false)
         session.state = .live
         // The rail shows Translate lit while the mirrored session translates: its picture holds
-        // the translations
+        // the translations. Like the user's own rail, it shows Text and Translate only with the
+        // setting "Experimental features" on.
         session.showTranslating(live?.isTranslating ?? false)
         // Show the tool rail's device buttons; afterwards control belongs to the real session again
         let liveControl = live?.control

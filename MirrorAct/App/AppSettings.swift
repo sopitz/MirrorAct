@@ -52,6 +52,12 @@ final class AppSettings: ObservableObject {
     @Published var alwaysShowTools: Bool { didSet { defaults.set(alwaysShowTools, forKey: "alwaysShowTools") } }
     /// Start iPhone/iPad control right away on connect (otherwise only via “Control”)
     @Published var autoStartControl: Bool { didSet { defaults.set(autoStartControl, forKey: "autoStartControl") } }
+    /// Functions that are still being tried out (`FeatureGate`): off, the app shows none of them
+    @Published var experimentalFeatures: Bool {
+        didSet { defaults.set(experimentalFeatures, forKey: "experimentalFeatures") }
+    }
+    /// What the app shows and does with the setting above; views and sessions ask this
+    var featureGate: FeatureGate { FeatureGate(experimental: experimentalFeatures) }
     /// Language the text on the screen is translated into: "system" or a language identifier
     @Published var translationLanguage: String {
         didSet { defaults.set(translationLanguage, forKey: "translationLanguage") }
@@ -95,6 +101,7 @@ final class AppSettings: ObservableObject {
             "recordWithFrame": false,
             "alwaysShowTools": false,
             "autoStartControl": true,
+            "experimentalFeatures": false,
             "translationLanguage": "system",
             "translationEngine": "apple",
             "llmProvider": "openai",
@@ -111,6 +118,7 @@ final class AppSettings: ObservableObject {
         recordWithFrame = defaults.bool(forKey: "recordWithFrame")
         alwaysShowTools = defaults.bool(forKey: "alwaysShowTools")
         autoStartControl = defaults.bool(forKey: "autoStartControl")
+        experimentalFeatures = defaults.bool(forKey: "experimentalFeatures")
         translationLanguage = defaults.string(forKey: "translationLanguage") ?? "system"
         translationEngine = defaults.string(forKey: "translationEngine") ?? "apple"
         llmProvider = defaults.string(forKey: "llmProvider") ?? "openai"

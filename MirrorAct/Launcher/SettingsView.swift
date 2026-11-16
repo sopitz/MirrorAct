@@ -15,10 +15,28 @@ struct SettingsView: View {
     }
 
     @AppStorage("settingsTab", store: AppSettings.shared.defaults) private var tab = "general"
+    @ObservedObject private var settings = AppSettings.shared
+
+    /// what the Text page is given: the keychain and this Mac's languages; the tests give it
+    /// their own, so that they never touch the user's keys
+    private let textKeys: TextSettingsView.KeyStore
+    private let textLanguages: AppleTranslationLanguages?
+
+    init(textKeys: TextSettingsView.KeyStore = .keychain, textLanguages: AppleTranslationLanguages? = nil) {
+        self.textKeys = textKeys
+        self.textLanguages = textLanguages
+    }
+
+    /// The tab shown: the stored one if it is there, otherwise General (`FeatureGate`)
+    private var selection: Binding<String> {
+        Binding(get: { settings.featureGate.settingsTab(forStored: tab).rawValue },
+                set: { tab = $0 })
+    }
 
     var body: some View {
         let maxHeight = Self.maxPageHeight(visibleHeight: NSScreen.main?.visibleFrame.height ?? 800)
-        TabView(selection: $tab) {
+        let tabs = settings.featureGate.settingsTabs
+        TabView(selection: selection) {
             GeneralSettingsView()
                 .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("General", systemImage: "gearshape") }
@@ -27,12 +45,19 @@ struct SettingsView: View {
                 .settingsPage(maxHeight: maxHeight)
                 .tabItem { Label("Style", systemImage: "paintpalette") }
                 .tag("design")
-            TextSettingsView()
-                .settingsPage(maxHeight: maxHeight)
-                .tabItem { Label("Text", systemImage: "text.viewfinder") }
-                .tag("text")
+            // only with the setting "Experimental features"
+            if tabs.contains(.text) {
+                TextSettingsView(keys: textKeys, languages: textLanguages)
+                    .settingsPage(maxHeight: maxHeight)
+                    .tabItem { Label("Text", systemImage: "text.viewfinder") }
+                    .tag("text")
+            }
         }
         .frame(width: Self.width)
+        // a tab that goes away while it is shown leaves General selected, also once it is back
+        .onChange(of: tabs) {
+            tab = settings.featureGate.settingsTab(forStored: tab).rawValue
+        }
     }
 }
 
@@ -163,6 +188,12 @@ struct GeneralSettingsView: View {
             Section("Recording") {
                 Toggle("Record with device frame", isOn: $settings.recordWithFrame)
                 Text("Background, padding and aspect ratio come from “Style”. A transparent background produces HEVC with transparency, otherwise H.264. Saved to the Desktop.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Experimental features", isOn: $settings.experimentalFeatures)
+                Text("Turns on functions that are still being tried out and can go wrong. At present these are “Text” and “Translate” in the tool rail, which copy and translate the text on the mirrored screen; their settings are under “Text”.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -80,6 +80,11 @@ struct TextSettingsView: View {
             : chosenRow
         Form {
             Section {
+                Text("Experimental: “Text” and “Translate” are still being tried out and can go wrong.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 Picker("Translate into", selection: $settings.translationLanguage) {
                     Text("System language").tag("system")
                     // while the list loads, the language chosen before keeps its row

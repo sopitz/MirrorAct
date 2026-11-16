@@ -63,6 +63,8 @@ final class LocalServiceWaitTests: XCTestCase {
     private var slowWaits: [Gate] = []
 
     override func setUp() async throws {
+        // Translate is there only with the setting "Experimental features"
+        setExperimentalFeatures(true)
         transport = WaitingTransport()
         slowWaits = []
         session = MirrorSession(id: "test", kind: .android, deviceName: "Phone", modelIdentifier: nil, muted: true)

@@ -57,13 +57,18 @@ struct MirrorToolRail: View {
                        })
                 .onDrag { screenshotProvider() }
                 .railItem(visible)
-            RailButton(symbol: "text.viewfinder", title: String(localized: "Text"),
-                       help: String(localized: "Copy the text on the screen (⌥⌘T)"), action: actions.copyText)
-                .railItem(visible)
-            RailButton(symbol: "character.bubble", title: String(localized: "Translate"),
-                       help: String(localized: "Translate the text on the screen in place (⇧⌘T) – language under Settings"),
-                       active: session.isTranslating, action: actions.toggleTranslation)
-                .railItem(visible)
+            // only with the setting "Experimental features" (`FeatureGate`)
+            if settings.featureGate.railItems.contains(.copyText) {
+                RailButton(symbol: "text.viewfinder", title: String(localized: "Text"),
+                           help: String(localized: "Copy the text on the screen (⌥⌘T)"), action: actions.copyText)
+                    .railItem(visible)
+            }
+            if settings.featureGate.railItems.contains(.translate) {
+                RailButton(symbol: "character.bubble", title: String(localized: "Translate"),
+                           help: String(localized: "Translate the text on the screen in place (⇧⌘T) – language under Settings"),
+                           active: session.isTranslating, action: actions.toggleTranslation)
+                    .railItem(visible)
+            }
             RailButton(symbol: session.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                        title: session.muted ? String(localized: "Muted") : String(localized: "Sound")) {
                 session.muted.toggle()

@@ -1523,6 +1523,26 @@
         }
       }
     },
+    "Experimental features" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experimentelle Funktionen"
+          }
+        }
+      }
+    },
+    "Experimental: “Text” and “Translate” are still being tried out and can go wrong." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experimentell: «Text» und «Übersetzen» werden noch erprobt, dabei kann etwas schiefgehen."
+          }
+        }
+      }
+    },
     "Export failed: %@" : {
       "localizations" : {
         "de" : {
@@ -1669,6 +1689,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vollbild"
+          }
+        }
+      }
+    },
+    "Turns on functions that are still being tried out and can go wrong. At present these are “Text” and “Translate” in the tool rail, which copy and translate the text on the mirrored screen; their settings are under “Text”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schaltet Funktionen ein, die noch erprobt werden und bei denen etwas schiefgehen kann. Zurzeit sind das «Text» und «Übersetzen» in der Werkzeugleiste: Sie kopieren und übersetzen den Text auf dem gespiegelten Bildschirm; ihre Einstellungen stehen unter «Text»."
           }
         }
       }

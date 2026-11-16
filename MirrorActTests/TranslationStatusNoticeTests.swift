@@ -7,6 +7,11 @@ import XCTest
 /// for as long as the engine says, under the passing ones, and goes with the turn of translating
 @MainActor
 final class TranslationStatusNoticeTests: XCTestCase {
+    /// Translate is there only with the setting "Experimental features"
+    override func setUp() async throws {
+        setExperimentalFeatures(true)
+    }
+
     private final class StatusEngine: TranslationEngine, @unchecked Sendable {
         let name = "Test"
         let isRemote = false

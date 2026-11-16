@@ -106,6 +106,12 @@ final class MirrorSession: ObservableObject, Identifiable {
     /// window was closed: stop the source
     var onClose: (() -> Void)?
 
+    /// Whether Text and Translate are there: the setting "Experimental features" (`FeatureGate`)
+    var allowsTextOnScreen: Bool { AppSettings.shared.featureGate.allows(.textOnScreen) }
+    private var featureGateChanges: AnyCancellable?
+    /// where Text puts the text it read: the clipboard (the tests give it one of their own)
+    var textPasteboard: NSPasteboard = .general
+
     /// set while a passing toast is up
     private var toastExpiry: AnyCancellable?
     /// the engine's notice, shown whenever no passing toast is up and Translate does not wait
@@ -133,6 +139,25 @@ final class MirrorSession: ObservableObject, Identifiable {
         translator.onMessage = { [weak self] message in self?.showToast(message) }
         translator.onStatus = { [weak self] status in self?.showLastingNotice(status) }
         translator.$isActive.assign(to: &$isTranslating)
+        // whoever asks, the translator does not start while the setting is off …
+        translator.mayStart = { AppSettings.shared.featureGate.allows(.textOnScreen) }
+        // … and it stops at once when the setting is turned off
+        featureGateChanges = AppSettings.shared.$experimentalFeatures
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] on in
+                MainActor.assumeIsolated {
+                    if !on { self?.textOnScreenTurnedOff() }
+                }
+            }
+    }
+
+    /// The setting "Experimental features" went off: Translate ends here as if it had been turned
+    /// off (which also withdraws the translator's lasting notice), and does not go on again after
+    /// a hand-over
+    private func textOnScreenTurnedOff() {
+        cancelTranslateResume()
+        translator.stop()
     }
 
     /// The stream is about to end. `handingOver`: the app moves this window to another
@@ -161,7 +186,8 @@ final class MirrorSession: ObservableObject, Identifiable {
 
     /// The Translate button, ⇧⌘T and the Device menu. While the window waits for the stream of
     /// a hand-over, it keeps Translate off instead: the button is not lit then, and before the
-    /// first frame there is nothing it could turn on.
+    /// first frame there is nothing it could turn on. While the setting "Experimental features"
+    /// is off, nothing starts (`ScreenTranslator.mayStart`).
     func toggleTranslation() {
         if translateResumeDeadline != nil {
             cancelTranslateResume()
@@ -372,8 +398,9 @@ final class MirrorSession: ObservableObject, Identifiable {
 
     /// Reads the text on the screen (Vision, on this Mac) and copies it to the clipboard:
     /// the text of the device, also while its translation is shown, one paragraph per line
-    /// (`TextLayout.plainText`)
+    /// (`TextLayout.plainText`). Does nothing while the setting "Experimental features" is off.
     func copyText() {
+        guard allowsTextOnScreen else { return }
         guard let buffer = sink.latestSource ?? sink.latest else {
             NSSound.beep()
             showToast(String(localized: "No video to copy text from yet"))
@@ -381,20 +408,23 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
         let statusBar = Self.statusBar(of: kind)
         Task { [weak self] in
-            guard let lines = await TextRecognizer.recognize(buffer) else {
-                self?.showToast(String(localized: "Text recognition failed"))
+            let read = await TextRecognizer.recognize(buffer)
+            // the setting may have gone off while the text was read: then nothing is copied or said
+            guard let self, self.allowsTextOnScreen else { return }
+            guard let lines = read else {
+                self.showToast(String(localized: "Text recognition failed"))
                 return
             }
             guard !lines.isEmpty else {
                 NSSound.beep()
-                self?.showToast(String(localized: "No text found"))
+                self.showToast(String(localized: "No text found"))
                 return
             }
-            NSPasteboard.general.clearContents()
+            self.textPasteboard.clearContents()
             let size = CGSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
-            NSPasteboard.general.setString(TextLayout.plainText(lines, imageSize: size, statusBar: statusBar),
-                                           forType: .string)
-            self?.showToast(String(localized: "Text copied to the clipboard"))
+            self.textPasteboard.setString(TextLayout.plainText(lines, imageSize: size, statusBar: statusBar),
+                                          forType: .string)
+            self.showToast(String(localized: "Text copied to the clipboard"))
         }
     }
 }

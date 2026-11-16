@@ -101,21 +101,39 @@ final class ShowcaseTests: XCTestCase {
     /// because the picture is drawn from a session of its own). The start window, which shows no
     /// session, comes out the same both times.
     func testTheRailShowsTranslateAsTheMirroredSessionHasIt() throws {
+        setExperimentalFeatures(true)
         let session = MirrorSession(id: "showcase-test", kind: .android, deviceName: "Phone",
                                     modelIdentifier: "Pixel", muted: true)
         func pixels(_ name: String, translating: Bool) throws -> Data {
-            session.showTranslating(translating)
-            let dir = folder.appendingPathComponent(translating ? "on" : "off")
-            Showcase.export(to: dir, session: session, scale: 1)
-            let file = dir.appendingPathComponent("\(name).png")
-            let source = try XCTUnwrap(CGImageSourceCreateWithURL(file as CFURL, nil), name)
-            let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil), name)
-            return try XCTUnwrap(image.dataProvider?.data as Data?, name)
+            try self.pixels(name, of: session, translating: translating)
         }
         let mirrorOff = try pixels("mirror", translating: false), startOff = try pixels("start-window", translating: false)
         let mirrorOn = try pixels("mirror", translating: true), startOn = try pixels("start-window", translating: true)
         XCTAssertEqual(startOn, startOff, "the same picture is drawn the same twice")
         XCTAssertNotEqual(mirrorOn, mirrorOff, "the Translate button is lit")
+    }
+
+    /// The pictures of the mirror window, drawn from `session` with Translate on or off
+    private func pixels(_ name: String, of session: MirrorSession, translating: Bool) throws -> Data {
+        session.showTranslating(translating)
+        let dir = folder.appendingPathComponent(translating ? "on" : "off")
+        Showcase.export(to: dir, session: session, scale: 1)
+        let file = dir.appendingPathComponent("\(name).png")
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(file as CFURL, nil), name)
+        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil), name)
+        return try XCTUnwrap(image.dataProvider?.data as Data?, name)
+    }
+
+    /// The pictures show the rail as the user has it: without Text and Translate while the
+    /// setting "Experimental features" is off
+    func testTheRailShowsTextAndTranslateOnlyWithExperimentalFeatures() throws {
+        let session = MirrorSession(id: "showcase-test", kind: .android, deviceName: "Phone",
+                                    modelIdentifier: "Pixel", muted: true)
+        setExperimentalFeatures(false)
+        let off = try pixels("mirror", of: session, translating: false)
+        XCTAssertEqual(try pixels("mirror", of: session, translating: true), off, "no Translate button to light")
+        AppSettings.shared.experimentalFeatures = true
+        XCTAssertNotEqual(try pixels("mirror", of: session, translating: false), off, "Text and Translate are there")
     }
 
     /// The pictures have the size of their canvas at the scale asked for

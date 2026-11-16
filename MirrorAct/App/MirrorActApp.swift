@@ -81,13 +81,22 @@ struct MirrorCommands: Commands {
             .keyboardShortcut("r")
             Toggle("Record with Device Frame", isOn: $settings.recordWithFrame)
             Divider()
-            Button("Copy Text on Screen") { mirror?.session.copyText() }
-                .keyboardShortcut("t", modifiers: [.command, .option])
-            Toggle("Translate Text on Screen", isOn: Binding(
-                get: { model.keyMirrorIsTranslating },
-                set: { _ in MainActor.assumeIsolated { mirror?.session.toggleTranslation() } }))
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-            Divider()
+            // only with the setting "Experimental features" (`FeatureGate`), and with them their
+            // shortcuts
+            let gated = settings.featureGate.menuItems
+            if gated.contains(.copyText) {
+                Button("Copy Text on Screen") { mirror?.session.copyText() }
+                    .keyboardShortcut("t", modifiers: [.command, .option])
+            }
+            if gated.contains(.translate) {
+                Toggle("Translate Text on Screen", isOn: Binding(
+                    get: { model.keyMirrorIsTranslating },
+                    set: { _ in MainActor.assumeIsolated { mirror?.session.toggleTranslation() } }))
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
+            if !gated.isEmpty {
+                Divider()
+            }
             Button("Control Device") { mirror?.toggleControl() }
                 .keyboardShortcut("c", modifiers: [.command, .option])
             Divider()

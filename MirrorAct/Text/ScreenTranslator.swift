@@ -22,6 +22,10 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
     /// a notice that stays until it is replaced or withdrawn (nil), called on the main thread
     var onStatus: ((String?) -> Void)?
 
+    /// Whether translating may start at all; the mirror session asks the setting "Experimental
+    /// features" here (`FeatureGate`), so that no way in can turn it on while that is off
+    var mayStart: @MainActor () -> Bool = { true }
+
     /// What translates a turn, the way the settings say; the tests hand in a stand-in
     var makeEngine: @MainActor (AppSettings) throws -> TranslationEngine = { try TranslationEngines.make(for: $0) }
 
@@ -104,7 +108,7 @@ final class ScreenTranslator: ObservableObject, FrameProcessor, @unchecked Senda
 
     @MainActor
     func start() {
-        guard !isActive else { return }
+        guard !isActive, mayStart() else { return }
         guard sink.latestSource != nil else {
             NSSound.beep()
             onMessage?(String(localized: "No video to translate yet"))

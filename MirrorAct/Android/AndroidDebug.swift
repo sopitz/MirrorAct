@@ -15,8 +15,10 @@ import SwiftUI
 ///   cmd=window path=<file.png>               screenshot with frame
 ///   cmd=guide|launcher|rail path=<file.png>  render view
 ///   cmd=showcase device=… path=<folder>      README images (showcase) from exactly this window
-///   cmd=translate on=1|0                     Translate on or off (without on=: toggle)
-///   cmd=copytext                             Text: copy the text on the screen to the clipboard
+///   cmd=translate on=1|0                     Translate on or off (without on=: toggle), as the
+///                                            button does: nothing while experimental features are off
+///   cmd=copytext                             Text: copy the text on the screen to the clipboard, as
+///                                            the button does: nothing while experimental features are off
 ///   cmd=dump path=<folder>                   one and the same frame: source.png (as sent), shown.png
 ///                                            (as shown) and placement.json (what the translator draws,
 ///                                            what the tracker knows and still has to read)
@@ -28,6 +30,8 @@ import SwiftUI
 ///                                            Save Screenshot · Copy Screenshot · the Shortcuts action
 ///   cmd=setting key=translationLanguage|translationEngine|llmProvider|llmModel|llmBaseURL|recordWithFrame
 ///               value=…                      change a setting while running; the stored value is put back
+///   cmd=setting key=experimentalFeatures value=0|1|true|false
+///                                            Text and Translate off or on (the setting under General)
 ///   device=<serial> selects the window (otherwise the frontmost), pid=<process> the instance
 @MainActor
 enum AndroidDebug {
@@ -108,10 +112,18 @@ enum AndroidDebug {
             }
         case "translate":
             guard let session else { break }
+            guard session.allowsTextOnScreen else {
+                Log.info("AndroidDebug translate: nothing done, experimental features are off")
+                break
+            }
             followToasts(of: session)
-            if wanted ?? !session.translator.isActive { session.translator.start() } else { session.translator.stop() }
+            if (wanted ?? !session.isTranslating) != session.isTranslating { session.toggleTranslation() }
         case "copytext":
             guard let session else { break }
+            guard session.allowsTextOnScreen else {
+                Log.info("AndroidDebug copytext: nothing done, experimental features are off")
+                break
+            }
             followToasts(of: session)
             session.copyText()
         case "dump":
@@ -173,6 +185,7 @@ enum AndroidDebug {
             case "llmModel": settings.llmModels[settings.llmProvider] = value.isEmpty ? nil : value
             case "llmBaseURL": settings.llmBaseURLs[settings.llmProvider] = value.isEmpty ? nil : value
             case "recordWithFrame": settings.recordWithFrame = value == "1"
+            case "experimentalFeatures": settings.experimentalFeatures = value == "1" || value == "true"
             default: Log.error("AndroidDebug setting: unknown key \(key)")
             }
             if let before { defaults.set(before, forKey: storedKey) } else { defaults.removeObject(forKey: storedKey) }

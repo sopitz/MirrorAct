@@ -105,6 +105,10 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         settings.$showFrame.dropFirst().sink { [weak self] _ in
             DispatchQueue.main.async { self?.applyLayout() }
         }.store(in: &cancellables)
+        // the rail gains or loses Text and Translate, and the window is never lower than the rail
+        settings.$experimentalFeatures.removeDuplicates().dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.applyLayout() }
+        }.store(in: &cancellables)
         settings.$style.map(\.bezelColor).removeDuplicates().sink { [weak self] color in
             self?.frameView.bezelColor = color
         }.store(in: &cancellables)
@@ -231,14 +235,11 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         menu.addItem(ActionMenuItem(String(localized: "Save Screenshot to Desktop"), key: "s", a.saveScreenshot))
         menu.addItem(ActionMenuItem(String(localized: "Copy Screenshot"), a.copyScreenshot))
         menu.addItem(.separator())
-        let copyText = ActionMenuItem(String(localized: "Copy Text on Screen"), key: "t", a.copyText)
-        copyText.keyEquivalentModifierMask = [.command, .option]
-        menu.addItem(copyText)
-        let translate = ActionMenuItem(String(localized: "Translate Text on Screen"), key: "t",
-                                       state: session.isTranslating, a.toggleTranslation)
-        translate.keyEquivalentModifierMask = [.command, .shift]
-        menu.addItem(translate)
-        menu.addItem(.separator())
+        let textItems = Self.textMenuItems(gate: settings.featureGate, translating: session.isTranslating, actions: a)
+        if !textItems.isEmpty {
+            textItems.forEach(menu.addItem)
+            menu.addItem(.separator())
+        }
         if let control = session.control {
             if session.isControlReady {
                 for button in control.buttons {
@@ -308,6 +309,24 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         }
         menu.addItem(ActionMenuItem(String(localized: "Close Window"), key: "w", a.close))
         return menu
+    }
+
+    /// The context menu's items for the text on the screen, those the setting "Experimental
+    /// features" allows (`FeatureGate`): none while it is off
+    static func textMenuItems(gate: FeatureGate, translating: Bool, actions a: MirrorActions) -> [NSMenuItem] {
+        gate.menuItems.map { item in
+            switch item {
+            case .copyText:
+                let copyText = ActionMenuItem(String(localized: "Copy Text on Screen"), key: "t", a.copyText)
+                copyText.keyEquivalentModifierMask = [.command, .option]
+                return copyText
+            case .translate:
+                let translate = ActionMenuItem(String(localized: "Translate Text on Screen"), key: "t",
+                                               state: translating, a.toggleTranslation)
+                translate.keyEquivalentModifierMask = [.command, .shift]
+                return translate
+            }
+        }
     }
 
     // MARK: Size

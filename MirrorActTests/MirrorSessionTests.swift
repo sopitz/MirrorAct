@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import AppKit
 import Combine
 import CoreMedia
 import CoreVideo
@@ -40,6 +41,11 @@ final class MirrorSessionTests: XCTestCase {
         TestFrames.Line(text: "Settings", x: 60, top: 120),
         TestFrames.Line(text: "Privacy and Security", x: 60, top: 400),
     ]
+
+    /// Text and Translate are there only with the setting "Experimental features"
+    override func setUp() async throws {
+        setExperimentalFeatures(true)
+    }
 
     private func translatingSession(kind: MirrorSession.Kind) async throws
         -> (session: MirrorSession, frame: CVPixelBuffer, shown: FrameLog) {
@@ -439,6 +445,112 @@ final class MirrorSessionTests: XCTestCase {
             XCTAssertEqual(AppModel.movesToAnotherConnection(otherConnection: item.other, wifiSwitchStarted: started,
                                                              now: now), item.moves, item.name)
         }
+    }
+
+    // MARK: The setting "Experimental features"
+
+    /// Turning the setting off ends Translate in every window at once, as if it had been
+    /// turned off there: the button is off, the picture is the device's own, the translator's
+    /// lasting notice goes
+    func testTranslateStopsWhenExperimentalFeaturesAreTurnedOff() async throws {
+        let (session, frame, shown) = try await translatingSession(kind: .wireless)
+        session.translator.onStatus?("macOS asks whether it may download")
+        XCTAssertEqual(session.toast, "macOS asks whether it may download")
+        AppSettings.shared.experimentalFeatures = false
+        XCTAssertFalse(session.isTranslating)
+        XCTAssertNil(session.sink.processor)
+        XCTAssertTrue(shown.last === frame, "the last picture must be the device's own")
+        XCTAssertNil(session.toast, "the translator's notice must go")
+        // on again: Translate stays off until the user turns it on
+        AppSettings.shared.experimentalFeatures = true
+        XCTAssertFalse(session.isTranslating)
+        session.sink.recording = nil
+    }
+
+    /// While the setting is off, nothing starts Translate: not the button, the menu or the
+    /// shortcut (they all call `toggleTranslation`), and not the translator itself
+    func testTranslateDoesNotStartWhileExperimentalFeaturesAreOff() throws {
+        setExperimentalFeatures(false)
+        let session = MirrorSession(id: "test", kind: .android, deviceName: "Phone", modelIdentifier: nil, muted: true)
+        session.translator.makeEngine = { _ in InstantEngine() }
+        let (frame, _) = try TestFrames.text(lines, width: 1170, height: 800, format: kCVPixelFormatType_32BGRA)
+        session.sink.push(frame)
+        session.state = .live
+        session.toggleTranslation()
+        XCTAssertFalse(session.isTranslating)
+        session.translator.start()
+        XCTAssertFalse(session.isTranslating)
+        XCTAssertNil(session.sink.processor)
+        XCTAssertNil(session.toast, "nothing to say about a function that is not there")
+    }
+
+    /// The app moved a translating window to another connection, and the setting goes off
+    /// before the new stream is live: Translate does not go on again, also when the setting is
+    /// on again by then
+    func testTranslateDoesNotGoOnAgainAfterAHandOverOnceExperimentalFeaturesAreOff() async throws {
+        for onAgain in [false, true] {
+            let (session, _, _) = try await translatingSession(kind: .android)
+            session.streamWillEnd(handingOver: true)
+            session.state = .disconnected(nil)
+            XCTAssertEqual(session.toast, MirrorSession.translateResumeNotice)
+            AppSettings.shared.experimentalFeatures = false
+            XCTAssertNotEqual(session.toast, MirrorSession.translateResumeNotice, "the wait must end")
+            if onAgain { AppSettings.shared.experimentalFeatures = true }
+            try reconnect(session)
+            XCTAssertFalse(session.isTranslating, "on again: \(onAgain)")
+            XCTAssertNil(session.sink.processor)
+            session.sink.recording = nil
+            AppSettings.shared.experimentalFeatures = true
+        }
+    }
+
+    /// While the setting is off, Text copies nothing and says nothing
+    func testCopyTextDoesNothingWhileExperimentalFeaturesAreOff() {
+        setExperimentalFeatures(false)
+        let session = MirrorSession(id: "test", kind: .wireless, deviceName: "iPhone", modelIdentifier: nil,
+                                    muted: true)
+        session.copyText()
+        XCTAssertNil(session.toast, "not even why it cannot copy")
+    }
+
+    /// The setting goes off while Text reads the screen: the text is not copied and nothing is
+    /// said. Text copies into a pasteboard of the test's own, never into the clipboard.
+    func testTextCopiesNothingOnceExperimentalFeaturesGoOffWhileItReads() async throws {
+        func session(into pasteboard: NSPasteboard) throws -> MirrorSession {
+            let session = MirrorSession(id: "test", kind: .wireless, deviceName: "iPhone", modelIdentifier: nil,
+                                        muted: true)
+            session.textPasteboard = pasteboard
+            let (frame, _) = try TestFrames.text(lines, width: 1170, height: 800, format: kCVPixelFormatType_32BGRA)
+            session.sink.push(frame)
+            return session
+        }
+        func waitFor(_ seconds: TimeInterval, _ condition: () -> Bool) async -> Bool {
+            let deadline = Date().addingTimeInterval(seconds)
+            while Date() < deadline, !condition() { try? await Task.sleep(nanoseconds: 20_000_000) }
+            return condition()
+        }
+        let pasteboards = (0..<2).map { _ in
+            NSPasteboard(name: NSPasteboard.Name("io.github.sopitz.MirrorAct.tests.\(UUID().uuidString)"))
+        }
+        defer { pasteboards.forEach { $0.releaseGlobally() } }
+
+        // with the setting on, Text copies the text: how long reading takes here
+        let copying = try session(into: pasteboards[0])
+        let started = Date()
+        copying.copyText()
+        let copied = await waitFor(15) { copying.toast != nil }
+        let reading = Date().timeIntervalSince(started)
+        XCTAssertTrue(copied)
+        XCTAssertEqual(copying.toast, String(localized: "Text copied to the clipboard"))
+        XCTAssertEqual(pasteboards[0].string(forType: .string)?.contains("Privacy and Security"), true)
+
+        // off while it reads: nothing comes, also well after the text has been read
+        let reader = try session(into: pasteboards[1])
+        reader.copyText()
+        AppSettings.shared.experimentalFeatures = false
+        let said = await waitFor(3 * reading + 0.5) { reader.toast != nil }
+        XCTAssertFalse(said, "\(reader.toast ?? "")")
+        XCTAssertNil(pasteboards[1].string(forType: .string))
     }
 
     /// Text before the first frame says why nothing happens, like Translate does
