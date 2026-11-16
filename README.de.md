@@ -68,7 +68,7 @@ Werkzeugleiste; ein Rechtsklick zeigt alle Funktionen.
 |---|---|
 | <img src="docs/iphone-duo-closed.jpg" alt="iPhone Duo zugeklappt, gerahmt auf blauem Verlauf, mit dem Scharnier links"> | <img src="docs/iphone-duo-open.jpg" alt="iPhone Duo aufgeklappt, gerahmt auf blauem Verlauf"> |
 
-**Übersetzen:** ein Android-Telefon mit deutscher Einstellungen-App, auf Englisch gezeigt
+**Übersetzen** (experimentell): ein Android-Telefon mit deutscher Einstellungen-App, auf Englisch gezeigt
 
 <img src="docs/translate.jpg" width="800" alt="MirrorAct spiegelt ein Android-Telefon mit deutscher Einstellungen-App, die mit eingeschaltetem «Übersetzen» auf Englisch erscheint, neben Werkzeugleiste und Stil-Panel">
 
@@ -81,11 +81,11 @@ Die Bilder zeigen die englische Oberfläche.
 - **Android:** über USB-Debugging, per Kabel oder WLAN, mit dem Server von [scrcpy](https://github.com/Genymobile/scrcpy) auf dem Telefon: Video ohne Puffer dekodiert, Ton ab Android 11, Bedienen mit Maus, Trackpad und Tastatur, Zwischenablage in beide Richtungen; siehe [Android-Telefon bedienen](#android-telefon-bedienen).
 - **iPhone und iPad bedienen** (optional, für Entwickler): Maus, Trackpad und Tastatur über einen Test-Agent auf dem Gerät (WebDriverAgent), per Kabel oder kabellos; siehe [iPhone oder iPad bedienen](#iphone-oder-ipad-bedienen).
 - **Gerätrahmen** pro Modell gezeichnet: Notch, Dynamic Island, Home-Button, iPad, iPhone Duo zu- und aufgeklappt, Android mit Kameraloch (Lage und Eckenradius liest MirrorAct vom Telefon), hoch und quer. Sieben Rahmenfarben.
-- **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Text, Übersetzen, Ton, Oben, Vollbild, Stil. Ein Rechtsklick zeigt alle Funktionen.
+- **Fenster ohne Leiste:** nur das Gerät auf dem Schreibtisch. Fährt die Maus darüber, erscheint daneben eine Werkzeugleiste: Aufnahme, Foto, Ton, Oben, Vollbild, Stil, und mit eingeschalteten experimentellen Funktionen auch Text und Übersetzen. Ein Rechtsklick zeigt alle Funktionen.
 - **Immer im Vordergrund** (⌘T): das Spiegelfenster schwebt über anderen Fenstern. Mit «Auch über Vollbild-Apps» (Einstellungen → Allgemein, Menü «Gerät» oder Rechtsklick) erscheint es auch auf jedem Schreibtisch und über anderen Apps im Vollbild; ein Klick darauf holt MirrorAct dann nicht mehr nach vorn.
 - **Stil-Panel:** Grösse (lebensgross, pixelgenau, punktgenau, Bildschirm füllen), Rahmen an/aus, Rahmenfarbe, Hintergrund (transparent, Verläufe, Farbe, Bild), Abstand, Schatten, Format (1:1, 16:9, 9:16, 4:3).
 - **Screenshots und Aufnahmen** mit oder ohne Rahmen und Hintergrund. Mit transparentem Hintergrund entstehen PNG bzw. HEVC mit Alpha für Keynote und Schnittprogramme, sonst H.264. Screenshots lassen sich direkt aus dem Fenster ziehen.
-- **Text auf dem Bildschirm:** «Text» kopiert den Text auf dem Gerätebildschirm in die Zwischenablage (Apples Vision, auf dem Mac). «Übersetzen» zeigt den Bildschirm in einer anderen Sprache, an Ort und Stelle und auch beim Scrollen, ebenso in Screenshots, Aufnahmen und beim Präsentieren. Übersetzt wird auf dem Mac (Apples Translation-Framework) oder von einem Sprachmodell-Dienst mit eigenem API-Schlüssel (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, Ollama, LM Studio oder jeder OpenAI-kompatible Server); siehe [Text kopieren und übersetzen](#text-kopieren-und-übersetzen).
+- **Text auf dem Bildschirm** (experimentell, aus, bis man unter Einstellungen → Allgemein «Experimentelle Funktionen» einschaltet): «Text» kopiert den Text auf dem Gerätebildschirm in die Zwischenablage (Apples Vision, auf dem Mac). «Übersetzen» zeigt den Bildschirm in einer anderen Sprache, an Ort und Stelle und auch beim Scrollen, ebenso in Screenshots, Aufnahmen und beim Präsentieren. Übersetzt wird auf dem Mac (Apples Translation-Framework) oder von einem Sprachmodell-Dienst mit eigenem API-Schlüssel (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, Ollama, LM Studio oder jeder OpenAI-kompatible Server); siehe [Text kopieren und übersetzen](#text-kopieren-und-übersetzen).
 - **Präsentieren:** Gerät mittig auf dem Hintergrund, im Vollbild ohne Dock; die Menüleiste erscheint am oberen Rand. Beenden mit Esc, ⌃⌘F oder «Präsentation beenden» oben links.
 - **Editor:** vorhandene Screenshots und Bildschirmaufnahmen nachträglich rahmen, Videos kürzen, zwei Screenshots als **Duo** (nebeneinander, versetzt, gekippt, perspektivisch).
 - **Kurzbefehle:** «Screenshot einrahmen» (auch als Finder-Schnellaktion), «Screenshot vom iPhone», «Aufnahme starten oder beenden».
@@ -94,12 +94,19 @@ Die Oberfläche gibt es auf Englisch und Deutsch; die Sprache lässt sich unter 
 
 ## Tastatur und Einstellungen
 
-⌘R Aufnahme, ⌘S Screenshot, ⇧⌘C Screenshot kopieren, ⌥⌘T Text kopieren, ⇧⌘T Übersetzen,
-⌘K Stil-Panel, ⌃⌘F Präsentieren, ⌘T immer im Vordergrund, ⌘1 lebensgross, ⌘2 pixelgenau, ⌘0 punktgenau, ⌘E Editor.
+⌘R Aufnahme, ⌘S Screenshot, ⇧⌘C Screenshot kopieren, ⌘K Stil-Panel, ⌃⌘F Präsentieren,
+⌘T immer im Vordergrund, ⌘1 lebensgross, ⌘2 pixelgenau, ⌘0 punktgenau, ⌘E Editor; mit eingeschalteten
+experimentellen Funktionen auch ⌥⌘T Text kopieren und ⇧⌘T Übersetzen.
 
 Einstellungen unter MirrorAct → Einstellungen, das Log in `~/Library/Logs/MirrorAct.log`.
 
 ## Text kopieren und übersetzen
+
+«Text» und «Übersetzen» sind experimentell: Sie werden noch erprobt, und dabei kann etwas schiefgehen
+(siehe «Gut zu wissen» weiter unten). Sie bleiben verborgen, bis man unter Einstellungen → Allgemein
+«Experimentelle Funktionen» einschaltet; dann erscheinen sie in der Werkzeugleiste, in den Menüs und
+als Tab «Text» in den Einstellungen. Wird die Einstellung wieder ausgeschaltet, verschwinden sie, und
+«Übersetzen» geht in jedem Fenster aus.
 
 «Text» (⌥⌘T) kopiert den Text auf dem Gerätebildschirm in die Zwischenablage, einen Absatz pro
 Zeile: den eigenen Text des Geräts, auch wenn «Übersetzen» an ist. «Übersetzen» (⇧⌘T) zeigt den

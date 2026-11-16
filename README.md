@@ -68,7 +68,7 @@ appears next to it; right-click shows every function.
 |---|---|
 | <img src="docs/iphone-duo-closed.jpg" alt="iPhone Duo closed, framed on a blue gradient, with the hinge on the left"> | <img src="docs/iphone-duo-open.jpg" alt="iPhone Duo open, framed on a blue gradient"> |
 
-**Translate:** an Android phone whose Settings app is in German, shown in English
+**Translate** (experimental): an Android phone whose Settings app is in German, shown in English
 
 <img src="docs/translate.jpg" width="800" alt="MirrorAct mirroring an Android phone whose Settings app is in German, shown in English with Translate on, next to the tool rail and the style panel">
 
@@ -79,11 +79,11 @@ appears next to it; right-click shows every function.
 - **Android:** over USB debugging, by cable or Wi-Fi, with the [scrcpy](https://github.com/Genymobile/scrcpy) server on the phone: video decoded without buffering, sound from Android 11, control with mouse, trackpad and keyboard, clipboard in both directions; see [Controlling an Android phone](#controlling-an-android-phone).
 - **iPhone and iPad control** (optional, for developers): mouse, trackpad and keyboard through a test agent on the device (WebDriverAgent), by cable or wirelessly; see [Controlling an iPhone or iPad](#controlling-an-iphone-or-ipad).
 - **Device frames** drawn for each model: notch, Dynamic Island, home button, iPad, iPhone Duo closed and open, Android with punch-hole camera (position and corner radius read from the phone), portrait and landscape. Seven frame colors.
-- **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: Record, Photo, Text, Translate, Sound, On Top, Full Screen, Style. Right-click shows every function.
+- **Window without chrome:** only the device on your desktop. A tool rail appears next to it on hover: Record, Photo, Sound, On Top, Full Screen, Style, and with experimental features on also Text and Translate. Right-click shows every function.
 - **Keep on top** (⌘T): the mirror window floats above other windows. With "Also above full-screen apps" (Settings → General, the Device menu or right-click) it also shows on every desktop and above other apps in full screen; clicking it then no longer brings MirrorAct to the front.
 - **Style panel:** size (life-size, pixel-perfect, point-perfect, fit), frame on/off, frame color, background (transparent, gradients, color, image), padding, shadow, aspect ratio (1:1, 16:9, 9:16, 4:3).
 - **Screenshots and recordings** with or without frame and background. Transparent backgrounds produce PNG or HEVC with alpha for Keynote and video editors, otherwise H.264. Drag screenshots straight out of the window.
-- **Text on the screen:** "Text" copies the text on the device screen to the clipboard (Apple's Vision, on your Mac). "Translate" shows the screen in another language, in place and while you scroll, in screenshots, recordings and the presentation too. It translates on your Mac (Apple's Translation framework) or with a language model service and your own API key (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, Ollama, LM Studio or any OpenAI-compatible server); see [Copying and translating text](#copying-and-translating-text).
+- **Text on the screen** (experimental, off until you turn on "Experimental features" under Settings → General): "Text" copies the text on the device screen to the clipboard (Apple's Vision, on your Mac). "Translate" shows the screen in another language, in place and while you scroll, in screenshots, recordings and the presentation too. It translates on your Mac (Apple's Translation framework) or with a language model service and your own API key (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, OpenRouter, Azure OpenAI, Ollama, LM Studio or any OpenAI-compatible server); see [Copying and translating text](#copying-and-translating-text).
 - **Presentation mode:** device centered on your background, full screen, without Dock; the menu bar slides in at the top edge. End it with Esc, ⌃⌘F or "Exit Presentation" at the top left.
 - **Editor:** frame existing screenshots and screen recordings afterwards, trim videos, two screenshots as a **duo** (side by side, staggered, tilted, perspective).
 - **Shortcuts:** "Frame screenshot" (usable as a Finder Quick Action), "Screenshot from iPhone", "Start or stop recording".
@@ -92,12 +92,18 @@ The user interface is available in English and German; choose the language under
 
 ## Keyboard and settings
 
-⌘R record, ⌘S screenshot, ⇧⌘C copy screenshot, ⌥⌘T copy text, ⇧⌘T translate, ⌘K style panel,
-⌃⌘F present, ⌘T keep on top, ⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor.
+⌘R record, ⌘S screenshot, ⇧⌘C copy screenshot, ⌘K style panel, ⌃⌘F present, ⌘T keep on top,
+⌘1 life-size, ⌘2 pixel-perfect, ⌘0 point-perfect, ⌘E editor; with experimental features on also
+⌥⌘T copy text and ⇧⌘T translate.
 
 Settings live under MirrorAct → Settings, the log in `~/Library/Logs/MirrorAct.log`.
 
 ## Copying and translating text
+
+"Text" and "Translate" are experimental: they are still being tried out and can go wrong (see "Good
+to know" below). They stay hidden until you turn on "Experimental features" under Settings →
+General; then they show in the tool rail, in the menus and as the tab "Text" in the settings.
+Turning the setting off hides them again and turns "Translate" off in every window.
 
 "Text" (⌥⌘T) copies the text on the device screen to the clipboard, one paragraph per line: the
 device's own text, also while "Translate" is on. "Translate" (⇧⌘T) shows the screen in another
