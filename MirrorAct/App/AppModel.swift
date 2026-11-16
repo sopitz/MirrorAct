@@ -25,9 +25,15 @@ final class AppModel: ObservableObject {
     @Published var pinRequested = false
 
     private var controllers: [String: MirrorWindowController] = [:] {
-        didSet { openSessionIDs = Set(controllers.keys) }
+        didSet {
+            openSessionIDs = Set(controllers.keys)
+            observeKeyMirror()
+        }
     }
     @Published private(set) var openSessionIDs: Set<String> = []
+    /// whether the mirror the Device menu acts on translates, for the check mark in the menu bar
+    @Published private(set) var keyMirrorIsTranslating = false
+    private var keyMirrorChanges: AnyCancellable?
     private var captures: [String: USBCaptureSession] = [:]
     private weak var wirelessSession: MirrorSession?
     private var cancellables: Set<AnyCancellable> = []
@@ -38,6 +44,23 @@ final class AppModel: ObservableObject {
     static func keyMirror(among controllers: [MirrorWindowController]) -> MirrorWindowController? {
         controllers.first { $0.isPresenting } ?? controllers.first { $0.window?.isKeyWindow == true }
             ?? controllers.first
+    }
+
+    /// The menu bar shows the state of the key mirror: it changes with the key window and with
+    /// the translating of any open session.
+    private func observeKeyMirror() {
+        let translating = controllers.values.map { $0.session.$isTranslating.map { _ in () } }
+        keyMirrorChanges = Publishers.MergeMany(translating)
+            .merge(with: NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification).map { _ in () })
+            // @Published announces a change before it is made: read the state afterwards
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.updateKeyMirrorIsTranslating() }
+        updateKeyMirrorIsTranslating()
+    }
+
+    private func updateKeyMirrorIsTranslating() {
+        let translating = keyMirror?.session.isTranslating ?? false
+        if translating != keyMirrorIsTranslating { keyMirrorIsTranslating = translating }
     }
 
     func isMirroring(cableDevice id: String) -> Bool { openSessionIDs.contains("usb:\(id)") }
@@ -333,11 +356,16 @@ final class AppModel: ObservableObject {
             self.androidAudio[key]?.stop()
             session.stopRecording()
             session.control = nil
-            session.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
             // Cable unplugged, Wi-Fi still there (or vice versa): continue over the other connection
-            if let other = self.android.devices.first(where: {
+            let other = self.android.devices.first(where: {
                 $0.state == .ready && $0.serial != device.serial && $0.info != nil && Self.androidKey($0) == key
-            }) {
+            })
+            // Translate goes on again by itself only when the app moves the window right now;
+            // a device that is back later mirrors on without it
+            session.streamWillEnd(handingOver: Self.movesToAnotherConnection(
+                otherConnection: other != nil, wifiSwitchStarted: self.wifiSwitches[key], now: Date()))
+            session.state = .disconnected(reason ?? String(localized: "Disconnected – connect the phone again"))
+            if let other {
                 self.connectAndroid(other, session: session)
             }
         }
@@ -352,15 +380,34 @@ final class AppModel: ObservableObject {
         client.start()
     }
 
+    /// when "Switch to Wi-Fi" started, per window key
+    private var wifiSwitches: [String: Date] = [:]
+    /// How long after "Switch to Wi-Fi" started a stream that stops was stopped by it: the
+    /// switch restarts adb on the phone, which ends the stream over the cable before the one
+    /// over Wi-Fi can start. It covers the timeouts of the commands that come first.
+    static let wifiSwitchWindow: TimeInterval = 30
+
+    /// Whether the app moves the window of a stopped Android stream to another connection by
+    /// itself: the other connection is there, or Switch to Wi-Fi just ended the stream
+    static func movesToAnotherConnection(otherConnection: Bool, wifiSwitchStarted: Date?, now: Date) -> Bool {
+        if otherConnection { return true }
+        guard let started = wifiSwitchStarted else { return false }
+        let elapsed = now.timeIntervalSince(started)
+        return elapsed >= 0 && elapsed < wifiSwitchWindow
+    }
+
     /// switch a cable-connected Android device to Wi-Fi; an open window reconnects
     func switchAndroidToWiFi(_ device: AndroidDeviceMonitor.Device) {
         let name = device.name
+        let key = Self.androidKey(device)
+        wifiSwitches[key] = Date()
         Task {
             do {
                 try await Task.detached { try AndroidWireless.switchToWiFi(serial: device.serial) }.value
-                controllers[Self.androidKey(device)]?.session
+                controllers[key]?.session
                     .showToast(String(localized: "Connected via Wi-Fi – you can unplug the cable"))
             } catch {
+                wifiSwitches[key] = nil
                 let alert = NSAlert()
                 alert.messageText = String(localized: "\(name) can’t be switched to Wi-Fi")
                 alert.informativeText = error.localizedDescription

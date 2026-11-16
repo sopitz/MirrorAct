@@ -80,13 +80,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MirrorAct ist als AirPlay-Empfänger für die Bildschirmsynchronisierung erreichbar."
+            "value" : "MirrorAct ist als AirPlay-Empfänger für die Bildschirmsynchronisierung erreichbar und kann mit einem Sprachmodell auf einem Computer im lokalen Netzwerk übersetzen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "MirrorAct can be reached as an AirPlay receiver for Screen Mirroring."
+            "value" : "MirrorAct can be reached as an AirPlay receiver for Screen Mirroring and can translate with a language model on a computer in the local network."
           }
         }
       }

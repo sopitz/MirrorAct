@@ -59,10 +59,18 @@ targets:
         NSHumanReadableCopyright: "GPL-3.0-or-later"
         NSCameraUsageDescription: MirrorAct shows the screen of an iPhone or iPad connected by cable.
         NSMicrophoneUsageDescription: MirrorAct plays the sound of an iPhone or iPad connected by cable.
-        NSLocalNetworkUsageDescription: MirrorAct can be reached as an AirPlay receiver for Screen Mirroring.
+        NSLocalNetworkUsageDescription: MirrorAct can be reached as an AirPlay receiver for Screen Mirroring and can translate with a language model on a computer in the local network.
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp
+        # Plain http for a language model on this Mac or in the local network. Tried on macOS 26,
+        # with and without this key alike, ATS lets through: localhost, loopback, private
+        # (10/8, 172.16/12, 192.168/16, fc00::/7) and link-local IP addresses, .local names and
+        # names without a dot. It refuses *.localhost, other DNS names (.lan, .home.arpa, tailnet
+        # names) and public or CGNAT (100.64/10) addresses: those need https. The app explains
+        # such a refusal instead of showing the system's message (LLMTranslationEngine).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: MirrorAct/MirrorAct.entitlements
       properties:
