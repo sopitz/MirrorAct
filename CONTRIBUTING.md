@@ -12,8 +12,9 @@ pull requests to `develop` (see [Branches and pull requests](#branches-and-pull-
 
 You need:
 
-- macOS 15 or later (tested on Apple silicon)
-- Xcode 16 or later
+- Xcode 26.4 or later: the code needs the macOS 26.4 SDK
+- macOS 26.2 or later (tested on Apple silicon), because Xcode 26.4 needs it; the app you build
+  still has macOS 15 as its minimum version
 - [Homebrew](https://brew.sh) packages:
 
 ```bash

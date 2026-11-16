@@ -12,8 +12,9 @@ kommen als Pull Request nach `develop` (siehe [Branches und Pull Requests](#bran
 
 Dafür braucht es:
 
-- macOS 15 oder neuer (getestet auf Apple Silicon)
-- Xcode 16 oder neuer
+- Xcode 26.4 oder neuer: Der Code braucht das SDK von macOS 26.4
+- macOS 26.2 oder neuer (getestet auf Apple Silicon), weil Xcode 26.4 es voraussetzt; das
+  Mindestsystem der gebauten App bleibt macOS 15
 - [Homebrew](https://brew.sh)-Pakete:
 
 ```bash
