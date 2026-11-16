@@ -106,7 +106,8 @@ final class ExperimentalFeaturesTests: XCTestCase {
     /// A layout of the window right after the setting changed has the rail as it is now. The
     /// rail's view takes a change on only when it is laid out. The window used to be measured
     /// around the rail from before, and followed the setting only when SwiftUI had brought the
-    /// rail up to date first: in the tests that held as long as the host had its start window.
+    /// rail up to date first: on macOS 26 that held in the tests as long as the host had its
+    /// start window, and failed about every second time without it.
     func testALayoutRightAfterTheSettingChangesHasTheNewRail() throws {
         setExperimentalFeatures(false)
         let session = MirrorSession(id: "test", kind: .cable, deviceName: "iPhone", modelIdentifier: "iPhone14,2",
