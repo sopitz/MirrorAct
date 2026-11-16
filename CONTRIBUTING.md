@@ -404,8 +404,9 @@ picture of a translated screen (`translate.jpg`) is the mirror picture of a sess
 `cmd=translate on=1 device=<serial>` first, and wait until the screen is translated): the device
 then shows the translations, and the tool rail shows "Translate" as on; the `mirror.png` written
 then becomes `docs/translate.jpg`. The pictures are drawn at 2 pixels per point, whatever displays
-are attached (`MirrorAct/App/Showcase.swift`); convert them to JPEG, 1600 px wide, for example with
-`sips -s format jpeg --resampleWidth 1600 mirror.png --out docs/mirror.jpg`. No mocked-up or
+are attached (`MirrorAct/App/Showcase.swift`); convert them to JPEG, 1600 px wide, at the quality of
+the pictures in `docs/`, for example with
+`sips -s format jpeg -s formatOptions 85 -Z 1600 mirror.png --out docs/mirror.jpg`. No mocked-up or
 retouched images.
 
 Format like the existing ones: JPEG, 1600 px wide; PNG only where transparency is needed. No

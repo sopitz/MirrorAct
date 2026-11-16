@@ -443,7 +443,8 @@ warten, bis der Bildschirm übersetzt ist): Das Gerät zeigt dann die Übersetzu
 Werkzeugleiste zeigt «Übersetzen» als eingeschaltet; das dabei geschriebene `mirror.png` wird zu
 `docs/translate.jpg`. Die Bilder werden mit 2 Pixeln pro Punkt gezeichnet, welche Bildschirme
 auch angeschlossen sind (`MirrorAct/App/Showcase.swift`); danach in JPEG mit 1600 px Breite
-umwandeln, etwa mit `sips -s format jpeg --resampleWidth 1600 mirror.png --out docs/mirror.jpg`.
+umwandeln, in der Qualität der Bilder in `docs/`, etwa mit
+`sips -s format jpeg -s formatOptions 85 -Z 1600 mirror.png --out docs/mirror.jpg`.
 Keine nachgebauten oder retuschierten Bilder.
 
 Format wie die vorhandenen: JPEG, 1600 px breit; PNG nur, wo Transparenz nötig ist. Keine privaten
