@@ -249,10 +249,10 @@ builds into `~/Library/Caches/MirrorAct/DerivedData` (`MIRRORACT_DERIVED` choose
 folder), writes the whole output to `test.log` there and prints the failures, or the count of
 tests run. It hands every `TRACKING_*` variable on to the tests (see the tracking bench below).
 
-Running as the host, the app starts without the AirPlay receiver, USB and adb, keeps its settings
-apart from yours (domain `io.github.sopitz.MirrorAct.tests`, emptied when a run starts and when it
-ends; API keys under a keychain name of their own) and logs only to the system log. Two test runs
-at the same time share that domain and disturb each other: run one at a time.
+Running as the host, the app starts without its start window, the AirPlay receiver, USB and adb,
+keeps its settings apart from yours (domain `io.github.sopitz.MirrorAct.tests`, emptied when a run
+starts and when it ends; API keys under a keychain name of their own) and logs only to the system
+log. Two test runs at the same time share that domain and disturb each other: run one at a time.
 
 Some tests open real windows. `PresentationTests` presents a mirror window, activates the app and
 goes full screen; `StylePanelAppearanceTests` presents a mirror window and activates the app;

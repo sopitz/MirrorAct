@@ -274,11 +274,11 @@ anderen Ordner), schreibt die ganze Ausgabe dort nach `test.log` und zeigt die F
 Zahl der ausgeführten Tests. Jede `TRACKING_*`-Variable gibt es an die Tests weiter (siehe den
 Prüfstand unten).
 
-Als Host startet die App ohne AirPlay-Empfänger, USB und adb, hält ihre Einstellungen von den
-eigenen getrennt (Domain `io.github.sopitz.MirrorAct.tests`, geleert, wenn ein Lauf beginnt und
-wenn er endet; API-Schlüssel unter einem eigenen Namen im Schlüsselbund) und schreibt nur ins
-Systemlog. Zwei Testläufe gleichzeitig teilen diese Domain und stören einander: immer nur einen
-laufen lassen.
+Als Host startet die App ohne ihr Startfenster, ohne AirPlay-Empfänger, USB und adb, hält ihre
+Einstellungen von den eigenen getrennt (Domain `io.github.sopitz.MirrorAct.tests`, geleert, wenn
+ein Lauf beginnt und wenn er endet; API-Schlüssel unter einem eigenen Namen im Schlüsselbund) und
+schreibt nur ins Systemlog. Zwei Testläufe gleichzeitig teilen diese Domain und stören einander:
+immer nur einen laufen lassen.
 
 Einige Tests öffnen echte Fenster. `PresentationTests` zeigt ein Spiegelfenster, holt die App nach
 vorn und geht ins Vollbild; `StylePanelAppearanceTests` zeigt ein Spiegelfenster und holt die App
