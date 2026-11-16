@@ -13,7 +13,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : " · 无线镜像"
+            "value" : " · 正在无线镜像"
           }
         }
       }
@@ -77,7 +77,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "否则，请在镜像窗口中点击“控制”。设备上需要 Xcode 和开发者模式。"
+            "value" : "否则，请在镜像窗口中点击“控制”。需要在 Mac 上安装 Xcode，并在设备上开启开发者模式。"
           }
         }
       }
@@ -141,7 +141,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "代理尚未构建：请在 MirrorAct 文件夹中运行 scripts/build-agent.sh。还需要在设备上启用 Xcode 和开发者模式。"
+            "value" : "代理尚未构建：请在 MirrorAct 文件夹中运行 scripts/build-agent.sh。还需要在 Mac 上安装 Xcode，并在设备上开启开发者模式。"
           }
         }
       }
@@ -269,7 +269,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法启动 Xcode (xcodebuild)。"
+            "value" : "无法启动 Xcode（xcodebuild）。"
           }
         }
       }
@@ -525,7 +525,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连接中…"
+            "value" : "正在连接…"
           }
         }
       }
@@ -605,7 +605,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用鼠标和键盘控制设备 (⌥⌘C)"
+            "value" : "使用鼠标和键盘控制设备（⌥⌘C）"
           }
         }
       }
@@ -861,7 +861,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过 Wi-Fi 准备就绪"
+            "value" : "已通过 Wi-Fi 就绪"
           }
         }
       }
@@ -973,7 +973,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在“允许 USB 调试？”中轻触“允许”（勾选“始终允许来自此计算机的调试”）。"
+            "value" : "在“允许 USB 调试吗？”中轻触“允许”（勾选“一律允许使用这台计算机进行调试”）。"
           }
         }
       }
@@ -1069,7 +1069,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "应用中缺少 scrcpy 服务器 (scripts/bootstrap-scrcpy.sh)"
+            "value" : "应用中缺少 scrcpy 服务器（scripts/bootstrap-scrcpy.sh）"
           }
         }
       }
@@ -1085,7 +1085,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "解锁手机，然后在“允许 USB 调试？”对话框中轻触“允许”。如果没有出现对话框，请拔下线缆，然后重新连接。"
+            "value" : "解锁手机，然后在“允许 USB 调试吗？”对话框中轻触“允许”。如果没有出现对话框，请拔下线缆，然后重新连接。"
           }
         }
       }
@@ -1303,7 +1303,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 台设备通过有线连接 · 无线镜像"
+            "value" : "1 台设备通过有线连接 · 正在无线镜像"
           }
         }
       }
@@ -1591,7 +1591,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "背景、内边距和宽高比来自“样式”。透明背景会生成具有透明度的 HEVC，否则为 H.264。已保存到桌面。"
+            "value" : "背景、内边距和宽高比来自“样式”。透明背景会生成具有透明度的 HEVC，否则为 H.264。录制内容保存到桌面。"
           }
         }
       }
@@ -1837,7 +1837,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点击：截屏到桌面 · 按住 ⌥ 点击：复制 · 拖动：直接拖入应用"
+            "value" : "点击：截图到桌面 · 按住 ⌥ 点击：复制 · 拖动：直接拖入应用"
           }
         }
       }
@@ -1885,7 +1885,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CODE"
+            "value" : "代码"
           }
         }
       }
@@ -2061,7 +2061,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制屏幕截图"
+            "value" : "复制截图"
           }
         }
       }
@@ -2093,7 +2093,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "深紫色"
+            "value" : "暗紫色"
           }
         }
       }
@@ -2109,7 +2109,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "截图、录制和演示的默认设置（⌃⌘F）。镜像窗口不显示背景。在编辑器 (⌘E) 中，您可以为每个文件更改样式。"
+            "value" : "截图、录制和演示（⌃⌘F）的默认设置。镜像窗口不显示背景。在编辑器（⌘E）中，您可以为每个文件更改样式。"
           }
         }
       }
@@ -2157,7 +2157,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过 Apple 无线网络直接连接 (AWDL)"
+            "value" : "通过 Apple 无线网络直接连接（AWDL）"
           }
         }
       }
@@ -2365,7 +2365,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑屏幕截图或视频…"
+            "value" : "编辑截图或视频…"
           }
         }
       }
@@ -2477,7 +2477,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出：H.264 (.mov)，最高 4K"
+            "value" : "导出：H.264（.mov），最高 4K"
           }
         }
       }
@@ -2525,7 +2525,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "适合\n屏幕"
+            "value" : "适应\n屏幕"
           }
         }
       }
@@ -3121,7 +3121,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "镜像"
+            "value" : "正在镜像"
           }
         }
       }
@@ -3137,7 +3137,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无线镜像"
+            "value" : "正在无线镜像"
           }
         }
       }
@@ -3329,7 +3329,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "确认"
+            "value" : "好"
           }
         }
       }
@@ -3425,7 +3425,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "透视图"
+            "value" : "透视"
           }
         }
       }
@@ -3521,7 +3521,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点位\n精准"
+            "value" : "点级\n精确"
           }
         }
       }
@@ -3537,7 +3537,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点位精准"
+            "value" : "点级精确"
           }
         }
       }
@@ -3553,7 +3553,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点位精准（与 iPhone 上一致）"
+            "value" : "点级精确（与 iPhone 上一致）"
           }
         }
       }
@@ -3617,7 +3617,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用 MirrorAct 的样式（边框颜色、背景、宽高比），将 iPhone 或 iPad 屏幕截图放入设备边框中。"
+            "value" : "使用 MirrorAct 的样式（边框颜色、背景、宽高比），将 iPhone 或 iPad 截图放入设备边框中。"
           }
         }
       }
@@ -3681,7 +3681,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "录制视频 (⌘R)"
+            "value" : "录制视频（⌘R）"
           }
         }
       }
@@ -3889,7 +3889,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将屏幕截图保存到桌面"
+            "value" : "将截图保存到桌面"
           }
         }
       }
@@ -3985,7 +3985,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPhone 截屏"
+            "value" : "iPhone 截图"
           }
         }
       }
@@ -4001,7 +4001,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "当前正在镜像的设备的屏幕截图，使用 MirrorAct 的样式。"
+            "value" : "当前正在镜像的设备的截图，使用 MirrorAct 的样式。"
           }
         }
       }
@@ -4353,7 +4353,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "停止录制 (⌘R)"
+            "value" : "停止录制（⌘R）"
           }
         }
       }
@@ -4689,7 +4689,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在等待视频"
+            "value" : "正在等待视频…"
           }
         }
       }
@@ -4737,7 +4737,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无线接收器 (AirPlay)"
+            "value" : "无线接收器（AirPlay）"
           }
         }
       }
