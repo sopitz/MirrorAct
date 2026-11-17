@@ -319,8 +319,7 @@ final class MirrorSession: ObservableObject, Identifiable {
             switch result {
             case let .success(url):
                 Log.info("Recording saved: \(url.path)")
-                self?.lastExport = url
-                self?.lastEditable = recorder.isPassthrough ? url : nil
+                self?.noteExport(url, editable: recorder.isPassthrough ? url : nil)
                 self?.showToast(String(localized: "Recording saved – drag it out to share"))
             case let .failure(error):
                 Log.error("Recording: \(error.localizedDescription)")
@@ -334,6 +333,13 @@ final class MirrorSession: ObservableObject, Identifiable {
         formatter.dateFormat = String(localized: "yyyy-MM-dd 'at' HH.mm.ss")
         let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
         return desktop.appendingPathComponent("\(deviceName) \(formatter.string(from: Date())).\(ext)")
+    }
+
+    /// a file was saved (screenshot or recording): it becomes the rail's "Latest", with its
+    /// unframed version for the editor (nil = can't be edited afterwards)
+    func noteExport(_ url: URL, editable: URL?) {
+        lastExport = url
+        lastEditable = editable
     }
 
     // MARK: Screenshots
@@ -371,8 +377,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
         let url = desktopURL(extension: "png")
         if FrameRenderer.writePNG(image, to: url) {
-            lastExport = url
-            lastEditable = rawScreenshotCopy()
+            noteExport(url, editable: rawScreenshotCopy())
             showToast(String(localized: "Saved to the Desktop"))
         } else {
             showToast(String(localized: "Saving failed"))

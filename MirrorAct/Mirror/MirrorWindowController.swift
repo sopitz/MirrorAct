@@ -96,11 +96,17 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
             DispatchQueue.main.async { self?.updatePlaceholder(state) }
         }.store(in: &cancellables)
         session.$deviceName.sink { [weak self] name in self?.window?.title = name }.store(in: &cancellables)
+        // the rail's control part changes the rail's height, and the window is never lower than the
+        // rail (the first value is the one the window is made with)
+        session.$controlState.removeDuplicates().dropFirst().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.applyLayout() }
+        }.store(in: &cancellables)
         session.$controlState.removeDuplicates().sink { [weak self] state in
             DispatchQueue.main.async { self?.controlStateChanged(state) }
         }.store(in: &cancellables)
+        // "Latest" comes with the first saved file and makes the rail higher
         session.$lastExport.dropFirst().sink { [weak self] _ in
-            DispatchQueue.main.async { self?.layoutSubviews() }
+            DispatchQueue.main.async { self?.applyLayout() }
         }.store(in: &cancellables)
         settings.$showFrame.dropFirst().sink { [weak self] _ in
             DispatchQueue.main.async { self?.applyLayout() }
