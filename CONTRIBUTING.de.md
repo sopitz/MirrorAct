@@ -275,22 +275,24 @@ anderen Ordner), schreibt die ganze Ausgabe dort nach `test.log` und zeigt die F
 Zahl der ausgeführten Tests. Jede `TRACKING_*`-Variable gibt es an die Tests weiter (siehe den
 Prüfstand unten).
 
-Als Host startet die App ohne AirPlay-Empfänger, USB und adb, hält ihre Einstellungen von den
-eigenen getrennt (Domain `io.github.sopitz.MirrorAct.tests`, geleert, wenn ein Lauf beginnt und
-wenn er endet; API-Schlüssel unter einem eigenen Namen im Schlüsselbund) und schreibt nur ins
-Systemlog. Zwei Testläufe gleichzeitig teilen diese Domain und stören einander: immer nur einen
-laufen lassen.
+Als Host startet die App ohne ihr Startfenster, ohne AirPlay-Empfänger, USB und adb, hält ihre
+Einstellungen von den eigenen getrennt (Domain `io.github.sopitz.MirrorAct.tests`, geleert, wenn
+ein Lauf beginnt und wenn er endet; API-Schlüssel unter einem eigenen Namen im Schlüsselbund) und
+schreibt nur ins Systemlog. Zwei Testläufe gleichzeitig teilen diese Domain und stören einander:
+immer nur einen laufen lassen.
 
 Einige Tests öffnen echte Fenster. `PresentationTests` zeigt ein Spiegelfenster, holt die App nach
 vorn und geht ins Vollbild; `StylePanelAppearanceTests` zeigt ein Spiegelfenster und holt die App
 nach vorn; `TextSettingsViewTests` zeigt die Text-Einstellungen in einem Fenster und macht es zum
 aktiven; `OnTopTests` zeigt ein Spiegelfenster, holt die App nach vorn, lässt das Fenster über
 anderen Fenstern und auf jedem Schreibtisch schweben und geht einmal ins Vollbild.
-(`SettingsLayoutTests` und `ShowcaseTests` legen ihre Fenster ausserhalb der Bildschirme ab;
-`AppleTranslationEngineTests` holt kurz ein fast durchsichtiges Fenster auf den Bildschirm, das
-weder Klicks noch Tasten annimmt.) Wer währenddessen am Mac arbeiten will, lässt diese vier weg:
-die nötigen Klassen mit Namen aufrufen, oder xcodebuild wie das Skript aufrufen, mit
-`-skip-testing`:
+(`SettingsLayoutTests` und `ShowcaseTests` legen ihre Fenster ausserhalb der Bildschirme ab, mit
+einer Ausnahme: `SettingsLayoutTests.testWindowChromeCoversTheRealSettingsWindow` öffnet kurz das
+echte Einstellungsfenster der App, und AppKit speichert Position und Grösse dieses Fensters in den
+Einstellungen der installierten App. `AppleTranslationEngineTests` holt kurz ein fast
+durchsichtiges Fenster auf den Bildschirm, das weder Klicks noch Tasten annimmt.) Wer
+währenddessen am Mac arbeiten will, lässt diese vier Klassen und diesen Test weg: die nötigen
+Klassen mit Namen aufrufen, oder xcodebuild wie das Skript aufrufen, mit `-skip-testing`:
 
 ```bash
 caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -configuration Debug \
@@ -298,7 +300,8 @@ caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -conf
   -skip-testing:MirrorActTests/PresentationTests \
   -skip-testing:MirrorActTests/StylePanelAppearanceTests \
   -skip-testing:MirrorActTests/TextSettingsViewTests \
-  -skip-testing:MirrorActTests/OnTopTests test
+  -skip-testing:MirrorActTests/OnTopTests \
+  -skip-testing:MirrorActTests/SettingsLayoutTests/testWindowChromeCoversTheRealSettingsWindow test
 ```
 
 Die Tests brauchen einen wachen Bildschirm: Schläft er, enden die Animationen dieser Fenster nie,

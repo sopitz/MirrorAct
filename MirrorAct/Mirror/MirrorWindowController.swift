@@ -425,6 +425,12 @@ final class MirrorWindowController: NSWindowController, NSWindowDelegate {
         guard let window else { return }
         let model = layout(for: zoom)
         frameView.layoutModel = model
+        // The rail may just have changed, with a setting or the session. Its hosting view takes
+        // that on when it is laid out; until then its fitting size is the one from before, also
+        // in this layout, which may be the answer to that very change. The view is marked here:
+        // macOS 26 marks it when the change is made, macOS 15 a pass of the run loop later.
+        railView.needsLayout = true
+        railView.layoutSubtreeIfNeeded()
         let size = contentSize(for: model)
         // top-left corner stays put
         let frame = NSRect(x: window.frame.minX, y: window.frame.maxY - size.height,

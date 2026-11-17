@@ -250,19 +250,22 @@ builds into `~/Library/Caches/MirrorAct/DerivedData` (`MIRRORACT_DERIVED` choose
 folder), writes the whole output to `test.log` there and prints the failures, or the count of
 tests run. It hands every `TRACKING_*` variable on to the tests (see the tracking bench below).
 
-Running as the host, the app starts without the AirPlay receiver, USB and adb, keeps its settings
-apart from yours (domain `io.github.sopitz.MirrorAct.tests`, emptied when a run starts and when it
-ends; API keys under a keychain name of their own) and logs only to the system log. Two test runs
-at the same time share that domain and disturb each other: run one at a time.
+Running as the host, the app starts without its start window, the AirPlay receiver, USB and adb,
+keeps its settings apart from yours (domain `io.github.sopitz.MirrorAct.tests`, emptied when a run
+starts and when it ends; API keys under a keychain name of their own) and logs only to the system
+log. Two test runs at the same time share that domain and disturb each other: run one at a time.
 
 Some tests open real windows. `PresentationTests` presents a mirror window, activates the app and
 goes full screen; `StylePanelAppearanceTests` presents a mirror window and activates the app;
 `TextSettingsViewTests` shows the Text settings in a window and makes it key; `OnTopTests` presents
 a mirror window, activates the app, lets the window float above other windows and on every desktop,
 and goes full screen once. (`SettingsLayoutTests` and `ShowcaseTests` place their windows outside
-the screens; `AppleTranslationEngineTests` moves an almost transparent window, which takes no
-clicks and no keys, onto the screen for a moment.) To work on the Mac meanwhile, leave those four
-out: run the classes you need by name, or call xcodebuild as the script does, with `-skip-testing`:
+the screens, with one exception: `SettingsLayoutTests.testWindowChromeCoversTheRealSettingsWindow`
+opens the app's real Settings window for a moment, and AppKit saves that window's position and size
+in the preferences of the installed app. `AppleTranslationEngineTests` moves an almost transparent
+window, which takes no clicks and no keys, onto the screen for a moment.) To work on the Mac
+meanwhile, leave those four classes and that test out: run the classes you need by name, or call
+xcodebuild as the script does, with `-skip-testing`:
 
 ```bash
 caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -configuration Debug \
@@ -270,7 +273,8 @@ caffeinate -d -i xcodebuild -project MirrorAct.xcodeproj -scheme MirrorAct -conf
   -skip-testing:MirrorActTests/PresentationTests \
   -skip-testing:MirrorActTests/StylePanelAppearanceTests \
   -skip-testing:MirrorActTests/TextSettingsViewTests \
-  -skip-testing:MirrorActTests/OnTopTests test
+  -skip-testing:MirrorActTests/OnTopTests \
+  -skip-testing:MirrorActTests/SettingsLayoutTests/testWindowChromeCoversTheRealSettingsWindow test
 ```
 
 The suite needs the display awake: while it sleeps, the animations of those windows never end, each

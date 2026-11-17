@@ -103,6 +103,30 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertFalse(window.isVisible)
     }
 
+    /// A layout of the window right after the setting changed has the rail as it is now. The
+    /// rail's view takes a change on only when it is laid out. The window used to be measured
+    /// around the rail from before, and followed the setting only when SwiftUI had brought the
+    /// rail up to date first: on macOS 26 that held in the tests as long as the host had its
+    /// start window; without it the window was wrong in 7 of 18 rounds.
+    func testALayoutRightAfterTheSettingChangesHasTheNewRail() throws {
+        setExperimentalFeatures(false)
+        let session = MirrorSession(id: "test", kind: .cable, deviceName: "iPhone", modelIdentifier: "iPhone14,2",
+                                    muted: true)
+        let controller = MirrorWindowController(session: session)
+        defer { controller.close() }
+        let window = try XCTUnwrap(controller.window)
+        controller.setZoom(0.25)
+        let low = window.frame.height
+        // (setting the zoom lays the window out at once, before anything else can run)
+        settings.experimentalFeatures = true
+        controller.setZoom(0.25)
+        XCTAssertGreaterThan(window.frame.height, low + 80, "low \(low)")
+        settings.experimentalFeatures = false
+        controller.setZoom(0.25)
+        XCTAssertEqual(window.frame.height, low, accuracy: 1)
+        XCTAssertFalse(window.isVisible)
+    }
+
     // MARK: The settings window
 
     /// The settings window hosted in a window that is never shown, with a Text page that never
