@@ -82,7 +82,7 @@ final class LLMSessionTests: XCTestCase {
         } catch let failure as TranslationFailure {
             // the same address redirects every request: no use asking again
             XCTAssertTrue(failure.isPermanent)
-            XCTAssertEqual(failure.message, "Azure OpenAI: " + String(localized: "the service forwards the request to \("elsewhere.test"), which MirrorAct does not follow – check the address in the settings"))
+            XCTAssertEqual(failure.message, LLMTranslationEngine.message(naming: "Azure OpenAI", String(localized: "the service forwards the request to \("elsewhere.test"), which MirrorAct does not follow – check the address in the settings")))
         }
         XCTAssertEqual(RedirectingService.requests.map { $0.url?.host }, ["service.test"])
     }

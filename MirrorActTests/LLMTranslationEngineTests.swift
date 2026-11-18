@@ -248,7 +248,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         // neither half comes back: the shortest text alone shows that the server is there
         XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [25, 13, 12, 1, 7, 6, 6, 6])
         // the user learns at the first time-out that the model is slow, and only once
-        XCTAssertEqual(notices.all, ["Mistral: " + String(localized: "the model takes longer than \(60) s to answer – MirrorAct asks for fewer texts at a time")])
+        XCTAssertEqual(notices.all, [LLMTranslationEngine.message(naming: "Mistral", String(localized: "the model takes longer than \(60) s to answer – MirrorAct asks for fewer texts at a time"))])
     }
 
     /// How a portion of 40 texts goes when some of them make every request they are in time out:
@@ -339,7 +339,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertNotNil(failure?.retryAfter)
         // the whole portion, both halves and the shortest text; told at the first time-out
         XCTAssertEqual(transport.requests.map { sentTexts($0).count }, [40, 20, 20, 1])
-        XCTAssertEqual(notices.all, ["Ollama: " + String(localized: "the model takes longer than \(300) s to answer – MirrorAct asks for fewer texts at a time")])
+        XCTAssertEqual(notices.all, [LLMTranslationEngine.message(naming: "Ollama", String(localized: "the model takes longer than \(300) s to answer – MirrorAct asks for fewer texts at a time"))])
     }
 
     func testASingleTextThatTimesOutIsAskedForLater() async {
@@ -373,7 +373,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(first, ["de:one", "two"])
         let second = try await engine.translate(["two"], into: german)
         XCTAssertEqual(second, ["two"])
-        XCTAssertEqual(notices.all, ["OpenAI: " + String(localized: "the model declined to translate this text")])
+        XCTAssertEqual(notices.all, [LLMTranslationEngine.message(naming: "OpenAI", String(localized: "the model declined to translate this text"))])
     }
 
     /// The model answers with something that is not the list asked for: the screen fails as a
@@ -391,8 +391,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let first = await failure { try await engine.translate(texts, into: self.german) }
         // not given up for good: a model that is loaded anew, or a service that is mended, may answer
         XCTAssertEqual(first?.isPermanent, false)
-        XCTAssertEqual(first?.message, "Ollama: "
-                       + String(localized: "the model’s answer cannot be used – choose another model in the settings"))
+        XCTAssertEqual(first?.message, LLMTranslationEngine.message(naming: "Ollama", String(localized: "the model’s answer cannot be used – choose another model in the settings")))
         XCTAssertEqual(first?.retryAfter, LLMTranslationEngine.firstBackOff)
         XCTAssertEqual(transport.requests.count, LLMTranslationEngine.requestBudget(for: 40))
 
@@ -473,8 +472,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(.lmStudio, model: "tiny", transport: transport)
         let failure = await failure { try await engine.translate(["Einstellungen"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, false)
-        XCTAssertEqual(failure?.message, "LM Studio: "
-                       + String(localized: "the model’s answer cannot be used – choose another model in the settings"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "LM Studio", String(localized: "the model’s answer cannot be used – choose another model in the settings")))
         XCTAssertEqual(transport.requests.count, 1)
     }
 
@@ -490,8 +488,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let texts = (1...16).map { "Text \($0)" }
         let failure = await failure { try await engine.translate(texts, into: self.german) }
         XCTAssertEqual(failure?.isPermanent, false)
-        XCTAssertEqual(failure?.message, "Mistral: "
-                       + String(localized: "the model’s answer cannot be used – choose another model in the settings"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Mistral", String(localized: "the model’s answer cannot be used – choose another model in the settings")))
         XCTAssertEqual(transport.requests.count, 1 + LLMTranslationEngine.requestBudget(for: 16))
     }
 
@@ -504,7 +501,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let failure = await failure { try await engine.translate(texts, into: self.german) }
         // translating ends: asking on would cost request after request
         XCTAssertEqual(failure?.isPermanent, true)
-        XCTAssertEqual(failure?.message, "OpenAI: " + String(localized: "the model declined to translate this text"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "OpenAI", String(localized: "the model declined to translate this text")))
         XCTAssertEqual(transport.requests.count, LLMTranslationEngine.patience)
     }
 
@@ -547,7 +544,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(.openAI, transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, true)
-        XCTAssertEqual(failure?.message, "OpenAI: " + String(localized: "the API key was not accepted"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "OpenAI", String(localized: "the API key was not accepted")))
         XCTAssertEqual(failure?.message.contains("sk-test"), false)
         // asked once: neither another try nor a request without the extra fields helps here
         XCTAssertEqual(transport.requests.count, 1)
@@ -560,8 +557,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(.openAI, model: "gpt-nope", transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, true)
-        XCTAssertEqual(failure?.message, "OpenAI: "
-                       + String(localized: "the model \("gpt-nope") is not available – choose another one in the settings"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "OpenAI", String(localized: "the model \("gpt-nope") is not available – choose another one in the settings")))
     }
 
     func testARejectedExtraFieldIsLeftOutFromThenOn() async throws {
@@ -588,7 +584,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, false)
-        XCTAssertEqual(failure?.message, "Mistral: " + String(localized: "the request was rejected (\("messages: Field required"))"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Mistral", String(localized: "the request was rejected (\("messages: Field required"))")))
         XCTAssertEqual(transport.requests.count, 1)
     }
 
@@ -613,7 +609,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         engine.pause = { waits.add($0) }
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, false)
-        XCTAssertEqual(failure?.message, "Mistral: " + String(localized: "the service is busy right now"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Mistral", String(localized: "the service is busy right now")))
         // no time was named: the short wait of the engine
         XCTAssertEqual(waits.all, [LLMTranslationEngine.retryWait])
         XCTAssertEqual(transport.requests.count, 2)
@@ -626,7 +622,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         engine.pause = { waits.add($0) }
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, false)
-        XCTAssertEqual(failure?.message, "Mistral: " + String(localized: "too many requests right now"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Mistral", String(localized: "too many requests right now")))
         XCTAssertTrue(waits.all.isEmpty)
         XCTAssertEqual(transport.requests.count, 1)
     }
@@ -666,19 +662,28 @@ final class LLMTranslationEngineTests: XCTestCase {
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.retryAfter, 590)
         // otherwise the texts that come into view meanwhile stay untranslated without a word
-        XCTAssertEqual(failure?.message, "Mistral: " + String(localized: "too many requests right now")
-                       + " – " + String(localized: "trying again in \(10) min"))
+        let tooMany = LLMTranslationEngine.message(naming: "Mistral", String(localized: "too many requests right now"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(tooMany, then: String(localized: "trying again in \(10) min")))
 
         // up to two minutes in seconds: "2 min" would overstate 70 s by most of a minute
         let minute = ScriptedTransport { _, _ in reply(429, rateLimited, headers: [LLMHeader("Retry-After", "70")]) }
         let inSeconds = await self.failure { try await self.makeEngine(transport: minute).translate(["Settings"], into: self.german) }
-        XCTAssertEqual(inSeconds?.message, "Mistral: " + String(localized: "too many requests right now")
-                       + " – " + String(localized: "trying again in \(70) s"))
+        XCTAssertEqual(inSeconds?.message, LLMTranslationEngine.message(tooMany, then: String(localized: "trying again in \(70) s")))
 
         // a short wait is not worth mentioning
         let brief = ScriptedTransport { _, _ in reply(429, rateLimited, headers: [LLMHeader("Retry-After", "20")]) }
         let other = await self.failure { try await self.makeEngine(transport: brief).translate(["Settings"], into: self.german) }
-        XCTAssertEqual(other?.message, "Mistral: " + String(localized: "too many requests right now"))
+        XCTAssertEqual(other?.message, tooMany)
+    }
+
+    /// The colon after the name of the service and the dash before the wait belong to the
+    /// localized formats, so that a language can use its own punctuation. English and German
+    /// show them as before.
+    func testTheNoticeFormatsShowTheSamePunctuationInEnglishAndGerman() throws {
+        for language in ["en", "de"] {
+            XCTAssertEqual(String(format: try appText("%@: %@", in: language), "Mistral", "words"), "Mistral: words", language)
+            XCTAssertEqual(String(format: try appText("%@ – %@", in: language), "notice", "wait"), "notice – wait", language)
+        }
     }
 
     func testAServiceThatKeepsFailingIsAskedLessAndLessOften() async throws {
@@ -705,8 +710,8 @@ final class LLMTranslationEngineTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, 14)
         // the notice names the wait that applies
         let named = await failure { try await engine.translate(["Settings"], into: self.german) }
-        XCTAssertEqual(named?.message, "Mistral: " + String(localized: "the service reported an error (\("500: Internal server error"))")
-                       + " – " + String(localized: "trying again in \(60) s"))
+        let serverError = LLMTranslationEngine.message(naming: "Mistral", String(localized: "the service reported an error (\("500: Internal server error"))"))
+        XCTAssertEqual(named?.message, LLMTranslationEngine.message(serverError, then: String(localized: "trying again in \(60) s")))
         clock += named?.retryAfter ?? 0
 
         // an answer ends the series: the next failure waits as briefly as the first
@@ -725,8 +730,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(.custom, baseURL: "https://llm.example.com", model: "m", transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, true)
-        XCTAssertEqual(failure?.message, "llm.example.com: "
-                       + String(localized: "the address \("https://llm.example.com") cannot be used – check it in the settings"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "llm.example.com", String(localized: "the address \("https://llm.example.com") cannot be used – check it in the settings")))
         XCTAssertEqual(transport.requests.count, 1)
     }
 
@@ -742,7 +746,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let translations = try await engine.translate(texts, into: german)
         // "not now" for the texts of the portion that failed: the caller asks again
         XCTAssertEqual(translations, texts[..<40].map { Optional("de:" + $0) } + [String?](repeating: nil, count: 5))
-        XCTAssertEqual(notices.all, ["Mistral: " + String(localized: "the service reported an error (\("500: Internal server error"))")])
+        XCTAssertEqual(notices.all, [LLMTranslationEngine.message(naming: "Mistral", String(localized: "the service reported an error (\("500: Internal server error"))"))])
     }
 
     func testALocalServerThatDoesNotAnswerIsProbablyNotRunning() async {
@@ -750,8 +754,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(.ollama, model: "gemma4", transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, false)
-        XCTAssertEqual(failure?.message, "Ollama: "
-                       + String(localized: "cannot be reached at \("http://localhost:11434/v1") – is it running?"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Ollama", String(localized: "cannot be reached at \("http://localhost:11434/v1") – is it running?")))
     }
 
     func testAComputerInTheNetworkThatMacOSKeepsAwayIsExplained() async {
@@ -759,8 +762,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(.ollama, baseURL: "192.168.1.20:11434", model: "gemma4", transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         // macOS reports the same when the Mac has no network at all: the notice names both
-        XCTAssertEqual(failure?.message, "Ollama: "
-                       + String(localized: "cannot be reached at \("http://192.168.1.20:11434/v1") – check that this Mac is on the network, and allow MirrorAct under System Settings → Privacy & Security → Local Network"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Ollama", String(localized: "cannot be reached at \("http://192.168.1.20:11434/v1") – check that this Mac is on the network, and allow MirrorAct under System Settings → Privacy & Security → Local Network")))
         XCTAssertEqual(failure?.isPermanent, false)
 
         // this Mac itself needs no permission, and a service on the internet none either
@@ -775,8 +777,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let transport = ScriptedTransport { _, _ in throw URLError(.cannotConnectToHost) }
         let engine = makeEngine(.custom, baseURL: "http://user:secret@192.168.1.5:8080/v1", model: "m", transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
-        XCTAssertEqual(failure?.message, "192.168.1.5: "
-                       + String(localized: "cannot be reached at \("http://192.168.1.5:8080/v1") – is it running?"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "192.168.1.5", String(localized: "cannot be reached at \("http://192.168.1.5:8080/v1") – is it running?")))
         XCTAssertEqual(failure?.message.contains("secret"), false)
 
         XCTAssertEqual(LLMConnection.withoutCredentials("https://user@example.com/v1?x=a@b"), "https://example.com/v1?x=a@b")
@@ -793,8 +794,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let transport = ScriptedTransport { _, _ in reply(404, "Not Found") }
         let engine = makeEngine(.custom, baseURL: "https://proxy.example.com/v1?key=sk-123#top", model: "m", transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
-        XCTAssertEqual(failure?.message, "proxy.example.com: "
-                       + String(localized: "the address \("https://proxy.example.com/v1") cannot be used – check it in the settings"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "proxy.example.com", String(localized: "the address \("https://proxy.example.com/v1") cannot be used – check it in the settings")))
         XCTAssertEqual(failure?.message.contains("sk-123"), false)
 
         let other = LLMConnection(provider: .custom, baseURL: "ftp://user:pw@example.com/v1?key=sk-123", model: "m")
@@ -825,8 +825,7 @@ final class LLMTranslationEngineTests: XCTestCase {
                 failure = error as? TranslationFailure
             }
             XCTAssertEqual(failure?.isPermanent, true, test.location)
-            XCTAssertEqual(failure?.message, "192.168.1.5: "
-                           + String(localized: "the service forwards the request to \(test.shown), which MirrorAct does not follow – check the address in the settings"),
+            XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "192.168.1.5", String(localized: "the service forwards the request to \(test.shown), which MirrorAct does not follow – check the address in the settings")),
                            "\(test.request) \(test.location)")
         }
     }
@@ -845,15 +844,13 @@ final class LLMTranslationEngineTests: XCTestCase {
         let failure = await failure { try await lan.translate(["Settings"], into: self.german) }
         // nothing changes by itself: asking again every few seconds would be no use
         XCTAssertEqual(failure?.isPermanent, true)
-        XCTAssertEqual(failure?.message, "Ollama: "
-                       + String(localized: "plain HTTP to \("gpu-box.lan") is not allowed – use a private IP address, a .local name or https"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Ollama", String(localized: "plain HTTP to \("gpu-box.lan") is not allowed – use a private IP address, a .local name or https")))
 
         // a name under .localhost is this Mac, but the system treats it like any other name
         let named = makeEngine(.custom, baseURL: "http://llm.localhost:8080/v1", model: "m", transport: transport)
         let other = await self.failure { try await named.translate(["Settings"], into: self.german) }
         XCTAssertEqual(other?.isPermanent, true)
-        XCTAssertEqual(other?.message, "llm.localhost: "
-                       + String(localized: "plain HTTP to \("llm.localhost") is not allowed – use localhost or 127.0.0.1 instead"))
+        XCTAssertEqual(other?.message, LLMTranslationEngine.message(naming: "llm.localhost", String(localized: "plain HTTP to \("llm.localhost") is not allowed – use localhost or 127.0.0.1 instead")))
     }
 
     func testAServerWithoutASecureConnectionIsNotAskedAgainAndAgain() async {
@@ -862,8 +859,7 @@ final class LLMTranslationEngineTests: XCTestCase {
             let engine = makeEngine(.custom, baseURL: "gpu-box.lan:8080/v1", model: "m", transport: transport)
             let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
             XCTAssertEqual(failure?.isPermanent, true, "\(code)")
-            XCTAssertEqual(failure?.message, "gpu-box.lan: "
-                           + String(localized: "no secure connection to \("gpu-box.lan") – for a server without https, enter its address with http:// and a private IP address or a .local name"))
+            XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "gpu-box.lan", String(localized: "no secure connection to \("gpu-box.lan") – for a server without https, enter its address with http:// and a private IP address or a .local name")))
             XCTAssertEqual(transport.requests.count, 1)
         }
     }
@@ -943,7 +939,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         return (engine, transport, statuses)
     }
 
-    private let waitNotice = "LM Studio: " + String(localized: "no answer for \(20) s – is the model still loading?")
+    private let waitNotice = LLMTranslationEngine.message(naming: "LM Studio", String(localized: "no answer for \(20) s – is the model still loading?"))
 
     func testALocalServerThatDoesNotAnswerIsNamedUntilItAnswers() async throws {
         let answer = Gate(), slow = Gate()
@@ -1100,7 +1096,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let named = await eventually { statuses.all.count == 1 }
         XCTAssertTrue(named)
         XCTAssertEqual(statuses.all,
-                       ["LM Studio: " + String(localized: "no answer for \(60) s – is the model still loading?")])
+                       [LLMTranslationEngine.message(naming: "LM Studio", String(localized: "no answer for \(60) s – is the model still loading?"))])
         waiting.open()
         _ = try await translating.value
         XCTAssertEqual(statuses.all.last, .some(nil))
@@ -1209,7 +1205,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let engine = makeEngine(.anthropic, transport: transport)
         let failure = await failure { try await engine.translate(["Settings"], into: self.german) }
         XCTAssertEqual(failure?.isPermanent, true)
-        XCTAssertEqual(failure?.message, "Anthropic: " + String(localized: "the API key was not accepted"))
+        XCTAssertEqual(failure?.message, LLMTranslationEngine.message(naming: "Anthropic", String(localized: "the API key was not accepted")))
         XCTAssertEqual(transport.requests.map(\.method), ["GET"])
     }
 
@@ -1244,8 +1240,7 @@ final class LLMTranslationEngineTests: XCTestCase {
         let first = try await engine.translate(["Settings"], into: german)
         XCTAssertEqual(first, ["de:Settings"])
         _ = try await engine.translate(["General"], into: german)
-        XCTAssertEqual(notices.all, ["Anthropic: "
-            + String(localized: "\("claude-opus-4-8") answered instead, because the chosen model declined")])
+        XCTAssertEqual(notices.all, [LLMTranslationEngine.message(naming: "Anthropic", String(localized: "\("claude-opus-4-8") answered instead, because the chosen model declined"))])
     }
 
     // MARK: The settings page
@@ -1261,8 +1256,7 @@ final class LLMTranslationEngineTests: XCTestCase {
             let answer = try await makeEngine(.lmStudio, model: "tiny", transport: bad).test("Hello", into: german)
             XCTFail("no failure, but \(answer)")
         } catch {
-            XCTAssertEqual((error as? TranslationFailure)?.message, "LM Studio: "
-                           + String(localized: "the model’s answer cannot be used – choose another model in the settings"))
+            XCTAssertEqual((error as? TranslationFailure)?.message, LLMTranslationEngine.message(naming: "LM Studio", String(localized: "the model’s answer cannot be used – choose another model in the settings")))
         }
         XCTAssertEqual(bad.requests.count, 1)
     }
@@ -1282,7 +1276,7 @@ final class LLMTranslationEngineTests: XCTestCase {
             let list = try await makeEngine(.groq, transport: refused).models()
             XCTFail("no failure, but \(list)")
         } catch {
-            XCTAssertEqual((error as? TranslationFailure)?.message, "Groq: " + String(localized: "the API key was not accepted"))
+            XCTAssertEqual((error as? TranslationFailure)?.message, LLMTranslationEngine.message(naming: "Groq", String(localized: "the API key was not accepted")))
         }
     }
 
