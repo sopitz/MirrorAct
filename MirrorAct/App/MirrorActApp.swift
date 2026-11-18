@@ -6,12 +6,20 @@ import SwiftUI
 struct MirrorActApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
+    /// The scene of the start window; AppKit saves the window's frame under this name
+    static let launcherID = "launcher"
+
     var body: some Scene {
-        Window("MirrorAct", id: "launcher") {
+        Window("MirrorAct", id: Self.launcherID) {
             LauncherView()
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+        // As the test host the app opens no start window: it would be on the screen for the
+        // whole test run, and AppKit would save its frame into the preferences of the installed
+        // app, which the host shares its bundle identifier with. `.automatic` is what a scene
+        // has without this modifier.
+        .defaultLaunchBehavior(AppDelegate.isTesting ? .suppressed : .automatic)
         .commands { MirrorCommands() }
 
         Settings {
@@ -21,7 +29,8 @@ struct MirrorActApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// runs as the test host (scripts/test.sh): no receiver, no USB, no adb
+    /// runs as the test host (scripts/test.sh): no start window, no receiver, no USB, no adb.
+    /// XCTest is loaded with the app, so this already holds when the scenes are built.
     static var isTesting: Bool { NSClassFromString("XCTestCase") != nil }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -59,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MirrorCommands: Commands {
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var model = AppModel.shared
 
     private var mirror: MirrorWindowController? { MainActor.assumeIsolated { AppModel.shared.keyMirror } }
 
@@ -80,6 +90,22 @@ struct MirrorCommands: Commands {
             .keyboardShortcut("r")
             Toggle("Record with Device Frame", isOn: $settings.recordWithFrame)
             Divider()
+            // only with the setting "Experimental features" (`FeatureGate`), and with them their
+            // shortcuts
+            let gated = settings.featureGate.menuItems
+            if gated.contains(.copyText) {
+                Button("Copy Text on Screen") { mirror?.session.copyText() }
+                    .keyboardShortcut("t", modifiers: [.command, .option])
+            }
+            if gated.contains(.translate) {
+                Toggle("Translate Text on Screen", isOn: Binding(
+                    get: { model.keyMirrorIsTranslating },
+                    set: { _ in MainActor.assumeIsolated { mirror?.session.toggleTranslation() } }))
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
+            if !gated.isEmpty {
+                Divider()
+            }
             Button("Control Device") { mirror?.toggleControl() }
                 .keyboardShortcut("c", modifiers: [.command, .option])
             Divider()

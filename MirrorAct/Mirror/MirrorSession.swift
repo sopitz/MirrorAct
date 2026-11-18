@@ -21,11 +21,54 @@ final class MirrorSession: ObservableObject, Identifiable {
     @Published var deviceName: String
     @Published var modelIdentifier: String? { didSet { updateProfile() } }
     @Published var sourcePixelSize: CGSize? { didSet { updateProfile() } }
-    @Published var state: State = .connecting
+    @Published var state: State = .connecting {
+        didSet {
+            // The device went away or connects anew: Translate ends here, before AirPlay and
+            // Android clear the sink, while the device's last frame is still there to be shown
+            // again without the translations. A new stream starts without the old ones, and
+            // translates again only if the app moved the window to it a moment ago.
+            if state != .live {
+                translator.stop()
+            } else if let deadline = translateResumeDeadline {
+                if now() <= deadline {
+                    cancelTranslateResume()
+                    translator.start()
+                } else {
+                    // the time is up, and the end of the wait has not run yet
+                    translateResumeTookTooLong()
+                }
+            }
+        }
+    }
+    /// Translate was on when the app moved this window to another connection: it goes on again
+    /// if the new stream is live before this time, and otherwise stays off
+    private var translateResumeDeadline: Date?
+    private var translateResumeExpiry: AnyCancellable?
+    /// How long the stream of a hand-over may take for Translate to go on again by itself. It
+    /// is short on purpose: with a language model service the text on the screen leaves the
+    /// Mac, which must not start again long after the user last turned Translate on. Switch to
+    /// Wi-Fi, which restarts adb on the phone, normally fits.
+    static let translateResumeWindow: TimeInterval = 10
+    static var translateResumeNotice: String {
+        String(localized: "Translate goes on again with the new connection – press Translate to keep it off")
+    }
+    /// the time, for the deadline above; the tests move it
+    var now: () -> Date = Date.init
+    /// Runs `action` after `seconds` unless the result is cancelled or released first: the end
+    /// of a toast and of the wait above. The tests run it on their own clock.
+    var schedule: (TimeInterval, @escaping @MainActor () -> Void) -> AnyCancellable = { seconds, action in
+        let task = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            action()
+        }
+        return AnyCancellable { task.cancel() }
+    }
     @Published private(set) var frameSize: CGSize = .zero
     @Published private(set) var profile: DeviceProfile
     @Published var muted: Bool { didSet { onMuteChange?(muted) } }
-    @Published var toast: String?
+    /// the message in place of the subtitle (see `showToast` for which one)
+    @Published private(set) var toast: String?
     @Published private(set) var recordingStartedAt: Date?
     /// most recently saved file (screenshot or recording), for dragging out of the tool rail
     @Published private(set) var lastExport: URL?
@@ -50,11 +93,30 @@ final class MirrorSession: ObservableObject, Identifiable {
     @Published private(set) var controlState: ControlState?
     var isControlReady: Bool { controlState == .ready }
 
+    /// translates the text on the screen in place (see `ScreenTranslator`)
+    let translator: ScreenTranslator
+    @Published private(set) var isTranslating = false
+    #if DEBUG
+    /// For the README pictures (`Showcase`): the session a picture is drawn from shows Translate
+    /// the way the mirrored session has it, though no translator of its own runs
+    func showTranslating(_ translating: Bool) { isTranslating = translating }
+    #endif
+
     var onMuteChange: ((Bool) -> Void)?
     /// window was closed: stop the source
     var onClose: (() -> Void)?
 
-    private var toastTask: Task<Void, Never>?
+    /// Whether Text and Translate are there: the setting "Experimental features" (`FeatureGate`)
+    var allowsTextOnScreen: Bool { AppSettings.shared.featureGate.allows(.textOnScreen) }
+    private var featureGateChanges: AnyCancellable?
+    /// where Text puts the text it read: the clipboard (the tests give it one of their own)
+    var textPasteboard: NSPasteboard = .general
+
+    /// set while a passing toast is up
+    private var toastExpiry: AnyCancellable?
+    /// the engine's notice, shown whenever no passing toast is up and Translate does not wait
+    /// to go on again, until it is withdrawn
+    private var lastingNotice: String?
 
     init(id: String, kind: Kind, deviceName: String, modelIdentifier: String?, muted: Bool) {
         self.id = id
@@ -62,6 +124,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         self.deviceName = deviceName
         self.modelIdentifier = modelIdentifier
         self.muted = muted
+        translator = ScreenTranslator(sink: sink, statusBar: Self.statusBar(of: kind))
         profile = DeviceProfile.resolve(modelIdentifier: modelIdentifier, screenPixels: nil,
                                         frameSize: CGSize(width: 1170, height: 2532))
         sink.onSizeChange = { [weak self] size in
@@ -73,6 +136,78 @@ final class MirrorSession: ObservableObject, Identifiable {
         sink.onFirstFrame = { [weak self] in
             MainActor.assumeIsolated { self?.state = .live }
         }
+        translator.onMessage = { [weak self] message in self?.showToast(message) }
+        translator.onStatus = { [weak self] status in self?.showLastingNotice(status) }
+        translator.$isActive.assign(to: &$isTranslating)
+        // whoever asks, the translator does not start while the setting is off …
+        translator.mayStart = { AppSettings.shared.featureGate.allows(.textOnScreen) }
+        // … and it stops at once when the setting is turned off
+        featureGateChanges = AppSettings.shared.$experimentalFeatures
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] on in
+                MainActor.assumeIsolated {
+                    if !on { self?.textOnScreenTurnedOff() }
+                }
+            }
+    }
+
+    /// The setting "Experimental features" went off: Translate ends here as if it had been turned
+    /// off (which also withdraws the translator's lasting notice), and does not go on again after
+    /// a hand-over
+    private func textOnScreenTurnedOff() {
+        cancelTranslateResume()
+        translator.stop()
+    }
+
+    /// The stream is about to end. `handingOver`: the app moves this window to another
+    /// connection to the same device right away (Android: the cable unplugged with Wi-Fi still
+    /// there or the other way round, Switch to Wi-Fi). Then Translate, if it is on, goes on
+    /// again once the new stream is live within `translateResumeWindow`; the window says so
+    /// until then, and that Translate is off if the time runs out. A stream that stops otherwise, also one of a hand-over that never showed a
+    /// frame, leaves Translate off. Call before the state changes.
+    func streamWillEnd(handingOver: Bool) {
+        guard handingOver else {
+            cancelTranslateResume()
+            return
+        }
+        // The stream of a hand-over failed and the app moves the window once more: a resume
+        // still waiting keeps its deadline
+        guard translator.isActive else { return }
+        let window = Self.translateResumeWindow
+        translateResumeDeadline = now().addingTimeInterval(window)
+        // the notice replaces a passing toast at once
+        toastExpiry = nil
+        showRestingNotice()
+        translateResumeExpiry = schedule(window) { [weak self] in
+            self?.translateResumeTookTooLong()
+        }
+    }
+
+    /// The Translate button, ⇧⌘T and the Device menu. While the window waits for the stream of
+    /// a hand-over, it keeps Translate off instead: the button is not lit then, and before the
+    /// first frame there is nothing it could turn on. While the setting "Experimental features"
+    /// is off, nothing starts (`ScreenTranslator.mayStart`).
+    func toggleTranslation() {
+        if translateResumeDeadline != nil {
+            cancelTranslateResume()
+            showToast(String(localized: "Translate stays off"))
+        } else {
+            translator.toggle()
+        }
+    }
+
+    /// The new stream was not live in time: the window had said that Translate goes on again
+    private func translateResumeTookTooLong() {
+        guard translateResumeDeadline != nil else { return }
+        cancelTranslateResume()
+        showToast(String(localized: "Translate is off – the new connection took too long"), seconds: 4)
+    }
+
+    private func cancelTranslateResume() {
+        translateResumeDeadline = nil
+        translateResumeExpiry = nil
+        showRestingNotice()
     }
 
     private func updateProfile() {
@@ -96,14 +231,40 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
     }
 
-    func showToast(_ text: String) {
+    // The window shows one of three kinds of message in place of the subtitle, the first of:
+    // 1. a passing toast (`showToast`), for its seconds;
+    // 2. while Translate waits to go on again after a hand-over, `translateResumeNotice`;
+    // 3. the engine's lasting notice (`showLastingNotice`, "macOS asks whether it may download …").
+    // Without any of them it shows the state. A passing toast goes when its time is up, when the
+    // next one replaces it, and when a hand-over starts, whose notice replaces it at once. The
+    // notice of the hand-over goes when the new stream is live in time and Translate goes on,
+    // when the time is up ("Translate is off – the new connection took too long"), when Translate
+    // is pressed ("Translate stays off"), and, without a word, when the stream ends without a
+    // hand-over: the device is gone.
+    // The engine's notice goes when the engine withdraws it and when Translate turns off, which
+    // it also does when the stream of a hand-over ends.
+
+    /// A passing message, over the others for `seconds`
+    func showToast(_ text: String, seconds: TimeInterval = 2) {
         toast = text
-        toastTask?.cancel()
-        toastTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard !Task.isCancelled else { return }
-            self?.toast = nil
+        toastExpiry = schedule(seconds) { [weak self] in
+            guard let self else { return }
+            self.toastExpiry = nil
+            self.showRestingNotice()
         }
+    }
+
+    /// A notice that stays until it is replaced or withdrawn with nil ("macOS asks whether it may
+    /// download …"). A toast and the wait after a hand-over go over it.
+    func showLastingNotice(_ text: String?) {
+        lastingNotice = text
+        showRestingNotice()
+    }
+
+    /// Shows what stays once no passing toast is up, unless one is up
+    private func showRestingNotice() {
+        guard toastExpiry == nil else { return }
+        toast = translateResumeDeadline != nil ? Self.translateResumeNotice : lastingNotice
     }
 
     /// screen size in macOS points at 100 % (oriented like the image)
@@ -158,8 +319,7 @@ final class MirrorSession: ObservableObject, Identifiable {
             switch result {
             case let .success(url):
                 Log.info("Recording saved: \(url.path)")
-                self?.lastExport = url
-                self?.lastEditable = recorder.isPassthrough ? url : nil
+                self?.noteExport(url, editable: recorder.isPassthrough ? url : nil)
                 self?.showToast(String(localized: "Recording saved – drag it out to share"))
             case let .failure(error):
                 Log.error("Recording: \(error.localizedDescription)")
@@ -173,6 +333,13 @@ final class MirrorSession: ObservableObject, Identifiable {
         formatter.dateFormat = String(localized: "yyyy-MM-dd 'at' HH.mm.ss")
         let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
         return desktop.appendingPathComponent("\(deviceName) \(formatter.string(from: Date())).\(ext)")
+    }
+
+    /// a file was saved (screenshot or recording): it becomes the rail's "Latest", with its
+    /// unframed version for the editor (nil = can't be edited afterwards)
+    func noteExport(_ url: URL, editable: URL?) {
+        lastExport = url
+        lastEditable = editable
     }
 
     // MARK: Screenshots
@@ -210,8 +377,7 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
         let url = desktopURL(extension: "png")
         if FrameRenderer.writePNG(image, to: url) {
-            lastExport = url
-            lastEditable = rawScreenshotCopy()
+            noteExport(url, editable: rawScreenshotCopy())
             showToast(String(localized: "Saved to the Desktop"))
         } else {
             showToast(String(localized: "Saving failed"))
@@ -225,5 +391,45 @@ final class MirrorSession: ObservableObject, Identifiable {
         }
         FrameRenderer.copyToPasteboard(image)
         showToast(String(localized: "Copied to the clipboard"))
+    }
+
+    // MARK: Text
+
+    /// Android's status bar has the same height in both orientations; an iPhone or iPad shows a
+    /// lower one in landscape, or none
+    nonisolated static func statusBar(of kind: Kind) -> TextLayout.StatusBar {
+        kind == .android ? .longerSide : .heightOfPicture
+    }
+
+    /// Reads the text on the screen (Vision, on this Mac) and copies it to the clipboard:
+    /// the text of the device, also while its translation is shown, one paragraph per line
+    /// (`TextLayout.plainText`). Does nothing while the setting "Experimental features" is off.
+    func copyText() {
+        guard allowsTextOnScreen else { return }
+        guard let buffer = sink.latestSource ?? sink.latest else {
+            NSSound.beep()
+            showToast(String(localized: "No video to copy text from yet"))
+            return
+        }
+        let statusBar = Self.statusBar(of: kind)
+        Task { [weak self] in
+            let read = await TextRecognizer.recognize(buffer)
+            // the setting may have gone off while the text was read: then nothing is copied or said
+            guard let self, self.allowsTextOnScreen else { return }
+            guard let lines = read else {
+                self.showToast(String(localized: "Text recognition failed"))
+                return
+            }
+            guard !lines.isEmpty else {
+                NSSound.beep()
+                self.showToast(String(localized: "No text found"))
+                return
+            }
+            self.textPasteboard.clearContents()
+            let size = CGSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+            self.textPasteboard.setString(TextLayout.plainText(lines, imageSize: size, statusBar: statusBar),
+                                          forType: .string)
+            self.showToast(String(localized: "Text copied to the clipboard"))
+        }
     }
 }
