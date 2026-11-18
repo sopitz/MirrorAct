@@ -5487,7 +5487,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "API 密钥未被接受"
+            "value" : "API 密钥验证失败"
           }
         }
       }
