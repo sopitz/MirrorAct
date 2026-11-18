@@ -1709,7 +1709,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有线：连接并解锁 iPhone，然后再次选择此项。\n\n无线：在 iPhone 上，打开“控制中心”→“屏幕镜像”→“%@”。代码：%@"
+            "value" : "有线：连接并解锁 iPhone，然后再次选择此项。\n\n无线：在 iPhone 上，打开“控制中心”→“屏幕镜像”→“%@”。验证码：%@"
           }
         }
       }
@@ -1885,7 +1885,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "代码"
+            "value" : "验证码"
           }
         }
       }
@@ -1901,7 +1901,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "代码（4 位数字）"
+            "value" : "验证码（4 位数字）"
           }
         }
       }
@@ -1917,7 +1917,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "首次连接时的代码：%@"
+            "value" : "首次连接验证码：%@"
           }
         }
       }
@@ -2253,7 +2253,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "完成 — 无需代码。"
+            "value" : "完成 — 无需验证码。"
           }
         }
       }
@@ -2381,7 +2381,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 iPhone 上输入此代码：%@"
+            "value" : "在 iPhone 上输入以下验证码：%@"
           }
         }
       }
@@ -3217,7 +3217,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "当 iPhone 在 Wi-Fi 上找不到 Mac 时需要。首次连接时会要求输入代码。"
+            "value" : "当 iPhone 在 Wi-Fi 上找不到 Mac 时需要。首次连接时会要求输入验证码。"
           }
         }
       }
@@ -3553,7 +3553,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点级精确（与 iPhone 上一致）"
+            "value" : "点级精确（按 iPhone 的逻辑点 1:1 显示）"
           }
         }
       }
@@ -3569,7 +3569,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "姿势"
+            "value" : "摆放方式"
           }
         }
       }
@@ -4513,7 +4513,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "首次连接时，请输入代码 %@。"
+            "value" : "首次连接时，请输入验证码 %@。"
           }
         }
       }
