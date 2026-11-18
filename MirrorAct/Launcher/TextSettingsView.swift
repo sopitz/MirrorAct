@@ -166,9 +166,9 @@ struct TextSettingsView: View {
                     .onSubmit { page.commitDrafts() }
             }
 
-            LabeledContent("Model") {
+            LabeledContent(Self.modelLabel) {
                 HStack {
-                    TextField("Model", text: $page.modelDraft, prompt: Self.modelPrompt(for: provider).text)
+                    TextField(Self.modelLabel, text: $page.modelDraft, prompt: Self.modelPrompt(for: provider).text)
                         .labelsHidden()
                         .focused($focusedField, equals: .model)
                         .onSubmit { page.commitDrafts() }
@@ -270,6 +270,13 @@ struct TextSettingsView: View {
         case serverToEnter
         /// to the service or host named
         case remote(String)
+    }
+
+    /// The label of the model field. It has a key of its own: "Model" is the device model in
+    /// the editor, and some languages use another word for a language model (Chinese 模型, not
+    /// 型号).
+    static var modelLabel: String {
+        String(localized: "Model (language model)", defaultValue: "Model")
     }
 
     /// What the model field shows while it is empty

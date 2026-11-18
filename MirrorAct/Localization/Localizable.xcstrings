@@ -3769,6 +3769,22 @@
         }
       }
     },
+    "Model (language model)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modell"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Model"
+          }
+        }
+      }
+    },
     "Deployment name" : {
       "localizations" : {
         "de" : {

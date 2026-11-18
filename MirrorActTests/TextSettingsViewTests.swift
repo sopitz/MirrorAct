@@ -51,6 +51,15 @@ final class TextSettingsViewTests: XCTestCase {
 
     // MARK: Address and model
 
+    /// The model field has a key of its own: "Model" is the device model in the editor, and
+    /// some languages use another word for a language model. English and German show the same
+    /// word as before.
+    func testTheModelFieldHasAKeyOfItsOwn() throws {
+        XCTAssertEqual(try appText("Model (language model)", defaultValue: "Model", in: "en"), "Model")
+        XCTAssertEqual(try appText("Model (language model)", defaultValue: "Model", in: "de"), "Modell")
+        XCTAssertEqual(try appText("Model", in: "de"), "Modell")
+    }
+
     /// A half-typed address must not reach the settings: translating would start over with it
     /// and send the screen's text there
     func testTheAddressIsAppliedOnlyOnReturn() throws {
