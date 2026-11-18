@@ -2441,6 +2441,12 @@
             "state" : "translated",
             "value" : "Experimentelle Funktionen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实验性功能"
+          }
         }
       }
     },
@@ -2450,6 +2456,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Experimentell: «Text» und «Übersetzen» werden noch erprobt, dabei kann etwas schiefgehen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实验性功能：“文本”和“翻译”仍在试验中，可能会出错。"
           }
         }
       }
@@ -2700,6 +2712,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schaltet Funktionen ein, die noch erprobt werden und bei denen etwas schiefgehen kann. Zurzeit sind das «Text» und «Übersetzen» in der Werkzeugleiste: Sie kopieren und übersetzen den Text auf dem gespiegelten Bildschirm; ihre Einstellungen stehen unter «Text»."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启仍在试验中、可能会出错的功能。目前包括工具栏中的“文本”和“翻译”，它们可复制和翻译镜像屏幕上的文本；相关设置位于“文本”下。"
           }
         }
       }
@@ -4859,6 +4877,12 @@
             "state" : "translated",
             "value" : "Text"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本"
+          }
         }
       }
     },
@@ -4868,6 +4892,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Text auf dem Bildschirm kopieren (⌥⌘T)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制屏幕上的文本（⌥⌘T）"
           }
         }
       }
@@ -4879,6 +4909,12 @@
             "state" : "translated",
             "value" : "Übersetzen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译"
+          }
         }
       }
     },
@@ -4888,6 +4924,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Text auf dem Bildschirm an Ort und Stelle übersetzen (⇧⌘T) – Sprache in den Einstellungen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在原位置翻译屏幕上的文本（⇧⌘T） — 语言可在设置中选择"
           }
         }
       }
@@ -4899,6 +4941,12 @@
             "state" : "translated",
             "value" : "Texterkennung fehlgeschlagen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本识别失败"
+          }
         }
       }
     },
@@ -4908,6 +4956,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kein Text gefunden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到文本"
           }
         }
       }
@@ -4919,6 +4973,12 @@
             "state" : "translated",
             "value" : "Text in die Zwischenablage kopiert"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将文本复制到剪贴板"
+          }
         }
       }
     },
@@ -4928,6 +4988,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch kein Bild zum Übersetzen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无可翻译的画面"
           }
         }
       }
@@ -4939,6 +5005,12 @@
             "state" : "translated",
             "value" : "Noch kein Bild, aus dem sich Text kopieren lässt"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无可复制文本的画面"
+          }
         }
       }
     },
@@ -4948,6 +5020,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen nach %@ ist auf diesem Mac nicht verfügbar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 无法翻译成%@"
           }
         }
       }
@@ -4959,6 +5037,12 @@
             "state" : "translated",
             "value" : "Text auf dem Bildschirm kopieren"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制屏幕上的文本"
+          }
         }
       }
     },
@@ -4968,6 +5052,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Text auf dem Bildschirm übersetzen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译屏幕上的文本"
           }
         }
       }
@@ -4979,6 +5069,12 @@
             "state" : "translated",
             "value" : "Übersetzen nach"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成"
+          }
         }
       }
     },
@@ -4989,6 +5085,12 @@
             "state" : "translated",
             "value" : "%@ – braucht Apple Intelligence"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 需要 Apple 智能"
+          }
         }
       }
     },
@@ -4998,6 +5100,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen nach %@ braucht Apple Intelligence."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成%@需要 Apple 智能。"
           }
         }
       }
@@ -5015,6 +5123,12 @@
             "state" : "new",
             "value" : "macOS asks whether it may download %1$@ and %2$@ – answer its question"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 正在询问是否可以下载%1$@和%2$@ — 请作出选择"
+          }
         }
       }
     },
@@ -5030,6 +5144,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Translating starts once %1$@ and %2$@ are on this Mac …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@和%2$@下载到这台 Mac 后即开始翻译…"
           }
         }
       }
@@ -5047,6 +5167,12 @@
             "state" : "new",
             "value" : "%1$@ and %2$@ aren’t on this Mac yet – if they weren’t downloaded, turn translating off and on again to be asked once more"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有%1$@和%2$@ — 如果未下载，请关闭翻译后再重新开启，以便再次收到询问"
+          }
         }
       }
     },
@@ -5056,6 +5182,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ konnte nicht geladen werden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载%@"
           }
         }
       }
@@ -5067,6 +5199,12 @@
             "state" : "translated",
             "value" : "%@ ist nicht geladen – zum Laden das Übersetzen aus- und wieder einschalten"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@尚未加载 — 请关闭翻译后再重新开启以加载"
+          }
         }
       }
     },
@@ -5076,6 +5214,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ lässt sich auf diesem Mac nicht übersetzen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 无法翻译%@"
           }
         }
       }
@@ -5087,6 +5231,12 @@
             "state" : "translated",
             "value" : "Übersetzen nach %@ braucht Apple Intelligence – in den Systemeinstellungen einschalten oder eine andere Sprache wählen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成%@需要 Apple 智能 — 请在“系统设置”中开启，或选择其他语言"
+          }
         }
       }
     },
@@ -5096,6 +5246,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen nach %@ braucht Apple Intelligence, die dieser Mac nicht unterstützt – eine andere Sprache wählen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成%@需要 Apple 智能，但这台 Mac 不支持 — 请选择其他语言"
           }
         }
       }
@@ -5113,6 +5269,12 @@
             "state" : "new",
             "value" : "Translating from %1$@ into %2$@ needs Apple Intelligence – turn it on in System Settings"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从%1$@翻译成%2$@需要 Apple 智能 — 请在“系统设置”中开启"
+          }
         }
       }
     },
@@ -5129,6 +5291,12 @@
             "state" : "new",
             "value" : "Translating from %1$@ into %2$@ needs Apple Intelligence, which this Mac doesn’t support"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从%1$@翻译成%2$@需要 Apple 智能，但这台 Mac 不支持"
+          }
         }
       }
     },
@@ -5138,6 +5306,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzung fehlgeschlagen: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译失败：%@"
           }
         }
       }
@@ -5149,6 +5323,12 @@
             "state" : "translated",
             "value" : "Die Übersetzung auf diesem Mac reagiert nicht"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上的翻译没有响应"
+          }
         }
       }
     },
@@ -5158,6 +5338,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Benutzerdefiniert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义"
           }
         }
       }
@@ -5169,6 +5355,12 @@
             "state" : "translated",
             "value" : "%@ hat stattdessen geantwortet, weil das gewählte Modell abgelehnt hat"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选模型拒绝了请求，因此改由 %@ 回答"
+          }
         }
       }
     },
@@ -5178,6 +5370,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ist unter %@ nicht erreichbar – läuft der Server?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接到 %@ — 服务器是否正在运行？"
           }
         }
       }
@@ -5189,6 +5387,12 @@
             "state" : "translated",
             "value" : "ist unter %@ nicht erreichbar – prüfen, ob dieser Mac mit dem Netzwerk verbunden ist, und MirrorAct unter Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk erlauben"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接到 %@ — 请检查这台 Mac 是否已连接网络，并在“系统设置”→“隐私与安全性”→“本地网络”中允许 MirrorAct"
+          }
         }
       }
     },
@@ -5198,6 +5402,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "der Dienst leitet die Anfrage an %@ weiter; MirrorAct folgt dem nicht – die Adresse in den Einstellungen prüfen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务将请求重定向到 %@，但 MirrorAct 不会跟随重定向 — 请检查设置中的地址"
           }
         }
       }
@@ -5209,6 +5419,12 @@
             "state" : "translated",
             "value" : "unverschlüsseltes HTTP zu %@ ist nicht erlaubt – stattdessen localhost oder 127.0.0.1 verwenden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不允许通过未加密的 HTTP 连接到 %@ — 请改用 localhost 或 127.0.0.1"
+          }
         }
       }
     },
@@ -5218,6 +5434,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "unverschlüsseltes HTTP zu %@ ist nicht erlaubt – eine private IP-Adresse, einen .local-Namen oder https verwenden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不允许通过未加密的 HTTP 连接到 %@ — 请使用私有 IP 地址、.local 名称或 https"
           }
         }
       }
@@ -5229,6 +5451,12 @@
             "state" : "translated",
             "value" : "keine sichere Verbindung zu %@ – für einen Server ohne https die Adresse mit http:// und einer privaten IP-Adresse oder einem .local-Namen eingeben"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法与 %@ 建立安全连接 — 对于不支持 https 的服务器，请输入以 http:// 开头、使用私有 IP 地址或 .local 名称的地址"
+          }
         }
       }
     },
@@ -5238,6 +5466,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "die Adresse %@ ist nicht verwendbar – in den Einstellungen prüfen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址 %@ 无法使用 — 请在设置中检查"
           }
         }
       }
@@ -5249,6 +5483,12 @@
             "state" : "translated",
             "value" : "der API-Schlüssel wurde nicht akzeptiert"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥未被接受"
+          }
         }
       }
     },
@@ -5258,6 +5498,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zugriff verweigert – prüfen, wofür der API-Schlüssel verwendet werden darf"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "访问被拒绝 — 请检查该 API 密钥的使用权限"
           }
         }
       }
@@ -5269,6 +5515,12 @@
             "state" : "translated",
             "value" : "das Modell %@ ist nicht verfügbar – in den Einstellungen ein anderes wählen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型 %@ 不可用 — 请在设置中选择其他模型"
+          }
         }
       }
     },
@@ -5278,6 +5530,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "kein Guthaben mehr oder das Ausgabenlimit ist erreicht"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "余额不足，或已达到支出上限"
           }
         }
       }
@@ -5289,6 +5547,12 @@
             "state" : "translated",
             "value" : "gerade zu viele Anfragen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前请求过多"
+          }
         }
       }
     },
@@ -5298,6 +5562,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "der Dienst ist gerade ausgelastet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务当前繁忙"
           }
         }
       }
@@ -5309,6 +5579,12 @@
             "state" : "translated",
             "value" : "das Modell braucht länger als %lld s für eine Antwort – MirrorAct sendet weniger Texte pro Anfrage"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型的响应时间超过 %lld 秒 — MirrorAct 将减少每次请求的文本数量"
+          }
         }
       }
     },
@@ -5318,6 +5594,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "seit %lld s keine Antwort – lädt das Modell noch?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已 %lld 秒没有响应 — 模型是否仍在加载？"
           }
         }
       }
@@ -5329,6 +5611,12 @@
             "state" : "translated",
             "value" : "nächster Versuch in %lld Min."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟后重试"
+          }
         }
       }
     },
@@ -5338,6 +5626,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "nächster Versuch in %lld s"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒后重试"
           }
         }
       }
@@ -5349,6 +5643,12 @@
             "state" : "translated",
             "value" : "die Anfrage wurde abgelehnt"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求被拒绝"
+          }
         }
       }
     },
@@ -5358,6 +5658,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "die Anfrage wurde abgelehnt (%@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求被拒绝（%@）"
           }
         }
       }
@@ -5369,6 +5675,12 @@
             "state" : "translated",
             "value" : "das Modell hat es abgelehnt, diesen Text zu übersetzen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型拒绝翻译此文本"
+          }
         }
       }
     },
@@ -5378,6 +5690,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "die Antwort des Modells ist nicht brauchbar – in den Einstellungen ein anderes Modell wählen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型的回答无法使用 — 请在设置中选择其他模型"
           }
         }
       }
@@ -5389,6 +5707,12 @@
             "state" : "translated",
             "value" : "der Dienst hat einen Fehler gemeldet (%@)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务返回了错误（%@）"
+          }
         }
       }
     },
@@ -5398,6 +5722,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuerst in den Einstellungen die Adresse des Dienstes eingeben"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先在设置中输入服务的地址"
           }
         }
       }
@@ -5409,6 +5739,12 @@
             "state" : "translated",
             "value" : "Die Adresse %@ ist nicht verwendbar – in den Einstellungen prüfen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址 %@ 无法使用 — 请在设置中检查"
+          }
         }
       }
     },
@@ -5418,6 +5754,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuerst in den Einstellungen den API-Schlüssel für %@ eingeben"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先在设置中输入 %@ 的 API 密钥"
           }
         }
       }
@@ -5429,6 +5771,12 @@
             "state" : "translated",
             "value" : "macOS hat den API-Schlüssel für %@ nicht herausgegeben – in den Einstellungen erneut sichern"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 未提供 %@ 的 API 密钥 — 请在设置中重新保存"
+          }
         }
       }
     },
@@ -5438,6 +5786,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuerst in den Einstellungen ein Modell für %@ wählen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先在设置中为 %@ 选择模型"
           }
         }
       }
@@ -5449,6 +5803,12 @@
             "state" : "translated",
             "value" : "Übersetzen mit"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译方式"
+          }
         }
       }
     },
@@ -5458,6 +5818,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dieser Mac (Apple)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac（Apple）"
           }
         }
       }
@@ -5469,6 +5835,12 @@
             "state" : "translated",
             "value" : "Sprachmodell-Dienst (eigener API-Schlüssel)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言模型服务（自备 API 密钥）"
+          }
         }
       }
     },
@@ -5478,6 +5850,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sprachmodell-Dienst"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言模型服务"
           }
         }
       }
@@ -5489,6 +5867,12 @@
             "state" : "translated",
             "value" : "Dienst"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务"
+          }
         }
       }
     },
@@ -5498,6 +5882,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Läuft auf diesem Mac oder im eigenen Netzwerk; nichts geht ins Internet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 或本地网络中运行；不会向互联网发送任何内容。"
           }
         }
       }
@@ -5509,6 +5899,12 @@
             "state" : "translated",
             "value" : "Der auf dem Bildschirm erkannte Text wird zum Übersetzen an %@ gesendet. Solange das Übersetzen aus ist, wird nichts gesendet."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕上识别出的文本会发送到 %@ 进行翻译。翻译关闭期间不会发送任何内容。"
+          }
         }
       }
     },
@@ -5518,6 +5914,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der auf dem Bildschirm erkannte Text wird zum Übersetzen an den hier eingetragenen Server gesendet. Solange das Übersetzen aus ist, wird nichts gesendet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕上识别出的文本会发送到此处填写的服务器进行翻译。翻译关闭期间不会发送任何内容。"
           }
         }
       }
@@ -5529,6 +5931,12 @@
             "state" : "translated",
             "value" : "Der Dienst kann jede Anfrage in Rechnung stellen: Je mehr neuer Text ins Bild kommt, desto mehr kostet es."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该服务可能会按请求向账户收费：画面中出现的新文本越多，费用越高。"
+          }
         }
       }
     },
@@ -5538,6 +5946,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Adresse"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址"
           }
         }
       }
@@ -5549,6 +5963,12 @@
             "state" : "translated",
             "value" : "Bereitstellungsname"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部署名称"
+          }
         }
       }
     },
@@ -5558,6 +5978,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modellname"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型名称"
           }
         }
       }
@@ -5569,6 +5995,12 @@
             "state" : "translated",
             "value" : "Modelle"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型列表"
+          }
         }
       }
     },
@@ -5578,6 +6010,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Liste laden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载列表"
           }
         }
       }
@@ -5589,6 +6027,12 @@
             "state" : "translated",
             "value" : "API-Schlüssel"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥"
+          }
         }
       }
     },
@@ -5598,6 +6042,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ein Schlüssel ist im Schlüsselbund gesichert."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钥匙串中已保存密钥。"
           }
         }
       }
@@ -5609,6 +6059,12 @@
             "state" : "translated",
             "value" : "Noch kein Schlüssel gesichert."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未保存密钥。"
+          }
         }
       }
     },
@@ -5618,6 +6074,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kein Schlüssel gesichert; dieser Dienst braucht womöglich keinen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未保存密钥；此服务可能不需要密钥。"
           }
         }
       }
@@ -5629,6 +6091,12 @@
             "state" : "translated",
             "value" : "Noch nicht gesichert: «Sichern», Return oder ein gelungenes «Testen» ersetzt den gesicherten Schlüssel."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未保存：点击“保存”、按 Return 键或“测试”成功后，将替换已保存的密钥。"
+          }
         }
       }
     },
@@ -5638,6 +6106,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schlüssel holen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取密钥"
           }
         }
       }
@@ -5649,6 +6123,12 @@
             "state" : "translated",
             "value" : "Entfernen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除"
+          }
         }
       }
     },
@@ -5658,6 +6138,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sichern"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
           }
         }
       }
@@ -5669,6 +6155,12 @@
             "state" : "translated",
             "value" : "Testen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试"
+          }
         }
       }
     },
@@ -5678,6 +6170,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Antwort: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答：%@"
           }
         }
       }
@@ -5689,6 +6187,12 @@
             "state" : "translated",
             "value" : "Der Schlüssel konnte nicht aus dem Schlüsselbund entfernt werden."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法从钥匙串中移除密钥。"
+          }
         }
       }
     },
@@ -5698,6 +6202,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Schlüssel konnte nicht im Schlüsselbund gesichert werden. Er wird verwendet, bis MirrorAct beendet wird."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将密钥保存到钥匙串。在 MirrorAct 退出前将继续使用该密钥。"
           }
         }
       }
@@ -5709,6 +6219,12 @@
             "state" : "translated",
             "value" : "Der Dienst führt keine Modelle zum Übersetzen auf."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该服务未列出可用于翻译的模型。"
+          }
         }
       }
     },
@@ -5718,6 +6234,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "«Text» im Spiegelfenster kopiert den Text auf dem Bildschirm, «Übersetzen» zeigt seine Übersetzung an Ort und Stelle, auch beim Scrollen. Mit «Dieser Mac» läuft beides auf diesem Mac; macOS fragt, bevor es ein Sprachpaar lädt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像窗口中的“文本”可复制屏幕上的文本，“翻译”则在原位置显示译文，滚动时也是如此。选择“这台 Mac”时，两者都在这台 Mac 上运行；macOS 在下载语言对之前会先询问。"
           }
         }
       }
@@ -5729,6 +6251,12 @@
             "state" : "translated",
             "value" : "Übersetzen mit %@ – der Text auf dem Bildschirm wird dorthin gesendet"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在使用 %@ 翻译 — 屏幕上的文本会发送到该服务"
+          }
         }
       }
     },
@@ -5738,6 +6266,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "«Übersetzen» geht mit der neuen Verbindung wieder an – auf «Übersetzen» klicken, damit es aus bleibt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新连接建立后，“翻译”将重新开启 — 点击“翻译”可使其保持关闭"
           }
         }
       }
@@ -5749,6 +6283,12 @@
             "state" : "translated",
             "value" : "«Übersetzen» bleibt aus"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“翻译”保持关闭"
+          }
         }
       }
     },
@@ -5758,6 +6298,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "«Übersetzen» ist aus – die neue Verbindung hat zu lange gedauert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“翻译”已关闭 — 新连接耗时过长"
           }
         }
       }

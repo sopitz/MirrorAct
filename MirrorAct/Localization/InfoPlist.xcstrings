@@ -116,7 +116,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MirrorAct 可作为用于屏幕镜像的 AirPlay 接收器在本地网络中被发现。"
+            "value" : "MirrorAct 可作为用于屏幕镜像的 AirPlay 接收器在本地网络中被发现，并可借助该网络中某台电脑上的语言模型进行翻译。"
           }
         }
       }
