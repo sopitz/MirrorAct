@@ -48,6 +48,7 @@ targets:
         CFBundleLocalizations:
           - en
           - de
+          - zh-Hans
         CFBundleDisplayName: MirrorAct
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

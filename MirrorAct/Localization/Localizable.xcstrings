@@ -1,15 +1,19 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "" : {
-
-    },
+    "" : {},
     " · mirroring wirelessly" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : " · spiegelt kabellos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · 正在无线镜像"
           }
         }
       }
@@ -21,6 +25,12 @@
             "state" : "translated",
             "value" : "Bedienung unterbrochen: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制被中断：%@"
+          }
         }
       }
     },
@@ -30,6 +40,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bedienung von iPhone und iPad"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone 和 iPad 控制"
           }
         }
       }
@@ -41,6 +57,12 @@
             "state" : "translated",
             "value" : "keine Details"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无详细信息"
+          }
         }
       }
     },
@@ -50,6 +72,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sonst im Spiegelfenster auf «Bedienen» klicken. Braucht Xcode und den Entwicklermodus auf dem Gerät."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "否则，请在镜像窗口中点击“控制”。需要在 Mac 上安装 Xcode，并在设备上开启开发者模式。"
           }
         }
       }
@@ -61,6 +89,12 @@
             "state" : "translated",
             "value" : "Bedienung beim Verbinden starten"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备连接时开始控制"
+          }
         }
       }
     },
@@ -70,6 +104,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Agent konnte auf dem Gerät nicht gestartet werden:\n%@\n\nVollständige Ausgabe: ~/Library/Logs/MirrorAct-Agent.log"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法在设备上启动代理：\n%@\n\n完整输出：~/Library/Logs/MirrorAct-Agent.log"
           }
         }
       }
@@ -81,6 +121,12 @@
             "state" : "translated",
             "value" : "Der Agent hat keine Sitzung geöffnet."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备上的代理未打开会话。"
+          }
         }
       }
     },
@@ -90,6 +136,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Agent ist noch nicht gebaut: im MirrorAct-Ordner scripts/build-agent.sh ausführen. Braucht ausserdem Xcode und den Entwicklermodus auf dem Gerät."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理尚未构建：请在 MirrorAct 文件夹中运行 scripts/build-agent.sh。还需要在 Mac 上安装 Xcode，并在设备上开启开发者模式。"
           }
         }
       }
@@ -101,6 +153,12 @@
             "state" : "translated",
             "value" : "der Agent auf dem Gerät wurde beendet"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备上的代理已停止"
+          }
         }
       }
     },
@@ -110,6 +168,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Agent läuft, aber der Mac erreicht ihn nicht."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理已启动，但 Mac 无法访问。"
           }
         }
       }
@@ -121,6 +185,12 @@
             "state" : "translated",
             "value" : "Der Agent für die Bedienung ist noch nicht gebaut. Im MirrorAct-Ordner ausführen: scripts/build-agent.sh"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制代理尚未构建。在 MirrorAct 文件夹中，运行：scripts/build-agent.sh"
+          }
         }
       }
     },
@@ -130,6 +200,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dem Entwicklerzertifikat auf dem Gerät vertrauen: Einstellungen → Allgemein → VPN & Geräteverwaltung."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信任设备上的开发者证书：设置 → 通用 → VPN与设备管理。"
           }
         }
       }
@@ -141,6 +217,12 @@
             "state" : "translated",
             "value" : "Entwicklermodus auf dem Gerät einschalten: Einstellungen → Datenschutz & Sicherheit → Entwicklermodus. Das Gerät startet neu; danach bestätigen."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设备上开启开发者模式：设置 → 隐私与安全性 → 开发者模式。设备将重启；请在重启后确认。"
+          }
         }
       }
     },
@@ -150,6 +232,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "UI-Automatisierung auf dem Gerät einschalten: Einstellungen → Entwickler → UI-Automatisierung aktivieren."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设备上启用 UI 自动化：设置 → 开发者 → 启用 UI 自动化。"
           }
         }
       }
@@ -161,6 +249,12 @@
             "state" : "translated",
             "value" : "Gerät entsperren und noch einmal versuchen."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解锁设备，然后重试。"
+          }
         }
       }
     },
@@ -170,6 +264,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Xcode (xcodebuild) konnte nicht gestartet werden."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启动 Xcode（xcodebuild）。"
           }
         }
       }
@@ -181,6 +281,12 @@
             "state" : "translated",
             "value" : "Xcode erreicht das Gerät nicht. Per Kabel verbinden und entsperren."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode 无法连接到设备。请用线缆连接设备并解锁。"
+          }
         }
       }
     },
@@ -190,6 +296,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Xcode kennt «%@» noch nicht. Einmal per Kabel verbinden, entsperren und diesem Mac vertrauen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode 尚不认识“%@”。用线缆连接一次，解锁并信任这台 Mac。"
           }
         }
       }
@@ -201,6 +313,12 @@
             "state" : "translated",
             "value" : "%@ lässt sich nicht bedienen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 无法控制"
+          }
         }
       }
     },
@@ -210,6 +328,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ lässt sich nicht auf WLAN umstellen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 无法切换为 Wi-Fi"
           }
         }
       }
@@ -221,6 +345,12 @@
             "state" : "translated",
             "value" : "adb fehlt auf diesem Mac. Im Terminal installieren mit: brew install android-platform-tools"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Mac 上缺少 adb。请在终端中使用以下命令进行安装：brew install android-platform-tools"
+          }
         }
       }
     },
@@ -230,6 +360,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "adb nicht gefunden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到 adb"
           }
         }
       }
@@ -241,6 +377,12 @@
             "state" : "translated",
             "value" : "USB-Debugging erlauben"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许 USB 调试"
+          }
         }
       }
     },
@@ -251,12 +393,24 @@
             "state" : "translated",
             "value" : "USB-Debugging auf %@ erlauben"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许在 %@ 上进行 USB 调试"
+          }
         }
       }
     },
     "Android" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Android"
@@ -271,6 +425,12 @@
             "state" : "translated",
             "value" : "Zurück"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回"
+          }
         }
       }
     },
@@ -280,6 +440,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verbinden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接"
           }
         }
       }
@@ -291,6 +457,12 @@
             "state" : "translated",
             "value" : "Telefon mit dem Mac verbinden und entsperren."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将手机连接到 Mac 并解锁。"
+          }
         }
       }
     },
@@ -300,6 +472,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Per Kabel verbunden? Rechtsklick auf das Telefon → «WLAN statt Kabel verwenden». Ohne Kabel (ab Android 11): Entwickleroptionen → Kabelloses Debugging → Gerät über einen Kopplungscode koppeln."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过线缆连接？右键单击手机 → “使用 Wi-Fi 代替线缆”。不使用线缆（Android 11 或更高版本）：开发者选项 → 无线调试 → 使用配对码配对设备。"
           }
         }
       }
@@ -311,6 +489,12 @@
             "state" : "translated",
             "value" : "Per WLAN verbunden – das Kabel kann ab"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 Wi-Fi 连接 — 您可以拔下线缆"
+          }
         }
       }
     },
@@ -320,6 +504,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verbunden – das Telefon erscheint im Startfenster."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接 — 手机显示在启动窗口中。"
           }
         }
       }
@@ -331,6 +521,12 @@
             "state" : "translated",
             "value" : "Verbinde …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在连接…"
+          }
         }
       }
     },
@@ -340,6 +536,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verbindung zum Telefon fehlgeschlagen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接到手机失败"
           }
         }
       }
@@ -351,6 +553,12 @@
             "state" : "translated",
             "value" : "Bedienen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制"
+          }
         }
       }
     },
@@ -360,6 +568,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gerät bedienen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制设备"
           }
         }
       }
@@ -371,6 +585,12 @@
             "state" : "translated",
             "value" : "Mit Maus, Trackpad und Tastatur bedienen; ⌘V fügt die Zwischenablage des Macs ein."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用鼠标、触控板和键盘进行控制；⌘V 粘贴 Mac 剪贴板。"
+          }
         }
       }
     },
@@ -380,6 +600,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gerät mit Maus und Tastatur bedienen (⌥⌘C)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用鼠标和键盘控制设备（⌥⌘C）"
           }
         }
       }
@@ -391,6 +617,12 @@
             "state" : "translated",
             "value" : "Getrennt – Telefon wieder verbinden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已断开连接 — 请重新连接手机"
+          }
         }
       }
     },
@@ -400,6 +632,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Home"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主屏幕"
           }
         }
       }
@@ -411,6 +649,12 @@
             "state" : "translated",
             "value" : "Unter Einstellungen → Entwickleroptionen «USB-Debugging» einschalten."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“设置” → “开发者选项”中，开启“USB 调试”。"
+          }
         }
       }
     },
@@ -420,6 +664,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "IP-Adresse & Port"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP 地址和端口"
           }
         }
       }
@@ -431,6 +681,12 @@
             "state" : "translated",
             "value" : "IP-Adresse & Port (Kabelloses Debugging)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP 地址和端口（无线调试）"
+          }
         }
       }
     },
@@ -440,6 +696,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iPhone & iPad"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone 和 iPad"
           }
         }
       }
@@ -451,6 +713,12 @@
             "state" : "translated",
             "value" : "Die Spiegelung nutzt adb, das Debugging-Werkzeug von Android, und den quelloffenen scrcpy-Server. Auf dem Telefon wird nichts dauerhaft installiert."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像功能使用 Android 调试工具 adb 和开源 scrcpy 服务器。手机上不会永久安装任何内容。"
+          }
         }
       }
     },
@@ -460,6 +728,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht verbunden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未连接"
           }
         }
       }
@@ -471,6 +745,12 @@
             "state" : "translated",
             "value" : "Mitteilungen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知"
+          }
         }
       }
     },
@@ -480,6 +760,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Offline"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离线"
           }
         }
       }
@@ -491,6 +777,12 @@
             "state" : "translated",
             "value" : "Einmalig auf dem Telefon"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅需在手机上操作一次"
+          }
         }
       }
     },
@@ -500,6 +792,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einstellungen → Telefoninfo öffnen (Samsung: → Softwareinformationen)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“设置”→“关于手机”（三星设备：→“软件信息”）。"
           }
         }
       }
@@ -511,6 +809,12 @@
             "state" : "translated",
             "value" : "Koppeln"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对"
+          }
         }
       }
     },
@@ -520,6 +824,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gekoppelt – das Telefon erscheint gleich im Startfenster. Sonst mit der Adresse verbinden, die unter «Kabelloses Debugging» steht."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配对 — 手机稍后将出现在启动窗口中。如果未显示，请使用“无线调试”下显示的地址进行连接。"
           }
         }
       }
@@ -531,6 +841,12 @@
             "state" : "translated",
             "value" : "Kopplungscode"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对码"
+          }
         }
       }
     },
@@ -540,6 +856,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Per WLAN bereit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过 Wi-Fi 就绪"
           }
         }
       }
@@ -551,6 +873,12 @@
             "state" : "translated",
             "value" : "Letzte Apps"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近使用的应用"
+          }
         }
       }
     },
@@ -560,6 +888,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Drehen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旋转"
           }
         }
       }
@@ -571,6 +905,12 @@
             "state" : "translated",
             "value" : "Bildschirm ein/aus"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕开/关"
+          }
         }
       }
     },
@@ -580,6 +920,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ton ab Android 11. Geschützte Apps (Banking, Streaming) bleiben schwarz."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声音功能需要 Android 11 或更高版本。受保护的应用（银行、流媒体）保持黑色。"
           }
         }
       }
@@ -591,6 +937,12 @@
             "state" : "translated",
             "value" : "Bedienung wird auf dem Gerät gestartet …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在启动设备上的控制…"
+          }
         }
       }
     },
@@ -600,6 +952,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Startet …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在启动…"
           }
         }
       }
@@ -611,6 +969,12 @@
             "state" : "translated",
             "value" : "Bei «USB-Debugging zulassen?» auf «Zulassen» tippen («Von diesem Computer immer zulassen» ankreuzen)."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“允许 USB 调试吗？”中轻触“允许”（勾选“一律允许使用这台计算机进行调试”）。"
+          }
         }
       }
     },
@@ -620,6 +984,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Siebenmal auf «Build-Nummer» tippen, bis der Entwicklermodus an ist."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "轻触“版本号”七次，直到开发者模式开启。"
           }
         }
       }
@@ -631,6 +1001,12 @@
             "state" : "translated",
             "value" : "Das Telefon erscheint im Startfenster – anklicken."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手机会出现在启动窗口中 — 点击它。"
+          }
         }
       }
     },
@@ -640,6 +1016,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Telefon konnte das Video nicht starten"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手机无法启动视频"
           }
         }
       }
@@ -651,6 +1033,12 @@
             "state" : "translated",
             "value" : "Das Telefon antwortet nicht"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手机没有响应"
+          }
         }
       }
     },
@@ -660,6 +1048,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Telefon ist mit keinem WLAN verbunden."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手机未连接到 Wi-Fi 网络。"
           }
         }
       }
@@ -671,6 +1065,12 @@
             "state" : "translated",
             "value" : "Der scrcpy-Server fehlt in der App (scripts/bootstrap-scrcpy.sh)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用中缺少 scrcpy 服务器（scripts/bootstrap-scrcpy.sh）"
+          }
         }
       }
     },
@@ -680,6 +1080,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Telefon entsperren und im Dialog «USB-Debugging zulassen?» auf «Zulassen» tippen. Erscheint kein Dialog, das Kabel abziehen und wieder anschliessen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解锁手机，然后在“允许 USB 调试吗？”对话框中轻触“允许”。如果没有出现对话框，请拔下线缆，然后重新连接。"
           }
         }
       }
@@ -691,6 +1097,12 @@
             "state" : "translated",
             "value" : "WLAN statt Kabel verwenden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Wi-Fi 代替线缆"
+          }
         }
       }
     },
@@ -700,6 +1112,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Leiser"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "降低音量"
           }
         }
       }
@@ -711,6 +1129,12 @@
             "state" : "translated",
             "value" : "Lauter"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提高音量"
+          }
         }
       }
     },
@@ -720,6 +1144,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "WLAN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wi-Fi"
           }
         }
       }
@@ -731,6 +1161,12 @@
             "state" : "translated",
             "value" : "«%@»"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”"
+          }
         }
       }
     },
@@ -740,6 +1176,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ – ziehen zum Teilen, klicken zum Bearbeiten"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 拖动以分享，点击以编辑"
           }
         }
       }
@@ -751,6 +1193,12 @@
             "state" : "translated",
             "value" : "%@ (Duo).png"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（双屏）.png"
+          }
         }
       }
     },
@@ -760,6 +1208,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ (Rahmen).mov"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（带边框）.mov"
           }
         }
       }
@@ -771,6 +1225,12 @@
             "state" : "translated",
             "value" : "%@ (Rahmen).png"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（带边框）.png"
+          }
         }
       }
     },
@@ -781,11 +1241,24 @@
             "state" : "translated",
             "value" : "%@ lässt sich nicht öffnen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开 %@"
+          }
         }
       }
     },
     "%lld" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        }
+      }
     },
     "%lld devices via cable" : {
       "localizations" : {
@@ -793,6 +1266,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld Geräte per Kabel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 台设备通过有线连接"
           }
         }
       }
@@ -804,6 +1283,12 @@
             "state" : "translated",
             "value" : "1 Gerät per Kabel – klicken zum Spiegeln"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 台设备通过有线连接 — 点击以镜像"
+          }
         }
       }
     },
@@ -813,6 +1298,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 Gerät per Kabel · spiegelt kabellos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 台设备通过有线连接 · 正在无线镜像"
           }
         }
       }
@@ -824,6 +1315,12 @@
             "state" : "translated",
             "value" : "30 Bilder/s"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 fps"
+          }
         }
       }
     },
@@ -833,6 +1330,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "60 Bilder/s"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60 fps"
           }
         }
       }
@@ -844,6 +1347,12 @@
             "state" : "translated",
             "value" : "1080 Pixel Höhe"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高 1080 像素"
+          }
         }
       }
     },
@@ -853,6 +1362,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1440 Pixel Höhe"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高 1440 像素"
           }
         }
       }
@@ -864,6 +1379,12 @@
             "state" : "translated",
             "value" : "2160 Pixel Höhe"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高 2160 像素"
+          }
         }
       }
     },
@@ -873,6 +1394,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Einstellungen …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有设置…"
           }
         }
       }
@@ -884,6 +1411,12 @@
             "state" : "translated",
             "value" : "HEVC erlauben (nötig über 1080)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许 HEVC（1080 以上需要）"
+          }
         }
       }
     },
@@ -893,6 +1426,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Auch über Vollbild-Apps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "也显示在全屏应用上方"
           }
         }
       }
@@ -904,6 +1443,12 @@
             "state" : "translated",
             "value" : "Auch über Vollbild-Apps"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "也显示在全屏应用上方"
+          }
         }
       }
     },
@@ -913,6 +1458,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Werkzeuge immer zeigen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终显示工具"
           }
         }
       }
@@ -924,6 +1475,12 @@
             "state" : "translated",
             "value" : "Werkzeuge immer zeigen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终显示工具"
+          }
         }
       }
     },
@@ -933,6 +1490,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übernehmen und neu starten"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用并重启"
           }
         }
       }
@@ -944,6 +1507,12 @@
             "state" : "translated",
             "value" : "Format"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宽高比"
+          }
         }
       }
     },
@@ -953,6 +1522,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Automatisch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动"
           }
         }
       }
@@ -964,6 +1539,12 @@
             "state" : "translated",
             "value" : "Automatisch (nach Auflösung)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动（按分辨率）"
+          }
         }
       }
     },
@@ -973,6 +1554,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hintergrund"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景"
           }
         }
       }
@@ -984,6 +1571,12 @@
             "state" : "translated",
             "value" : "Hintergrund für Fotos, Videos und Vollbild"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "照片、视频和全屏显示的背景"
+          }
         }
       }
     },
@@ -993,6 +1586,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hintergrund, Abstand und Format kommen aus «Stil». Bei transparentem Hintergrund entsteht HEVC mit Transparenz, sonst H.264. Ablage: Schreibtisch."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景、内边距和宽高比来自“样式”。透明背景会生成具有透明度的 HEVC，否则为 H.264。录制内容保存到桌面。"
           }
         }
       }
@@ -1004,6 +1603,12 @@
             "state" : "translated",
             "value" : "Schwarz"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黑色"
+          }
         }
       }
     },
@@ -1013,6 +1618,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Blau"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蓝色"
           }
         }
       }
@@ -1024,6 +1635,12 @@
             "state" : "translated",
             "value" : "Per Kabel"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线缆"
+          }
         }
       }
     },
@@ -1033,6 +1650,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kabel getrennt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线缆已断开"
           }
         }
       }
@@ -1044,6 +1667,12 @@
             "state" : "translated",
             "value" : "Kabel nicht verbunden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线缆未连接"
+          }
         }
       }
     },
@@ -1053,6 +1682,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kabel oder WLAN – so geht's"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线缆或 Wi-Fi — 工作原理"
           }
         }
       }
@@ -1070,6 +1705,12 @@
             "state" : "new",
             "value" : "Cable: connect and unlock the iPhone, then choose this again.\n\nWireless: on the iPhone, open Control Center → Screen Mirroring → “%1$@”. Code: %2$@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有线：连接并解锁 iPhone，然后再次选择此项。\n\n无线：在 iPhone 上，打开“控制中心”→“屏幕镜像”→“%@”。验证码：%@"
+          }
         }
       }
     },
@@ -1079,6 +1720,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kamerazugriff nötig"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要访问摄像头"
           }
         }
       }
@@ -1090,6 +1737,12 @@
             "state" : "translated",
             "value" : "Abbrechen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
         }
       }
     },
@@ -1099,6 +1752,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "«%@» wählen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择“%@”。"
           }
         }
       }
@@ -1110,6 +1769,12 @@
             "state" : "translated",
             "value" : "Hintergrundbild wählen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择背景图像"
+          }
         }
       }
     },
@@ -1119,6 +1784,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bild wählen …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择图像…"
           }
         }
       }
@@ -1130,6 +1801,12 @@
             "state" : "translated",
             "value" : "Im Kontrollzentrum wählen:"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在控制中心中选择："
+          }
         }
       }
     },
@@ -1139,6 +1816,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Screenshots (eins, oder zwei für Duo) oder eine Bildschirmaufnahme wählen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择截图（一张，双屏用两张）或屏幕录制"
           }
         }
       }
@@ -1150,6 +1833,12 @@
             "state" : "translated",
             "value" : "Klick: Screenshot auf den Schreibtisch · ⌥-Klick: kopieren · Ziehen: direkt in eine App"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击：截图到桌面 · 按住 ⌥ 点击：复制 · 拖动：直接拖入应用"
+          }
         }
       }
     },
@@ -1159,6 +1848,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schliessen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
           }
         }
       }
@@ -1170,6 +1865,12 @@
             "state" : "translated",
             "value" : "Fenster schliessen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭窗口"
+          }
         }
       }
     },
@@ -1179,6 +1880,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "CODE"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证码"
           }
         }
       }
@@ -1190,6 +1897,12 @@
             "state" : "translated",
             "value" : "Code (4 Ziffern)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证码（4 位数字）"
+          }
         }
       }
     },
@@ -1199,6 +1912,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Code beim ersten Verbinden: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首次连接验证码：%@"
           }
         }
       }
@@ -1210,6 +1929,12 @@
             "state" : "translated",
             "value" : "Farbe"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "颜色"
+          }
         }
       }
     },
@@ -1219,6 +1944,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gerät verbinden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接设备"
           }
         }
       }
@@ -1230,6 +1961,12 @@
             "state" : "translated",
             "value" : "Gerät anschliessen oder kabellos verbinden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过有线或无线方式连接设备"
+          }
         }
       }
     },
@@ -1239,6 +1976,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iPhone oder iPad mit dem Mac verbinden."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 iPhone 或 iPad 连接到 Mac。"
           }
         }
       }
@@ -1250,6 +1993,12 @@
             "state" : "translated",
             "value" : "Verbinde …\nGerät entsperren, falls nötig"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在连接…\n如果需要，请解锁设备"
+          }
         }
       }
     },
@@ -1259,6 +2008,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verbinde per Kabel …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在通过有线连接…"
           }
         }
       }
@@ -1270,6 +2025,12 @@
             "state" : "translated",
             "value" : "In die Zwischenablage kopiert"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制到剪贴板"
+          }
         }
       }
     },
@@ -1279,6 +2040,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kopieren"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制"
           }
         }
       }
@@ -1290,6 +2057,12 @@
             "state" : "translated",
             "value" : "Screenshot kopieren"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制截图"
+          }
         }
       }
     },
@@ -1299,6 +2072,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eigenes Bild"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义图像"
           }
         }
       }
@@ -1310,6 +2089,12 @@
             "state" : "translated",
             "value" : "Dunkellila"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暗紫色"
+          }
         }
       }
     },
@@ -1319,6 +2104,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Standard für Screenshots, Aufnahmen und die Präsentation (⌃⌘F). Im Spiegelfenster bleibt der Hintergrund weg. Im Editor (⌘E) lässt sich der Stil pro Datei ändern."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截图、录制和演示（⌃⌘F）的默认设置。镜像窗口不显示背景。在编辑器（⌘E）中，您可以为每个文件更改样式。"
           }
         }
       }
@@ -1330,6 +2121,12 @@
             "state" : "translated",
             "value" : "Gerät"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备"
+          }
         }
       }
     },
@@ -1339,6 +2136,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gerätrahmen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备边框"
           }
         }
       }
@@ -1350,6 +2153,12 @@
             "state" : "translated",
             "value" : "Direktverbindung über Apple-Funk (AWDL)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 Apple 无线网络直接连接（AWDL）"
+          }
         }
       }
     },
@@ -1359,6 +2168,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trennen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开连接"
           }
         }
       }
@@ -1370,6 +2185,12 @@
             "state" : "translated",
             "value" : "Gerät trennen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开设备连接"
+          }
         }
       }
     },
@@ -1379,6 +2200,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Getrennt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已断开连接"
           }
         }
       }
@@ -1390,6 +2217,12 @@
             "state" : "translated",
             "value" : "Getrennt – auf dem iPhone erneut «%@» wählen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已断开连接 — 请在 iPhone 上再次选择“%@”"
+          }
         }
       }
     },
@@ -1399,6 +2232,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fertig"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成"
           }
         }
       }
@@ -1410,6 +2249,12 @@
             "state" : "translated",
             "value" : "Fertig – ohne Code."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成 — 无需验证码。"
+          }
         }
       }
     },
@@ -1419,6 +2264,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bild herausziehen zum Teilen, oder sichern/kopieren."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将图片拖出以分享，或保存/复制。"
           }
         }
       }
@@ -1430,6 +2281,12 @@
             "state" : "translated",
             "value" : "Duo"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "双屏"
+          }
         }
       }
     },
@@ -1439,6 +2296,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bearbeiten"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑"
           }
         }
       }
@@ -1450,6 +2313,12 @@
             "state" : "translated",
             "value" : "Bearbeiten – %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑 — %@"
+          }
         }
       }
     },
@@ -1459,6 +2328,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bearbeiten …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑…"
           }
         }
       }
@@ -1470,6 +2345,12 @@
             "state" : "translated",
             "value" : "Letzte Datei bearbeiten …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑上一个文件…"
+          }
         }
       }
     },
@@ -1479,6 +2360,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Screenshot oder Video bearbeiten …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑截图或视频…"
           }
         }
       }
@@ -1490,6 +2377,12 @@
             "state" : "translated",
             "value" : "Code auf dem iPhone eingeben: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 iPhone 上输入以下验证码：%@"
+          }
         }
       }
     },
@@ -1499,6 +2392,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abend"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暮色"
           }
         }
       }
@@ -1510,6 +2409,12 @@
             "state" : "translated",
             "value" : "Präsentation beenden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出演示"
+          }
         }
       }
     },
@@ -1519,6 +2424,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Präsentation beenden (Esc oder ⌃⌘F)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出演示（Esc 或 ⌃⌘F）"
           }
         }
       }
@@ -1530,6 +2441,12 @@
             "state" : "translated",
             "value" : "Experimentelle Funktionen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实验性功能"
+          }
         }
       }
     },
@@ -1539,6 +2456,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Experimentell: «Text» und «Übersetzen» werden noch erprobt, dabei kann etwas schiefgehen."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实验性功能：“文本”和“翻译”仍在试验中，可能会出错。"
           }
         }
       }
@@ -1550,6 +2473,12 @@
             "state" : "translated",
             "value" : "Export fehlgeschlagen: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出失败：%@"
+          }
         }
       }
     },
@@ -1559,6 +2488,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Exportprofil nicht verfügbar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出预设不可用"
           }
         }
       }
@@ -1570,6 +2505,12 @@
             "state" : "translated",
             "value" : "Export: H.264 (.mov), höchstens 4K"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出：H.264（.mov），最高 4K"
+          }
         }
       }
     },
@@ -1579,6 +2520,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Export: HEVC mit Transparenz (.mov)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出：HEVC，带透明度（.mov）"
           }
         }
       }
@@ -1590,6 +2537,12 @@
             "state" : "translated",
             "value" : "Exportiere …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在导出…"
+          }
         }
       }
     },
@@ -1599,6 +2552,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bildschirm\nfüllen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适应\n屏幕"
           }
         }
       }
@@ -1610,6 +2569,12 @@
             "state" : "translated",
             "value" : "An Bildschirm anpassen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适应屏幕"
+          }
         }
       }
     },
@@ -1619,6 +2584,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wald"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "森林"
           }
         }
       }
@@ -1630,6 +2601,12 @@
             "state" : "translated",
             "value" : "${files} einrahmen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为 ${files} 添加边框"
+          }
         }
       }
     },
@@ -1639,6 +2616,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rahmenfarbe"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "边框颜色"
           }
         }
       }
@@ -1650,6 +2633,12 @@
             "state" : "translated",
             "value" : "Rahmenfarbe"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "边框颜色"
+          }
         }
       }
     },
@@ -1659,6 +2648,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bildrate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧速率"
           }
         }
       }
@@ -1670,6 +2665,12 @@
             "state" : "translated",
             "value" : "Screenshot einrahmen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为截图添加边框"
+          }
         }
       }
     },
@@ -1679,6 +2680,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Screenshots (auch zwei als Duo) oder Videos einrahmen (⌘E)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为截图（两张可组成双屏）或视频添加边框（⌘E）"
           }
         }
       }
@@ -1690,6 +2697,12 @@
             "state" : "translated",
             "value" : "Vollbild"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全屏"
+          }
         }
       }
     },
@@ -1699,6 +2712,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schaltet Funktionen ein, die noch erprobt werden und bei denen etwas schiefgehen kann. Zurzeit sind das «Text» und «Übersetzen» in der Werkzeugleiste: Sie kopieren und übersetzen den Text auf dem gespiegelten Bildschirm; ihre Einstellungen stehen unter «Text»."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启仍在试验中、可能会出错的功能。目前包括工具栏中的“文本”和“翻译”，它们可复制和翻译镜像屏幕上的文本；相关设置位于“文本”下。"
           }
         }
       }
@@ -1710,6 +2729,12 @@
             "state" : "translated",
             "value" : "Allgemein"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用"
+          }
         }
       }
     },
@@ -1719,6 +2744,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gold"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金色"
           }
         }
       }
@@ -1730,6 +2761,12 @@
             "state" : "translated",
             "value" : "Verlauf"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "渐变"
+          }
         }
       }
     },
@@ -1739,6 +2776,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Graphit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "石墨色"
           }
         }
       }
@@ -1750,6 +2793,12 @@
             "state" : "translated",
             "value" : "Erscheint «%@» nicht: in macOS unter Allgemein → AirDrop & Handoff den AirPlay-Empfänger einschalten. WLAN und Bluetooth am Gerät eingeschaltet lassen."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果未显示“%@”，请在 Mac 的“系统设置”→“通用”→“隔空投送与接力”（或“隔空投送与连续互通”）中打开“隔空播放接收器”。请保持设备上的 Wi-Fi 和蓝牙开启。"
+          }
         }
       }
     },
@@ -1759,6 +2808,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bild"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图像"
           }
         }
       }
@@ -1771,6 +2826,12 @@
             "state" : "translated",
             "value" : "iPad (mit Home-Button)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad（带主屏幕按钮）"
+          }
         }
       }
     },
@@ -1781,6 +2842,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iPad (ohne Home-Button)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad（无主屏幕按钮）"
           }
         }
       }
@@ -1793,6 +2860,12 @@
             "state" : "translated",
             "value" : "iPhone SE (2. Gen.)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone SE（第 2 代）"
+          }
         }
       }
     },
@@ -1804,6 +2877,12 @@
             "state" : "translated",
             "value" : "iPhone SE (3. Gen.)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone SE（第 3 代）"
+          }
         }
       }
     },
@@ -1813,6 +2892,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Immer im Vordergrund"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
           }
         }
       }
@@ -1824,6 +2909,12 @@
             "state" : "translated",
             "value" : "Immer im Vordergrund"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
+          }
         }
       }
     },
@@ -1833,6 +2924,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Immer im Vordergrund (⌘T)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶（⌘T）"
           }
         }
       }
@@ -1844,6 +2941,12 @@
             "state" : "translated",
             "value" : "Sprache"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
+          }
         }
       }
     },
@@ -1853,6 +2956,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Grösser"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放大"
           }
         }
       }
@@ -1864,6 +2973,12 @@
             "state" : "translated",
             "value" : "Zuletzt"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新"
+          }
         }
       }
     },
@@ -1873,6 +2988,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lebens-\ngross"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实际\n尺寸"
           }
         }
       }
@@ -1884,6 +3005,12 @@
             "state" : "translated",
             "value" : "Lebensgross"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实际尺寸"
+          }
         }
       }
     },
@@ -1893,6 +3020,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lebensgross: Grösse des Monitors oder Geräts unbekannt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实际尺寸：显示器或设备尺寸未知"
           }
         }
       }
@@ -1904,6 +3037,12 @@
             "state" : "translated",
             "value" : "Hell"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浅色"
+          }
         }
       }
     },
@@ -1913,6 +3052,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Flieder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "丁香紫"
           }
         }
       }
@@ -1924,6 +3069,12 @@
             "state" : "translated",
             "value" : "Geringste Verzögerung. Andere Apps wie QuickTime dürfen das Gerät nicht gleichzeitig geöffnet haben."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最低延迟。其他应用（如 QuickTime）不得同时打开该设备。"
+          }
         }
       }
     },
@@ -1933,6 +3084,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "macOS stellt den Bildschirm eines per Kabel verbundenen iPhones wie eine Kamera bereit. Bitte MirrorAct unter Datenschutz & Sicherheit → Kamera erlauben."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 将通过线缆连接的 iPhone 的屏幕显示为摄像头。请在“隐私与安全性”→“摄像头”下允许 MirrorAct。"
           }
         }
       }
@@ -1944,6 +3101,12 @@
             "state" : "translated",
             "value" : "Spiegeln"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像"
+          }
         }
       }
     },
@@ -1953,6 +3116,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ kabellos spiegeln"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无线镜像 %@"
           }
         }
       }
@@ -1964,12 +3133,24 @@
             "state" : "translated",
             "value" : "iPhone oder iPad spiegeln …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像 iPhone 或 iPad…"
+          }
         }
       }
     },
     "MirrorAct" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MirrorAct"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "MirrorAct"
@@ -1984,6 +3165,12 @@
             "state" : "translated",
             "value" : "Wird gespiegelt"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在镜像"
+          }
         }
       }
     },
@@ -1993,6 +3180,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Spiegelt kabellos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在无线镜像"
           }
         }
       }
@@ -2004,6 +3197,12 @@
             "state" : "translated",
             "value" : "Modell"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "型号"
+          }
         }
       }
     },
@@ -2013,6 +3212,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Stumm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已静音"
           }
         }
       }
@@ -2024,6 +3229,12 @@
             "state" : "translated",
             "value" : "Name auf dem iPhone"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone 上显示的名称"
+          }
         }
       }
     },
@@ -2033,6 +3244,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Titan Natur"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原色钛金属"
           }
         }
       }
@@ -2044,6 +3261,12 @@
             "state" : "translated",
             "value" : "Nötig, wenn das iPhone den Mac im WLAN nicht findet. Verlangt beim ersten Verbinden einen Code."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当 iPhone 在 Wi-Fi 上找不到 Mac 时需要。首次连接时会要求输入验证码。"
+          }
         }
       }
     },
@@ -2053,6 +3276,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kein Gerät per Kabel verbunden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有通过线缆连接的设备"
           }
         }
       }
@@ -2064,6 +3293,12 @@
             "state" : "translated",
             "value" : "Kein Gerät wird gerade gespiegelt."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有设备正在镜像。"
+          }
         }
       }
     },
@@ -2073,6 +3308,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kein Bild gewählt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未选择图像"
           }
         }
       }
@@ -2084,6 +3325,12 @@
             "state" : "translated",
             "value" : "Keine lesbaren Bilder übergeben."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未传递任何可读取的图像。"
+          }
         }
       }
     },
@@ -2093,6 +3340,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch kein Bild zum Aufnehmen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无要录制的视频"
           }
         }
       }
@@ -2104,6 +3357,12 @@
             "state" : "translated",
             "value" : "Ozean"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "海洋"
+          }
         }
       }
     },
@@ -2113,6 +3372,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好"
           }
         }
       }
@@ -2124,6 +3389,12 @@
             "state" : "translated",
             "value" : "Auf dem Gerät: Kontrollzentrum → Bildschirmsynchronisierung → «%@»."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设备上：控制中心 → 屏幕镜像 → “%@”。"
+          }
         }
       }
     },
@@ -2133,6 +3404,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Oben"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
           }
         }
       }
@@ -2144,6 +3421,12 @@
             "state" : "translated",
             "value" : "Auf dem Gerät das Kontrollzentrum öffnen."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设备上打开“控制中心”。"
+          }
         }
       }
     },
@@ -2153,6 +3436,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einstellungen öffnen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开设置"
           }
         }
       }
@@ -2164,6 +3453,12 @@
             "state" : "translated",
             "value" : "Abstand"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内边距"
+          }
         }
       }
     },
@@ -2173,6 +3468,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Perspektive"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "透视"
           }
         }
       }
@@ -2184,6 +3485,12 @@
             "state" : "translated",
             "value" : "Foto"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "照片"
+          }
         }
       }
     },
@@ -2193,6 +3500,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pixel-\ngenau"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "像素级\n精确"
           }
         }
       }
@@ -2204,6 +3517,12 @@
             "state" : "translated",
             "value" : "Pixelgenau"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "像素级精确"
+          }
         }
       }
     },
@@ -2213,6 +3532,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ton wiedergeben"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放声音"
           }
         }
       }
@@ -2224,6 +3549,12 @@
             "state" : "translated",
             "value" : "Ton wiedergeben"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放声音"
+          }
         }
       }
     },
@@ -2233,6 +3564,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Punkt-\ngenau"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点级\n精确"
           }
         }
       }
@@ -2244,6 +3581,12 @@
             "state" : "translated",
             "value" : "Punktgenau"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点级精确"
+          }
         }
       }
     },
@@ -2253,6 +3596,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Punktgenau (wie auf dem iPhone)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点级精确（按 iPhone 的逻辑点 1:1 显示）"
           }
         }
       }
@@ -2264,6 +3613,12 @@
             "state" : "translated",
             "value" : "Pose"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摆放方式"
+          }
         }
       }
     },
@@ -2273,6 +3628,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Präsentieren"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "演示"
           }
         }
       }
@@ -2284,6 +3645,12 @@
             "state" : "translated",
             "value" : "Präsentieren (⌃⌘F, Esc beendet)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以全屏模式演示（⌃⌘F，按 Esc 退出）"
+          }
         }
       }
     },
@@ -2293,6 +3660,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Setzt iPhone- oder iPad-Screenshots in den Gerätrahmen, mit der Gestaltung aus MirrorAct (Rahmenfarbe, Hintergrund, Format)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 MirrorAct 的样式（边框颜色、背景、宽高比），将 iPhone 或 iPad 截图放入设备边框中。"
           }
         }
       }
@@ -2304,6 +3677,12 @@
             "state" : "translated",
             "value" : "Per Kabel bereit"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过有线连接就绪"
+          }
         }
       }
     },
@@ -2313,6 +3692,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Empfang fehlgeschlagen – Details im Log"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收器故障 — 请参阅日志"
           }
         }
       }
@@ -2324,6 +3709,12 @@
             "state" : "translated",
             "value" : "Aufnahme"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制"
+          }
         }
       }
     },
@@ -2333,6 +3724,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Video aufnehmen (⌘R)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制视频（⌘R）"
           }
         }
       }
@@ -2344,6 +3741,12 @@
             "state" : "translated",
             "value" : "Mit Gerätrahmen aufnehmen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用设备边框录制"
+          }
         }
       }
     },
@@ -2353,6 +3756,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme mit Gerätrahmen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用设备边框录制"
           }
         }
       }
@@ -2364,6 +3773,12 @@
             "state" : "translated",
             "value" : "Aufnahme"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制"
+          }
         }
       }
     },
@@ -2373,6 +3788,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme fehlgeschlagen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制失败"
           }
         }
       }
@@ -2384,6 +3805,12 @@
             "state" : "translated",
             "value" : "Aufnahme gesichert – zum Teilen herausziehen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制已保存 — 拖出即可分享"
+          }
         }
       }
     },
@@ -2393,6 +3820,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme läuft"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已开始录制"
           }
         }
       }
@@ -2404,6 +3837,12 @@
             "state" : "translated",
             "value" : "Aufnahme beendet"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已停止录制"
+          }
         }
       }
     },
@@ -2413,6 +3852,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Auflösung"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分辨率"
           }
         }
       }
@@ -2424,6 +3869,12 @@
             "state" : "translated",
             "value" : "Neu starten"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启"
+          }
         }
       }
     },
@@ -2433,6 +3884,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jetzt neu starten"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即重启"
           }
         }
       }
@@ -2444,6 +3901,12 @@
             "state" : "translated",
             "value" : "Sichern …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存…"
+          }
         }
       }
     },
@@ -2453,6 +3916,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Screenshot sichern"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存截图"
           }
         }
       }
@@ -2464,6 +3933,12 @@
             "state" : "translated",
             "value" : "Screenshot auf den Schreibtisch"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将截图保存到桌面"
+          }
         }
       }
     },
@@ -2473,6 +3948,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Video sichern …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存视频…"
           }
         }
       }
@@ -2484,6 +3965,12 @@
             "state" : "translated",
             "value" : "Auf dem Schreibtisch gesichert"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存到桌面"
+          }
         }
       }
     },
@@ -2493,6 +3980,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gesichert: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存：%@"
           }
         }
       }
@@ -2504,6 +3997,12 @@
             "state" : "translated",
             "value" : "Sichern fehlgeschlagen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存失败"
+          }
         }
       }
     },
@@ -2513,6 +4012,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nur Bildschirm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅屏幕"
           }
         }
       }
@@ -2524,6 +4029,12 @@
             "state" : "translated",
             "value" : "Screenshot vom iPhone"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone 截图"
+          }
         }
       }
     },
@@ -2533,6 +4044,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Screenshot des gerade gespiegelten Geräts, mit der Gestaltung aus MirrorAct."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前正在镜像的设备的截图，使用 MirrorAct 的样式。"
           }
         }
       }
@@ -2544,6 +4061,12 @@
             "state" : "translated",
             "value" : "Screenshots"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截图"
+          }
         }
       }
     },
@@ -2553,6 +4076,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einstellungen (⌘,)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置（⌘,）"
           }
         }
       }
@@ -2564,6 +4093,12 @@
             "state" : "translated",
             "value" : "Schatten"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阴影"
+          }
         }
       }
     },
@@ -2573,6 +4108,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Teilen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享"
           }
         }
       }
@@ -2584,6 +4125,12 @@
             "state" : "translated",
             "value" : "Anzeigen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示"
+          }
         }
       }
     },
@@ -2593,6 +4140,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gerätrahmen anzeigen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示设备边框"
           }
         }
       }
@@ -2604,6 +4157,12 @@
             "state" : "translated",
             "value" : "Gerätrahmen anzeigen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示设备边框"
+          }
         }
       }
     },
@@ -2613,6 +4172,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Im Finder zeigen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中显示"
           }
         }
       }
@@ -2624,6 +4189,12 @@
             "state" : "translated",
             "value" : "Nebeneinander"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "并排"
+          }
         }
       }
     },
@@ -2633,6 +4204,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Silber"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "银色"
           }
         }
       }
@@ -2644,6 +4221,12 @@
             "state" : "translated",
             "value" : "Grösse"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尺寸"
+          }
         }
       }
     },
@@ -2653,6 +4236,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kleiner"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缩小"
           }
         }
       }
@@ -2664,6 +4253,12 @@
             "state" : "translated",
             "value" : "Ton"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声音"
+          }
         }
       }
     },
@@ -2673,6 +4268,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quelle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来源"
           }
         }
       }
@@ -2684,6 +4285,12 @@
             "state" : "translated",
             "value" : "Versetzt"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "交错"
+          }
         }
       }
     },
@@ -2693,6 +4300,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Video aufnehmen / beenden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始/停止录制"
           }
         }
       }
@@ -2704,6 +4317,12 @@
             "state" : "translated",
             "value" : "Aufnahme starten oder beenden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始或停止录制"
+          }
         }
       }
     },
@@ -2713,6 +4332,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Video aufnehmen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始录制"
           }
         }
       }
@@ -2724,6 +4349,12 @@
             "state" : "translated",
             "value" : "Aufnahme starten/beenden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始/停止录制"
+          }
         }
       }
     },
@@ -2733,6 +4364,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Startet bzw. beendet die Videoaufnahme des gespiegelten Geräts."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始或停止镜像设备的视频录制。"
           }
         }
       }
@@ -2744,6 +4381,12 @@
             "state" : "translated",
             "value" : "Aufnahme beenden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止录制"
+          }
         }
       }
     },
@@ -2753,6 +4396,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme beenden (⌘R)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止录制（⌘R）"
           }
         }
       }
@@ -2764,6 +4413,12 @@
             "state" : "translated",
             "value" : "Stil"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "样式"
+          }
         }
       }
     },
@@ -2773,6 +4428,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Stil …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "样式…"
           }
         }
       }
@@ -2784,6 +4445,12 @@
             "state" : "translated",
             "value" : "Systemsprache"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统语言"
+          }
         }
       }
     },
@@ -2793,6 +4460,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wird nach einem Neustart wirksam."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启后生效。"
           }
         }
       }
@@ -2804,6 +4477,12 @@
             "state" : "translated",
             "value" : "«Bildschirmsynchronisierung» tippen."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "轻触“屏幕镜像”。"
+          }
         }
       }
     },
@@ -2813,6 +4492,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Gerät erscheint im Startfenster – anklicken."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备会出现在启动窗口中 — 点击它。"
           }
         }
       }
@@ -2824,6 +4509,12 @@
             "state" : "translated",
             "value" : "Das Gerät ist bereits in einer anderen App geöffnet (z. B. QuickTime)."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该设备已在另一个应用（如 QuickTime）中打开。"
+          }
         }
       }
     },
@@ -2833,6 +4524,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Datei enthält keine Videospur."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件不包含视频轨道。"
           }
         }
       }
@@ -2844,6 +4541,12 @@
             "state" : "translated",
             "value" : "Beim ersten Mal den Kamerazugriff für MirrorAct erlauben."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第一次使用时，请允许 MirrorAct 访问摄像头。"
+          }
         }
       }
     },
@@ -2853,6 +4556,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beim ersten Mal den Code %@ eingeben."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首次连接时，请输入验证码 %@。"
           }
         }
       }
@@ -2864,6 +4573,12 @@
             "state" : "translated",
             "value" : "Das Spiegelfenster erscheint dann auch auf jedem Schreibtisch und über anderen Apps im Vollbild. Ein Klick darauf holt MirrorAct nicht mehr nach vorn."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像窗口将显示在每个桌面空间中，并覆盖其他全屏应用。点击窗口将不再把 MirrorAct 带到前台。"
+          }
         }
       }
     },
@@ -2873,6 +4588,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Aufnahme konnte nicht gestartet werden."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法开始录制。"
           }
         }
       }
@@ -2884,6 +4605,12 @@
             "state" : "translated",
             "value" : "Gekippt"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "倾斜"
+          }
         }
       }
     },
@@ -2893,6 +4620,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transparent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "透明"
           }
         }
       }
@@ -2904,6 +4637,12 @@
             "state" : "translated",
             "value" : "Kürzen …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修剪…"
+          }
         }
       }
     },
@@ -2913,6 +4652,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kürzen über «Kürzen …»; die Vorschau zeigt halbe Auflösung."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用“修剪…”修剪视频。预览以原分辨率的一半显示。"
           }
         }
       }
@@ -2924,6 +4669,12 @@
             "state" : "translated",
             "value" : "Gerät entsperren und «Diesem Computer vertrauen» bestätigen."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解锁设备并确认“信任此电脑”。"
+          }
         }
       }
     },
@@ -2933,6 +4684,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als Standard übernehmen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设为默认"
           }
         }
       }
@@ -2944,6 +4701,12 @@
             "state" : "translated",
             "value" : "Als Standard übernommen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已设为默认"
+          }
         }
       }
     },
@@ -2953,6 +4716,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Video"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "视频"
           }
         }
       }
@@ -2964,6 +4733,12 @@
             "state" : "translated",
             "value" : "Warte auf Bild …"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待视频…"
+          }
         }
       }
     },
@@ -2973,6 +4748,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fenster"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗口"
           }
         }
       }
@@ -2984,6 +4765,12 @@
             "state" : "translated",
             "value" : "Kabellos"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无线"
+          }
         }
       }
     },
@@ -2993,6 +4780,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kabelloser Empfang (AirPlay)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无线接收器（AirPlay）"
           }
         }
       }
@@ -3004,6 +4797,12 @@
             "state" : "translated",
             "value" : "Kabelloser Empfang aus"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无线接收器已关闭"
+          }
         }
       }
     },
@@ -3013,6 +4812,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mit Gerätrahmen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "带设备边框"
           }
         }
       }
@@ -3024,6 +4829,12 @@
             "state" : "translated",
             "value" : "Mit Rahmen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "带边框"
+          }
         }
       }
     },
@@ -3033,6 +4844,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ohne Rahmen: Ecken wie das Gerät abrunden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无边框：圆角与设备一致"
           }
         }
       }
@@ -3044,6 +4861,12 @@
             "state" : "translated",
             "value" : "yyyy-MM-dd 'um' HH.mm.ss"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "yyyy-MM-dd '于' HH.mm.ss"
+          }
         }
       }
     },
@@ -3053,6 +4876,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Text"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本"
           }
         }
       }
@@ -3064,6 +4893,12 @@
             "state" : "translated",
             "value" : "Text auf dem Bildschirm kopieren (⌥⌘T)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制屏幕上的文本（⌥⌘T）"
+          }
         }
       }
     },
@@ -3073,6 +4908,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译"
           }
         }
       }
@@ -3084,6 +4925,12 @@
             "state" : "translated",
             "value" : "Text auf dem Bildschirm an Ort und Stelle übersetzen (⇧⌘T) – Sprache in den Einstellungen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在原位置翻译屏幕上的文本（⇧⌘T） — 语言可在设置中选择"
+          }
         }
       }
     },
@@ -3093,6 +4940,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Texterkennung fehlgeschlagen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本识别失败"
           }
         }
       }
@@ -3104,6 +4957,12 @@
             "state" : "translated",
             "value" : "Kein Text gefunden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到文本"
+          }
         }
       }
     },
@@ -3113,6 +4972,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Text in die Zwischenablage kopiert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将文本复制到剪贴板"
           }
         }
       }
@@ -3124,6 +4989,12 @@
             "state" : "translated",
             "value" : "Noch kein Bild zum Übersetzen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无可翻译的画面"
+          }
         }
       }
     },
@@ -3133,6 +5004,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch kein Bild, aus dem sich Text kopieren lässt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无可复制文本的画面"
           }
         }
       }
@@ -3144,6 +5021,12 @@
             "state" : "translated",
             "value" : "Übersetzen nach %@ ist auf diesem Mac nicht verfügbar"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 无法翻译成%@"
+          }
         }
       }
     },
@@ -3153,6 +5036,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Text auf dem Bildschirm kopieren"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制屏幕上的文本"
           }
         }
       }
@@ -3164,6 +5053,12 @@
             "state" : "translated",
             "value" : "Text auf dem Bildschirm übersetzen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译屏幕上的文本"
+          }
         }
       }
     },
@@ -3173,6 +5068,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen nach"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成"
           }
         }
       }
@@ -3184,6 +5085,12 @@
             "state" : "translated",
             "value" : "%@ – braucht Apple Intelligence"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 需要 Apple 智能"
+          }
         }
       }
     },
@@ -3193,6 +5100,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen nach %@ braucht Apple Intelligence."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成%@需要 Apple 智能。"
           }
         }
       }
@@ -3210,6 +5123,12 @@
             "state" : "new",
             "value" : "macOS asks whether it may download %1$@ and %2$@ – answer its question"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 正在询问是否可以下载%1$@和%2$@ — 请作出选择"
+          }
         }
       }
     },
@@ -3225,6 +5144,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Translating starts once %1$@ and %2$@ are on this Mac …"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@和%2$@下载到这台 Mac 后即开始翻译…"
           }
         }
       }
@@ -3242,6 +5167,12 @@
             "state" : "new",
             "value" : "%1$@ and %2$@ aren’t on this Mac yet – if they weren’t downloaded, turn translating off and on again to be asked once more"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有%1$@和%2$@ — 如果未下载，请关闭翻译后再重新开启，以便再次收到询问"
+          }
         }
       }
     },
@@ -3251,6 +5182,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ konnte nicht geladen werden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载%@"
           }
         }
       }
@@ -3262,6 +5199,12 @@
             "state" : "translated",
             "value" : "%@ ist nicht geladen – zum Laden das Übersetzen aus- und wieder einschalten"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@尚未加载 — 请关闭翻译后再重新开启以加载"
+          }
         }
       }
     },
@@ -3271,6 +5214,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ lässt sich auf diesem Mac nicht übersetzen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 无法翻译%@"
           }
         }
       }
@@ -3282,6 +5231,12 @@
             "state" : "translated",
             "value" : "Übersetzen nach %@ braucht Apple Intelligence – in den Systemeinstellungen einschalten oder eine andere Sprache wählen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成%@需要 Apple 智能 — 请在“系统设置”中开启，或选择其他语言"
+          }
         }
       }
     },
@@ -3291,6 +5246,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen nach %@ braucht Apple Intelligence, die dieser Mac nicht unterstützt – eine andere Sprache wählen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成%@需要 Apple 智能，但这台 Mac 不支持 — 请选择其他语言"
           }
         }
       }
@@ -3308,6 +5269,12 @@
             "state" : "new",
             "value" : "Translating from %1$@ into %2$@ needs Apple Intelligence – turn it on in System Settings"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从%1$@翻译成%2$@需要 Apple 智能 — 请在“系统设置”中开启"
+          }
         }
       }
     },
@@ -3324,6 +5291,12 @@
             "state" : "new",
             "value" : "Translating from %1$@ into %2$@ needs Apple Intelligence, which this Mac doesn’t support"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从%1$@翻译成%2$@需要 Apple 智能，但这台 Mac 不支持"
+          }
         }
       }
     },
@@ -3333,6 +5306,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzung fehlgeschlagen: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译失败：%@"
           }
         }
       }
@@ -3344,6 +5323,12 @@
             "state" : "translated",
             "value" : "Die Übersetzung auf diesem Mac reagiert nicht"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上的翻译没有响应"
+          }
         }
       }
     },
@@ -3353,6 +5338,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Benutzerdefiniert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义"
           }
         }
       }
@@ -3370,6 +5361,12 @@
             "state" : "new",
             "value" : "%1$@: %2$@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@：%2$@"
+          }
         }
       }
     },
@@ -3386,6 +5383,12 @@
             "state" : "new",
             "value" : "%1$@ – %2$@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ — %2$@"
+          }
         }
       }
     },
@@ -3395,6 +5398,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ hat stattdessen geantwortet, weil das gewählte Modell abgelehnt hat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选模型拒绝了请求，因此改由 %@ 回答"
           }
         }
       }
@@ -3406,6 +5415,12 @@
             "state" : "translated",
             "value" : "ist unter %@ nicht erreichbar – läuft der Server?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接到 %@ — 服务器是否正在运行？"
+          }
         }
       }
     },
@@ -3415,6 +5430,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ist unter %@ nicht erreichbar – prüfen, ob dieser Mac mit dem Netzwerk verbunden ist, und MirrorAct unter Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk erlauben"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接到 %@ — 请检查这台 Mac 是否已连接网络，并在“系统设置”→“隐私与安全性”→“本地网络”中允许 MirrorAct"
           }
         }
       }
@@ -3426,6 +5447,12 @@
             "state" : "translated",
             "value" : "der Dienst leitet die Anfrage an %@ weiter; MirrorAct folgt dem nicht – die Adresse in den Einstellungen prüfen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务将请求重定向到 %@，但 MirrorAct 不会跟随重定向 — 请检查设置中的地址"
+          }
         }
       }
     },
@@ -3435,6 +5462,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "unverschlüsseltes HTTP zu %@ ist nicht erlaubt – stattdessen localhost oder 127.0.0.1 verwenden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不允许通过未加密的 HTTP 连接到 %@ — 请改用 localhost 或 127.0.0.1"
           }
         }
       }
@@ -3446,6 +5479,12 @@
             "state" : "translated",
             "value" : "unverschlüsseltes HTTP zu %@ ist nicht erlaubt – eine private IP-Adresse, einen .local-Namen oder https verwenden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不允许通过未加密的 HTTP 连接到 %@ — 请使用私有 IP 地址、.local 名称或 https"
+          }
         }
       }
     },
@@ -3455,6 +5494,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "keine sichere Verbindung zu %@ – für einen Server ohne https die Adresse mit http:// und einer privaten IP-Adresse oder einem .local-Namen eingeben"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法与 %@ 建立安全连接 — 对于不支持 https 的服务器，请输入以 http:// 开头、使用私有 IP 地址或 .local 名称的地址"
           }
         }
       }
@@ -3466,6 +5511,12 @@
             "state" : "translated",
             "value" : "die Adresse %@ ist nicht verwendbar – in den Einstellungen prüfen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址 %@ 无法使用 — 请在设置中检查"
+          }
         }
       }
     },
@@ -3475,6 +5526,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "der API-Schlüssel wurde nicht akzeptiert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥验证失败"
           }
         }
       }
@@ -3486,6 +5543,12 @@
             "state" : "translated",
             "value" : "Zugriff verweigert – prüfen, wofür der API-Schlüssel verwendet werden darf"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "访问被拒绝 — 请检查该 API 密钥的使用权限"
+          }
         }
       }
     },
@@ -3495,6 +5558,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "das Modell %@ ist nicht verfügbar – in den Einstellungen ein anderes wählen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型 %@ 不可用 — 请在设置中选择其他模型"
           }
         }
       }
@@ -3506,6 +5575,12 @@
             "state" : "translated",
             "value" : "kein Guthaben mehr oder das Ausgabenlimit ist erreicht"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "余额不足，或已达到支出上限"
+          }
         }
       }
     },
@@ -3515,6 +5590,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "gerade zu viele Anfragen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前请求过多"
           }
         }
       }
@@ -3526,6 +5607,12 @@
             "state" : "translated",
             "value" : "der Dienst ist gerade ausgelastet"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务当前繁忙"
+          }
         }
       }
     },
@@ -3535,6 +5622,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "das Modell braucht länger als %lld s für eine Antwort – MirrorAct sendet weniger Texte pro Anfrage"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型的响应时间超过 %lld 秒 — MirrorAct 将减少每次请求的文本数量"
           }
         }
       }
@@ -3546,6 +5639,12 @@
             "state" : "translated",
             "value" : "seit %lld s keine Antwort – lädt das Modell noch?"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已 %lld 秒没有响应 — 模型是否仍在加载？"
+          }
         }
       }
     },
@@ -3555,6 +5654,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "nächster Versuch in %lld Min."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟后重试"
           }
         }
       }
@@ -3566,6 +5671,12 @@
             "state" : "translated",
             "value" : "nächster Versuch in %lld s"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒后重试"
+          }
         }
       }
     },
@@ -3575,6 +5686,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "die Anfrage wurde abgelehnt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求被拒绝"
           }
         }
       }
@@ -3586,6 +5703,12 @@
             "state" : "translated",
             "value" : "die Anfrage wurde abgelehnt (%@)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求被拒绝（%@）"
+          }
         }
       }
     },
@@ -3595,6 +5718,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "das Modell hat es abgelehnt, diesen Text zu übersetzen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型拒绝翻译此文本"
           }
         }
       }
@@ -3606,6 +5735,12 @@
             "state" : "translated",
             "value" : "die Antwort des Modells ist nicht brauchbar – in den Einstellungen ein anderes Modell wählen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型的回答无法使用 — 请在设置中选择其他模型"
+          }
         }
       }
     },
@@ -3615,6 +5750,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "der Dienst hat einen Fehler gemeldet (%@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务返回了错误（%@）"
           }
         }
       }
@@ -3626,6 +5767,12 @@
             "state" : "translated",
             "value" : "Zuerst in den Einstellungen die Adresse des Dienstes eingeben"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先在设置中输入服务的地址"
+          }
         }
       }
     },
@@ -3635,6 +5782,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Adresse %@ ist nicht verwendbar – in den Einstellungen prüfen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址 %@ 无法使用 — 请在设置中检查"
           }
         }
       }
@@ -3646,6 +5799,12 @@
             "state" : "translated",
             "value" : "Zuerst in den Einstellungen den API-Schlüssel für %@ eingeben"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先在设置中输入 %@ 的 API 密钥"
+          }
         }
       }
     },
@@ -3655,6 +5814,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "macOS hat den API-Schlüssel für %@ nicht herausgegeben – in den Einstellungen erneut sichern"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 未提供 %@ 的 API 密钥 — 请在设置中重新保存"
           }
         }
       }
@@ -3666,6 +5831,12 @@
             "state" : "translated",
             "value" : "Zuerst in den Einstellungen ein Modell für %@ wählen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先在设置中为 %@ 选择模型"
+          }
         }
       }
     },
@@ -3675,6 +5846,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen mit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译方式"
           }
         }
       }
@@ -3686,6 +5863,12 @@
             "state" : "translated",
             "value" : "Dieser Mac (Apple)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac（Apple）"
+          }
         }
       }
     },
@@ -3695,6 +5878,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sprachmodell-Dienst (eigener API-Schlüssel)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言模型服务（自备 API 密钥）"
           }
         }
       }
@@ -3706,6 +5895,12 @@
             "state" : "translated",
             "value" : "Sprachmodell-Dienst"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言模型服务"
+          }
         }
       }
     },
@@ -3715,6 +5910,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dienst"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务"
           }
         }
       }
@@ -3726,6 +5927,12 @@
             "state" : "translated",
             "value" : "Läuft auf diesem Mac oder im eigenen Netzwerk; nichts geht ins Internet."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 或本地网络中运行；不会向互联网发送任何内容。"
+          }
         }
       }
     },
@@ -3735,6 +5942,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der auf dem Bildschirm erkannte Text wird zum Übersetzen an %@ gesendet. Solange das Übersetzen aus ist, wird nichts gesendet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕上识别出的文本会发送到 %@ 进行翻译。翻译关闭期间不会发送任何内容。"
           }
         }
       }
@@ -3746,6 +5959,12 @@
             "state" : "translated",
             "value" : "Der auf dem Bildschirm erkannte Text wird zum Übersetzen an den hier eingetragenen Server gesendet. Solange das Übersetzen aus ist, wird nichts gesendet."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕上识别出的文本会发送到此处填写的服务器进行翻译。翻译关闭期间不会发送任何内容。"
+          }
         }
       }
     },
@@ -3756,6 +5975,12 @@
             "state" : "translated",
             "value" : "Der Dienst kann jede Anfrage in Rechnung stellen: Je mehr neuer Text ins Bild kommt, desto mehr kostet es."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该服务可能会按请求向账户收费：画面中出现的新文本越多，费用越高。"
+          }
         }
       }
     },
@@ -3765,6 +5990,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Adresse"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址"
           }
         }
       }
@@ -3782,6 +6013,12 @@
             "state" : "new",
             "value" : "Model"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型"
+          }
         }
       }
     },
@@ -3791,6 +6028,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bereitstellungsname"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部署名称"
           }
         }
       }
@@ -3802,6 +6045,12 @@
             "state" : "translated",
             "value" : "Modellname"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型名称"
+          }
         }
       }
     },
@@ -3811,6 +6060,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modelle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型列表"
           }
         }
       }
@@ -3822,6 +6077,12 @@
             "state" : "translated",
             "value" : "Liste laden"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载列表"
+          }
         }
       }
     },
@@ -3831,6 +6092,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "API-Schlüssel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥"
           }
         }
       }
@@ -3842,6 +6109,12 @@
             "state" : "translated",
             "value" : "Ein Schlüssel ist im Schlüsselbund gesichert."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钥匙串中已保存密钥。"
+          }
         }
       }
     },
@@ -3851,6 +6124,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch kein Schlüssel gesichert."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未保存密钥。"
           }
         }
       }
@@ -3862,6 +6141,12 @@
             "state" : "translated",
             "value" : "Kein Schlüssel gesichert; dieser Dienst braucht womöglich keinen."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未保存密钥；此服务可能不需要密钥。"
+          }
         }
       }
     },
@@ -3871,6 +6156,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch nicht gesichert: «Sichern», Return oder ein gelungenes «Testen» ersetzt den gesicherten Schlüssel."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未保存：点击“保存”、按 Return 键或“测试”成功后，将替换已保存的密钥。"
           }
         }
       }
@@ -3882,6 +6173,12 @@
             "state" : "translated",
             "value" : "Schlüssel holen"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取密钥"
+          }
         }
       }
     },
@@ -3891,6 +6188,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entfernen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除"
           }
         }
       }
@@ -3902,6 +6205,12 @@
             "state" : "translated",
             "value" : "Sichern"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
         }
       }
     },
@@ -3911,6 +6220,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Testen"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试"
           }
         }
       }
@@ -3922,6 +6237,12 @@
             "state" : "translated",
             "value" : "Antwort: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答：%@"
+          }
         }
       }
     },
@@ -3931,6 +6252,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Schlüssel konnte nicht aus dem Schlüsselbund entfernt werden."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法从钥匙串中移除密钥。"
           }
         }
       }
@@ -3942,6 +6269,12 @@
             "state" : "translated",
             "value" : "Der Schlüssel konnte nicht im Schlüsselbund gesichert werden. Er wird verwendet, bis MirrorAct beendet wird."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将密钥保存到钥匙串。在 MirrorAct 退出前将继续使用该密钥。"
+          }
         }
       }
     },
@@ -3951,6 +6284,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Dienst führt keine Modelle zum Übersetzen auf."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该服务未列出可用于翻译的模型。"
           }
         }
       }
@@ -3962,6 +6301,12 @@
             "state" : "translated",
             "value" : "«Text» im Spiegelfenster kopiert den Text auf dem Bildschirm, «Übersetzen» zeigt seine Übersetzung an Ort und Stelle, auch beim Scrollen. Mit «Dieser Mac» läuft beides auf diesem Mac; macOS fragt, bevor es ein Sprachpaar lädt."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像窗口中的“文本”可复制屏幕上的文本，“翻译”则在原位置显示译文，滚动时也是如此。选择“这台 Mac”时，两者都在这台 Mac 上运行；macOS 在下载语言对之前会先询问。"
+          }
         }
       }
     },
@@ -3971,6 +6316,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übersetzen mit %@ – der Text auf dem Bildschirm wird dorthin gesendet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在使用 %@ 翻译 — 屏幕上的文本会发送到该服务"
           }
         }
       }
@@ -3982,6 +6333,12 @@
             "state" : "translated",
             "value" : "«Übersetzen» geht mit der neuen Verbindung wieder an – auf «Übersetzen» klicken, damit es aus bleibt"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新连接建立后，“翻译”将重新开启 — 点击“翻译”可使其保持关闭"
+          }
         }
       }
     },
@@ -3992,6 +6349,12 @@
             "state" : "translated",
             "value" : "«Übersetzen» bleibt aus"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“翻译”保持关闭"
+          }
         }
       }
     },
@@ -4001,6 +6364,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "«Übersetzen» ist aus – die neue Verbindung hat zu lange gedauert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“翻译”已关闭 — 新连接耗时过长"
           }
         }
       }
