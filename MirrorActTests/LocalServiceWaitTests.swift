@@ -55,7 +55,7 @@ final class LocalServiceWaitTests: XCTestCase {
         TestFrames.Line(text: "Settings", x: 60, top: 120),
         TestFrames.Line(text: "General information about this device", x: 60, top: 360),
     ]
-    private let notice = "LM Studio: " + String(localized: "no answer for \(20) s – is the model still loading?")
+    private let notice = LLMTranslationEngine.message(naming: "LM Studio", String(localized: "no answer for \(20) s – is the model still loading?"))
 
     private var session: MirrorSession!
     private var transport: WaitingTransport!

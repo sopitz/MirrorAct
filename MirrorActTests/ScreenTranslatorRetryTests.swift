@@ -191,7 +191,7 @@ final class ScreenTranslatorRetryTests: XCTestCase {
         XCTAssertEqual(outage.requests, 26)
         assertTheWaits(outage.waits, steadyAfter: 4)
         XCTAssertLessThanOrEqual(outage.recovery, 62, "translated \(outage.recovery) s after the service answered again")
-        let wait = " – " + String(localized: "trying again in \(60) s")
+        let wait = String(localized: "trying again in \(60) s")
         XCTAssertTrue(messages.contains { $0.hasSuffix(wait) }, "\(messages)")
         XCTAssertFalse(messages.contains { $0.contains(String(localized: "trying again in \(2) min")) }, "\(messages)")
         XCTAssertTrue(translator.isActive)
@@ -213,7 +213,7 @@ final class ScreenTranslatorRetryTests: XCTestCase {
     /// properly the screen is translated with the next try, without turning Translate off and on
     func testAModelWhoseAnswersCannotBeUsedIsNamedAndTheScreenIsTranslatedOnceItAnswersProperly() async throws {
         let outage = try await failFor(600, mode: .garbage)
-        let notice = "LM Studio: " + String(localized: "the model’s answer cannot be used – choose another model in the settings")
+        let notice = LLMTranslationEngine.message(naming: "LM Studio", String(localized: "the model’s answer cannot be used – choose another model in the settings"))
         XCTAssertEqual(messages.first, notice)
         // the halves of the first try, then the shortest text alone at each try
         XCTAssertEqual(outage.tries.count, 13, "tries at \(outage.tries)")

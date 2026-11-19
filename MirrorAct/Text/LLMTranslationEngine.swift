@@ -284,7 +284,8 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
                 var failure = self.failure(for: error)
                 if !failure.isPermanent {
                     let wait = backOff()
-                    failure = TranslationFailure(message: failure.message + Self.words(forWait: wait),
+                    let message = Self.words(forWait: wait).map { Self.message(failure.message, then: $0) }
+                    failure = TranslationFailure(message: message ?? failure.message,
                                                  isPermanent: false, retryAfter: wait)
                 }
                 // the request as a whole failed only if nothing came of it
@@ -310,14 +311,14 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         }
     }
 
-    /// What a notice adds about a wait of `seconds` before the next request: nothing for a short
-    /// one. A long one is named, because until then new texts stay untranslated without a word:
-    /// in seconds up to two minutes (the steady wait of an outage is 60 s, which "2 min" would
-    /// overstate by half), in minutes rounded up above that.
-    private static func words(forWait seconds: TimeInterval) -> String {
-        guard seconds >= 60 else { return "" }
-        if seconds < 120 { return " – " + String(localized: "trying again in \(Int(seconds.rounded())) s") }
-        return " – " + String(localized: "trying again in \(Int((seconds / 60).rounded(.up))) min")
+    /// What a notice adds about a wait of `seconds` before the next request (`message(_:then:)`):
+    /// nothing for a short one. A long one is named, because until then new texts stay
+    /// untranslated without a word: in seconds up to two minutes (the steady wait of an outage
+    /// is 60 s, which "2 min" would overstate by half), in minutes rounded up above that.
+    private static func words(forWait seconds: TimeInterval) -> String? {
+        guard seconds >= 60 else { return nil }
+        if seconds < 120 { return String(localized: "trying again in \(Int(seconds.rounded())) s") }
+        return String(localized: "trying again in \(Int((seconds / 60).rounded(.up))) min")
     }
 
     /// Translates one text and takes no answer but a usable one: for "Test" in the settings,
@@ -451,7 +452,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
 
     /// The failure of a portion of which no answer could be used
     private func unusableAnswers() -> TranslationFailure {
-        TranslationFailure(message: name + ": " + Self.words(for: .malformedReply(""), model: connection.model))
+        TranslationFailure(message: Self.message(naming: name, Self.words(for: .malformedReply(""), model: connection.model)))
     }
 
     /// The translations of one portion of texts, in their order; nil = not now, ask again later.
@@ -505,7 +506,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
                 }
                 if isHopeless {
                     // Asking on would cost the user request after request for nothing.
-                    throw TranslationFailure(message: name + ": " + Self.words(for: .refused, model: connection.model),
+                    throw TranslationFailure(message: Self.message(naming: name, Self.words(for: .refused, model: connection.model)),
                                              isPermanent: true)
                 }
             } else {
@@ -518,7 +519,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             guard texts.count > 1 else {
                 if declined {
                     Log.info("Translation: \(name): one text stays as it is (\(Self.kind(of: error)))")
-                    note(name + ": " + Self.words(for: error, model: connection.model))
+                    note(Self.message(naming: name, Self.words(for: error, model: connection.model)))
                     return texts
                 }
                 Log.info("Translation: \(name): one text is asked for later (\(Self.kind(of: error)))")
@@ -532,7 +533,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             // time either; half as many texts take about half as long. Says nothing about
             // whether the model can be used, so it does not count against its patience.
             portion.timedOut = true
-            note(name + ": " + String(localized: "the model takes longer than \(Int(Self.timeout(for: connection))) s to answer – MirrorAct asks for fewer texts at a time"))
+            note(Self.message(naming: name, String(localized: "the model takes longer than \(Int(Self.timeout(for: connection))) s to answer – MirrorAct asks for fewer texts at a time")))
             // the server answers, only not these texts in time
             if portion.answered { return try await putOff(texts, system: system, portion: &portion) }
             guard isWhole, texts.count > 1 else { throw error }
@@ -737,7 +738,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         guard blocks.contains(where: { LLMJSON.string(LLMJSON.object($0)?["type"]) == "fallback" }),
               let model = LLMJSON.string(reply["model"]), !model.isEmpty else { return }
         Log.info("Translation: \(name): \(model) answered because \(connection.model) declined")
-        note(name + ": " + String(localized: "\(model) answered instead, because the chosen model declined"))
+        note(Self.message(naming: name, String(localized: "\(model) answered instead, because the chosen model declined")))
     }
 
     // MARK: Requests on their way
@@ -777,8 +778,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
         let sameServer = host.lowercased() == LLMConnection.host(of: request.url).lowercased()
         let shown = host.isEmpty || sameServer ? Self.short(baseAddress(of: LLMConnection.shown(target), for: request)) : host
         Log.error("Translation: \(name): the request was redirected to \(host.isEmpty ? "another address" : host)")
-        return TranslationFailure(message: name + ": "
-                                  + String(localized: "the service forwards the request to \(shown), which MirrorAct does not follow – check the address in the settings"),
+        return TranslationFailure(message: Self.message(naming: name, String(localized: "the service forwards the request to \(shown), which MirrorAct does not follow – check the address in the settings")),
                                   isPermanent: true)
     }
 
@@ -851,7 +851,7 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             return (status, watched.seconds)
         }
         guard let handler else { return }
-        handler(name + ": " + String(localized: "no answer for \(Int(seconds.rounded())) s – is the model still loading?"))
+        handler(Self.message(naming: name, String(localized: "no answer for \(Int(seconds.rounded())) s – is the model still loading?")))
     }
 
     /// A request of this turn was answered `seconds` after it was sent (`noticeWait`)
@@ -879,6 +879,18 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
 
     // MARK: Notices and failures
 
+    /// A notice that names the service: "name: words". The colon belongs to the localized
+    /// format, so that a language can use its own punctuation (Chinese "：").
+    static func message(naming name: String, _ words: String) -> String {
+        String(localized: "\(name): \(words)")
+    }
+
+    /// `message` followed by what comes of it, "message – more" (a wait before the next
+    /// request). The dash belongs to the localized format, like the colon in `message(naming:_:)`.
+    static func message(_ message: String, then more: String) -> String {
+        String(localized: "\(message) – \(more)")
+    }
+
     /// Shows a notice once for as long as this engine is used
     private func note(_ message: String) {
         let handler: ((String) -> Void)? = locked {
@@ -895,15 +907,14 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             // A page that is not there, and no word about a model: the address the user entered
             // leads to a server, but not to the service ("/v1" missing …). Nothing changes by itself.
             if case .server(status: 404, _) = error, connection.provider.baseURLRule != .fixed {
-                return TranslationFailure(message: name + ": "
-                                          + String(localized: "the address \(connection.shownAddress) cannot be used – check it in the settings"),
+                return TranslationFailure(message: Self.message(naming: name, String(localized: "the address \(connection.shownAddress) cannot be used – check it in the settings")),
                                           isPermanent: true)
             }
-            return TranslationFailure(message: name + ": " + Self.words(for: error, model: connection.model),
+            return TranslationFailure(message: Self.message(naming: name, Self.words(for: error, model: connection.model)),
                                       isPermanent: error.isPermanent)
         }
         if let error = error as? URLError, let failure = failure(for: error) { return failure }
-        return TranslationFailure(message: name + ": " + error.localizedDescription)
+        return TranslationFailure(message: Self.message(naming: name, error.localizedDescription))
     }
 
     /// The failures of the connection itself that the user can do something about
@@ -917,18 +928,16 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             let words = host.hasSuffix(".localhost")
                 ? String(localized: "plain HTTP to \(host) is not allowed – use localhost or 127.0.0.1 instead")
                 : String(localized: "plain HTTP to \(host) is not allowed – use a private IP address, a .local name or https")
-            return TranslationFailure(message: name + ": " + words, isPermanent: true)
+            return TranslationFailure(message: Self.message(naming: name, words), isPermanent: true)
         case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
              .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid, .clientCertificateRejected,
              .clientCertificateRequired:
             // Most often a local server that speaks plain HTTP behind an address with https
             // (or without a scheme, which gets https for a name with a dot)
-            return TranslationFailure(message: name + ": "
-                                      + String(localized: "no secure connection to \(host) – for a server without https, enter its address with http:// and a private IP address or a .local name"),
+            return TranslationFailure(message: Self.message(naming: name, String(localized: "no secure connection to \(host) – for a server without https, enter its address with http:// and a private IP address or a .local name")),
                                       isPermanent: true)
         case .badURL, .unsupportedURL:
-            return TranslationFailure(message: name + ": "
-                                      + String(localized: "the address \(connection.shownAddress) cannot be used – check it in the settings"),
+            return TranslationFailure(message: Self.message(naming: name, String(localized: "the address \(connection.shownAddress) cannot be used – check it in the settings")),
                                       isPermanent: true)
         case .notConnectedToInternet:
             // What macOS reports for a computer in the local network when MirrorAct may not
@@ -936,13 +945,11 @@ final class LLMTranslationEngine: TranslationEngine, @unchecked Sendable {
             // network at all, so the notice names both; this Mac itself needs no permission.
             let isThisMac = host == "localhost" || host == "::1" || host.hasPrefix("127.") || host.hasSuffix(".localhost")
             guard connection.isLocal, !isThisMac else { return nil }
-            return TranslationFailure(message: name + ": "
-                                      + String(localized: "cannot be reached at \(connection.shownAddress) – check that this Mac is on the network, and allow MirrorAct under System Settings → Privacy & Security → Local Network"))
+            return TranslationFailure(message: Self.message(naming: name, String(localized: "cannot be reached at \(connection.shownAddress) – check that this Mac is on the network, and allow MirrorAct under System Settings → Privacy & Security → Local Network")))
         case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost:
             // a server on this Mac or in the network that does not answer is most often not running
             guard connection.isLocal else { return nil }
-            return TranslationFailure(message: name + ": "
-                                      + String(localized: "cannot be reached at \(connection.shownAddress) – is it running?"))
+            return TranslationFailure(message: Self.message(naming: name, String(localized: "cannot be reached at \(connection.shownAddress) – is it running?")))
         default:
             return nil
         }
