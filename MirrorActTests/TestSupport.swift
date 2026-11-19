@@ -16,4 +16,14 @@ extension XCTestCase {
         AppSettings.shared.experimentalFeatures = on
         addTeardownBlock { @MainActor in AppSettings.shared.experimentalFeatures = before }
     }
+
+    /// What the app shows for `key` in `language` ("en", "de"), whatever language the tests run
+    /// in. Like `String(localized:)`: the entry of the string catalog, or else `defaultValue`,
+    /// or else the key itself. (The English table holds no entry for a key taken from the code:
+    /// English comes from the code.)
+    func appText(_ key: String, defaultValue: String? = nil, in language: String) throws -> String {
+        let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"), "no \(language).lproj in the app")
+        let bundle = try XCTUnwrap(Bundle(path: path))
+        return bundle.localizedString(forKey: key, value: defaultValue ?? key, table: nil)
+    }
 }
